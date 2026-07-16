@@ -114,6 +114,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // Sync Banner Click Listener (Join sync room / Copy sharing URL)
+    const banner = document.getElementById("sync-status-banner");
+    if (banner) {
+        banner.addEventListener("click", async () => {
+            if (!syncRoomId) {
+                let roomId = prompt("연결할 커플 동기화 방 이름을 입력하세요 (예: love1004, 초코딸기)", "love1004");
+                if (!roomId) return;
+                roomId = roomId.trim();
+                if (roomId) {
+                    syncRoomId = roomId;
+                    localStorage.setItem("aura_sync_room_id", roomId);
+                    const syncInput = document.getElementById("settings-sync-room-id");
+                    if (syncInput) syncInput.value = roomId;
+                    
+                    const newUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(roomId)}`;
+                    window.history.pushState({ path: newUrl }, '', newUrl);
+                    
+                    startCloudSyncLoop();
+                    
+                    await copyShareLinkToClipboard(newUrl);
+                    showToast(`동기화 룸 '${roomId}'에 연결되었으며 공유 링크가 복사되었습니다! 💖`, "success");
+                }
+            } else {
+                const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(syncRoomId)}`;
+                await copyShareLinkToClipboard(shareUrl);
+                showToast("실시간 동기화 공유 링크가 클립보드에 복사되었습니다! 💌", "success");
+            }
+        });
+    }
+
     // Visit logging modal logic
     document.getElementById("btn-close-visit-modal").addEventListener("click", closeVisitModal);
     document.getElementById("btn-cancel-visit-modal").addEventListener("click", closeVisitModal);
@@ -985,14 +1015,26 @@ function startCloudSyncLoop() {
     
     const banner = document.getElementById("sync-status-banner");
     const statusText = document.getElementById("sync-status-text");
+    const pulse = document.getElementById("sync-status-pulse");
 
     if (!syncRoomId) {
-        banner.classList.add("hidden");
+        if (pulse) pulse.style.display = "none";
+        if (statusText) statusText.innerHTML = `실시간 동기화 연결하기 🔗`;
+        if (banner) {
+            banner.style.background = "rgba(124, 92, 104, 0.1)";
+            banner.style.color = "var(--color-text-med)";
+            banner.style.borderColor = "rgba(124, 92, 104, 0.25)";
+        }
         return;
     }
 
-    banner.classList.remove("hidden");
-    statusText.textContent = `연결 룸: ${syncRoomId}`;
+    if (pulse) pulse.style.display = "inline-block";
+    if (statusText) statusText.innerHTML = `연결 룸: <strong>${syncRoomId}</strong> 🔗`;
+    if (banner) {
+        banner.style.background = "rgba(255, 101, 132, 0.1)";
+        banner.style.color = "var(--color-primary)";
+        banner.style.borderColor = "rgba(255, 101, 132, 0.25)";
+    }
 
     // Establish 5-second interval loop for main DB state sync
     syncIntervalId = setInterval(async () => {
@@ -1669,5 +1711,24 @@ async function downloadAllPhotos() {
     } catch (e) {
         showToast("다운로드 중 오류가 발생했습니다: " + e.message, "danger");
         console.error("ZIP download failed:", e);
+    }
+}
+
+// Copy sharing link with fallback for non-secure/file contexts
+async function copyShareLinkToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (err) {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand("copy");
+        } catch (e) {
+            console.error("Fallback copy failed", e);
+        }
+        document.body.removeChild(textarea);
     }
 }
