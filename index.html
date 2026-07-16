@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA - 러블리 AI 데이트 플래너</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS for Map Fallback -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Style CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Dexie.js for IndexedDB -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    
+    <!-- Leaflet JS for Map Fallback -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- JSZip for Downloading All Photos -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="lovely-theme">
+    <!-- Background glow elements (Soft lovely pink & peaches) -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i data-lucide="heart" class="brand-logo text-primary"></i>
+                <span class="brand-name">AURA</span>
+            </div>
+            
+            <!-- Couple Profile Box -->
+            <div class="couple-profile-box">
+                <div class="profile-avatar-frame">
+                    <img src="images/couple3.jpg" alt="Couple" class="profile-avatar" id="sidebar-profile-img">
+                </div>
+                <div class="profile-names">
+                    <span class="partner-name-a" id="profile-name-a">초코</span>
+                    <i data-lucide="heart" class="heart-split"></i>
+                    <span class="partner-name-b" id="profile-name-b">딸기</span>
+                </div>
+                <div class="love-days-count" id="love-days-text">행복한 연애 중 💕</div>
+            </div>
+
+            <!-- Real-Time Sync Status Banner -->
+            <div class="sync-status-banner hidden" id="sync-status-banner">
+                <span class="sync-pulse"></span>
+                <span id="sync-status-text">동기화 대기 중...</span>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>러블리 대시보드</span>
+                </button>
+                <button class="nav-item" data-tab="wishlist">
+                    <i data-lucide="heart-handshake"></i>
+                    <span>데이트 위시리스트</span>
+                </button>
+                <button class="nav-item" data-tab="visited">
+                    <i data-lucide="smile"></i>
+                    <span>함께 다녀온 곳</span>
+                </button>
+                <button class="nav-item" data-tab="ai-planner">
+                    <i data-lucide="sparkles" class="text-ai"></i>
+                    <span>AI 코스 플래너</span>
+                </button>
+                <button class="nav-item" data-tab="settings">
+                    <i data-lucide="settings"></i>
+                    <span>에이전트 설정</span>
+                </button>
+            </nav>
+            
+            <div class="active-date-card" id="sidebar-dday-card">
+                <div class="card-title">다음 사랑 예정일</div>
+                <div class="date-title" id="next-date-title">아직 약속이 없어요 😢</div>
+                <div class="dday-tag" id="next-date-dday">D-Day</div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Topbar Header -->
+            <header class="topbar">
+                <h1 class="page-title" id="page-title-text">러블리 대시보드</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="btn-quick-add">
+                        <i data-lucide="heart-handshake"></i>
+                        <span>장소 신규 추가</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-pane active">
+                <div class="dashboard-grid">
+                    <!-- Stats Section -->
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-pink-soft"><i data-lucide="heart" class="text-primary"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">저장된 위시리스트</div>
+                                <div class="stat-value" id="stat-wishlist-count">0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-violet-soft"><i data-lucide="smile" class="text-secondary"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">함께 다녀온 장소</div>
+                                <div class="stat-value" id="stat-visited-count">0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-cyan-soft"><i data-lucide="coins" class="text-ai"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">총 데이트 지출</div>
+                                <div class="stat-value" id="stat-expense-sum">0원</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Map and Budget/Settlement -->
+                    <div class="main-grid-row">
+                        <!-- Interactive Map Card -->
+                        <div class="card map-card flex-grow">
+                            <div class="card-header">
+                                <h3 class="card-heading">우리의 러브 맵</h3>
+                                <div class="map-legend">
+                                    <span class="legend-item"><span class="legend-dot bg-primary"></span>위시리스트</span>
+                                    <span class="legend-item"><span class="legend-dot bg-secondary"></span>다녀온 곳</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Embedded Local Search Inside Map -->
+                            <div class="map-search-bar">
+                                <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query">
+                                <button class="btn btn-primary" id="btn-map-search">
+                                    <i data-lucide="search"></i> 검색
+                                </button>
+                            </div>
+                            
+                            <div class="map-container-wrapper">
+                                <!-- Naver Map / Leaflet Map Container -->
+                                <div id="map"></div>
+                            </div>
+                        </div>
+
+                        <!-- Budget & Dutch-pay Settlement Card -->
+                        <div class="card budget-card flex-column">
+                            <div>
+                                <div class="card-header">
+                                    <h3 class="card-heading">예산 대비 지출 현황</h3>
+                                </div>
+                                <div class="budget-chart-container">
+                                    <div class="budget-progress-label">
+                                        <span>현재 데이트 실지출</span>
+                                        <span id="budget-ratio-text">0%</span>
+                                    </div>
+                                    <div class="progress-bar-bg">
+                                        <div class="progress-bar-fill" id="budget-progress-fill" style="width: 0%;"></div>
+                                    </div>
+                                    <div class="budget-values">
+                                        <div>데이트 한도 예산: <span id="budget-limit-text">500,000원</span></div>
+                                        <div>우리가 쓴 총액: <span id="budget-spent-text" class="text-primary font-bold">0원</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="divider">
+
+                            <!-- Dutch-pay Calculator details -->
+                            <div class="settlement-container">
+                                <h4 class="sub-heading"><i data-lucide="calculator" class="margin-right-sm"></i>커플 정산 결과</h4>
+                                <div class="settlement-detail-card" id="dutchpay-settlement-card">
+                                    <div class="settlement-row">
+                                        <span>초코(A)가 결제한 총액:</span>
+                                        <span id="dutchpay-paid-a">0원</span>
+                                    </div>
+                                    <div class="settlement-row">
+                                        <span>딸기(B)가 결제한 총액:</span>
+                                        <span id="dutchpay-paid-b">0원</span>
+                                    </div>
+                                    <div class="settlement-result" id="dutchpay-result-text">
+                                        정산할 내역이 없습니다 💖
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="divider">
+                            
+                            <div class="upcoming-details">
+                                <h4 class="sub-heading">마지막 다녀온 곳의 추억</h4>
+                                <div class="visited-quote-box" id="latest-visited-review">
+                                    "아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"
+                                </div>
+                            </div>
+
+                            <hr class="divider">
+
+                            <!-- Couple Memory Gallery Widget -->
+                            <div class="memory-gallery-widget">
+                                <h4 class="sub-heading"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
+                                <div class="memory-grid">
+                                    <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
+                                    <div class="memory-item"><img src="images/couple2.jpg" alt="Sunny Day" class="gallery-img"></div>
+                                    <div class="memory-item"><img src="images/couple3.jpg" alt="Night Street" class="gallery-img"></div>
+                                    <div class="memory-item"><img src="images/couple4.jpg" alt="Cute Pinch" class="gallery-img"></div>
+                                    <div class="memory-item"><img src="images/couple5.jpg" alt="Punch Fight" class="gallery-img"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Wishlist -->
+            <section id="tab-wishlist" class="tab-pane">
+                <div class="places-container">
+                    <div class="filter-bar">
+                        <h2 class="section-title">데이트 위시리스트 🌸</h2>
+                        <div class="search-box">
+                            <i data-lucide="search"></i>
+                            <input type="text" placeholder="장소명 또는 메모 검색..." id="wishlist-search-input">
+                        </div>
+                    </div>
+                    <div class="places-grid" id="wishlist-list-container">
+                        <!-- Dynamic list rendered by app.js -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Visited -->
+            <section id="tab-visited" class="tab-pane">
+                <div class="places-container">
+                    <div class="filter-bar">
+                        <h2 class="section-title">함께 다녀온 곳 💖</h2>
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <div class="search-box">
+                                <i data-lucide="search"></i>
+                                <input type="text" placeholder="장소명, 메모, 후기 검색..." id="visited-search-input">
+                            </div>
+                            <button type="button" class="btn btn-outline" id="btn-download-photos" style="gap:6px;">
+                                <i data-lucide="download"></i> 전체 사진 다운로드
+                            </button>
+                        </div>
+                    </div>
+                    <div class="places-grid" id="visited-list-container">
+                        <!-- Dynamic list rendered by app.js -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: AI Course Planner -->
+            <section id="tab-ai-planner" class="tab-pane">
+                <div class="ai-planner-layout">
+                    <!-- Sidebar settings alert if key is missing -->
+                    <div class="alert-banner warning hidden" id="api-key-warning">
+                        <i data-lucide="alert-triangle"></i>
+                        <span>AI 플래너를 사용하려면 설정 탭에서 <strong>Gemini API Key</strong>를 입력해 주세요 🌸</span>
+                    </div>
+
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <div class="bot-info">
+                                <div class="bot-avatar"><i data-lucide="sparkles"></i></div>
+                                <div>
+                                    <div class="bot-name">AURA 러블리 AI 플래너</div>
+                                    <div class="bot-status">가고 싶은 동네나 원하는 테마를 쏙쏙 추천해 드려요!</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Message Area -->
+                        <div class="chat-messages" id="chat-messages-box">
+                            <div class="message message-bot">
+                                <div class="msg-bubble">
+                                    안녕하세요, 공주님 왕자님! 💖 오늘 데이트는 어디로 떠나고 싶으신가요?<br>
+                                    예: "홍대 예쁜 카페랑 아기자기한 밥집 코스 짜줘", "익선동 한옥 뷰 추천해줘" 등 마음껏 말씀하세요!
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick suggestion chips -->
+                        <div class="suggestion-chips">
+                            <button class="chip-btn" data-prompt="연남동 핑크빛 감성의 아기자기한 카페 & 식당 코스 짜줘">🌸 핑크빛 연남동</button>
+                            <button class="chip-btn" data-prompt="혜화역 근처 연극보고 가기 좋은 데이트 코스 제안해줘">🎭 대학로 문화 데이트</button>
+                            <button class="chip-btn" data-prompt="비 오는 날 가기 좋은 예쁜 실내 식물원/미술관 코스 짜줘">☔ 촉촉한 실내 코스</button>
+                            <button class="chip-btn" data-prompt="커플이 1박 2일로 가기 좋은 가평 힐링 스팟 추천해줘">🚗 힐링 여행 코스</button>
+                        </div>
+
+                        <!-- Message Input Form -->
+                        <form class="chat-input-area" id="chat-input-form">
+                            <input type="text" placeholder="메시지를 입력하세요 (예: 삼청동 조용하고 분위기 넘치는 산책 코스)" id="chat-user-input" required>
+                            <button type="submit" class="btn-send"><i data-lucide="send"></i></button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Settings -->
+            <section id="tab-settings" class="tab-pane">
+                <div class="card settings-card">
+                    <h3 class="card-heading"><i data-lucide="sliders" class="margin-right-sm text-primary"></i>AURA 환경 설정</h3>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label for="settings-gemini-key">Gemini API Key</label>
+                            <input type="password" id="settings-gemini-key" placeholder="Gemini API Key를 입력하세요">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settings-naver-client-id">네이버 지도 Client ID</label>
+                            <input type="text" id="settings-naver-client-id" placeholder="네이버 클라우드 플랫폼 Maps Client ID를 입력하세요">
+                            <span class="help-text">등록 시 전용 네이버 지도로 로드되며, 미입력 시 Leaflet 지도로 작동합니다.</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="settings-budget-limit">데이트 예산 한도 (원)</label>
+                            <input type="number" id="settings-budget-limit" placeholder="예: 500000" value="500000">
+                        </div>
+
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="settings-partner-a-name">파트너 A 이름 (초코)</label>
+                                <input type="text" id="settings-partner-a-name" placeholder="기본값: 초코" value="초코">
+                            </div>
+                            <div class="form-group">
+                                <label for="settings-partner-b-name">파트너 B 이름 (딸기)</label>
+                                <input type="text" id="settings-partner-b-name" placeholder="기본값: 딸기" value="딸기">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settings-sync-room-id">실시간 동기화 룸 이름 (방 이름)</label>
+                            <input type="text" id="settings-sync-room-id" placeholder="예: lovestory (비워둘 시 동기화 미사용)">
+                            <span class="help-text">주소창에 <code>?room=방이름</code>을 붙이거나 여기에 입력하면 5초마다 자동 동기화 룸이 실행됩니다.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settings-firebase-url">Firebase Database URL (격리용 선택)</label>
+                            <input type="text" id="settings-firebase-url" placeholder="예: https://your-db.firebasedatabase.app">
+                            <span class="help-text">비워두면 AURA 기본 분리 경로(aura-rooms/)를 사용하며, 입력하면 본인의 전용 Firebase DB로 완벽히 격리됩니다.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>데이터 수동 관리</label>
+                            <div class="btn-row">
+                                <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 데이터 내보내기</button>
+                                <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 데이터 가져오기</button>
+                                <input type="file" id="file-import-data" class="hidden" accept=".json">
+                                <button class="btn btn-danger" id="btn-clear-data"><i data-lucide="trash-2"></i> 데이터 전체 삭제</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group-row">
+                            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Place Registration (Quick Add) -->
+    <div class="modal-overlay" id="modal-place-add">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>💖 가고 싶은 장소 추가</h3>
+                <button class="modal-close" id="btn-close-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-place-add">
+                <div class="form-group">
+                    <label for="add-place-name">장소 이름 *</label>
+                    <input type="text" id="add-place-name" placeholder="예: 페이브 베이커리 연남" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="add-place-category">장소 종류</label>
+                    <select id="add-place-category">
+                        <option value="Cafe">카페 (Cafe)</option>
+                        <option value="Restaurant">맛집 (Restaurant)</option>
+                        <option value="Bar">술집/바 (Bar)</option>
+                        <option value="Park">공원/산책 (Park)</option>
+                        <option value="Museum">문화/미술관 (Museum)</option>
+                        <option value="Other">기타 (Other)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-url">지도 링크 입력 (구글/네이버 공유 URL)</label>
+                    <input type="url" id="add-place-url" placeholder="지도 링크를 붙여넣으세요">
+                    <span class="help-text">공유용 긴 URL인 경우 위도/경도를 자동 파싱합니다.</span>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="add-place-lat">위도 (Latitude)</label>
+                        <input type="number" id="add-place-lat" step="any" placeholder="예: 37.5612">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-place-lng">경도 (Longitude)</label>
+                        <input type="number" id="add-place-lng" step="any" placeholder="예: 126.9248">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-notes">추천 사유 / 시키고 싶은 메뉴</label>
+                    <textarea id="add-place-notes" rows="3" placeholder="예: 시그니처 멜팅 초콜릿 케이크 필수!"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-priority">가고 싶은 열정 정도</label>
+                    <select id="add-place-priority">
+                        <option value="medium">꼭 가봐요 (Medium)</option>
+                        <option value="high">당장 가요!! 🔥 (High)</option>
+                        <option value="low">천천히 가요 (Low)</option>
+                    </select>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">보관함에 쏙</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Visit Log & Review (Wishlist -> Visited) -->
+    <div class="modal-overlay" id="modal-visit-log">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>🎀 방문 완료 기록 작성</h3>
+                <button class="modal-close" id="btn-close-visit-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-visit-log">
+                <input type="hidden" id="visit-place-id">
+                
+                <div class="form-group">
+                    <label>방문한 장소</label>
+                    <div class="read-only-val" id="visit-place-name">장소명</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-rating">평점 *</label>
+                    <div class="rating-input-row">
+                        <input type="radio" name="rating" id="star5" value="5" required><label for="star5" title="5점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star4" value="4"><label for="star4" title="4점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star3" value="3"><label for="star3" title="3점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star2" value="2"><label for="star2" title="2점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star1" value="1"><label for="star1" title="1점"><i data-lucide="star"></i></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-review">오늘의 즐거웠던 기억/기록 *</label>
+                    <textarea id="visit-review" rows="4" placeholder="여기서 어떤 재밌는 추억을 남겼는지 기록하세요 💖" required></textarea>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="visit-expense">결제한 비용 (원)</label>
+                        <input type="number" id="visit-expense" placeholder="금액" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-payer">누가 결제했나요? *</label>
+                        <select id="visit-payer">
+                            <option value="A" id="opt-partner-a">초코(A)</option>
+                            <option value="B" id="opt-partner-b">딸기(B)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-photo">커플 추억 사진 (선택, 여러 장 가능)</label>
+                    <input type="file" id="visit-photo" accept="image/*" multiple style="display: none;">
+                    <div class="photo-preview-box" id="visit-photo-preview">
+                        <span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-visit-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">기록 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Photo Viewer (Lightbox) -->
+    <div class="modal-overlay" id="modal-photo-viewer">
+        <div class="lightbox-card">
+            <button class="modal-close lightbox-close" id="btn-close-viewer"><i data-lucide="x"></i></button>
+            <img src="" id="lightbox-img" alt="Enlarged Memory">
+        </div>
+    </div>
+
+    <!-- App Logic Script -->
+    <script src="app.js"></script>
+</body>
+</html>
