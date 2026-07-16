@@ -920,6 +920,17 @@ async function deletePlace(id, name) {
     
     try {
         await db.places.delete(id);
+        
+        // Clean up associated cloud photos from Firebase
+        if (syncRoomId) {
+            try {
+                const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${id}.json`;
+                await fetch(url, { method: 'DELETE' });
+            } catch(e) {
+                console.error("Cloud photo cleanup failed:", e);
+            }
+        }
+
         showToast("장소가 정상 삭제되었습니다.", "success");
         await updateDashboardStats();
         await renderPlacesList();
