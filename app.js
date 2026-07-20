@@ -144,6 +144,92 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // Couple Names Inline Edit (click on "초코 ♥ 딸기" to edit)
+    const coupleNamesEl = document.getElementById("couple-names-editable");
+    if (coupleNamesEl) {
+        coupleNamesEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            // Prevent duplicate popovers
+            if (document.getElementById("couple-edit-popover")) return;
+            
+            const popover = document.createElement("div");
+            popover.id = "couple-edit-popover";
+            popover.style.cssText = `
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 999;
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 101, 132, 0.2);
+                border-radius: 16px;
+                padding: 1rem;
+                box-shadow: 0 8px 32px rgba(255, 101, 132, 0.15);
+                min-width: 220px;
+                animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            `;
+            popover.innerHTML = `
+                <div style="font-size:0.75rem; color:var(--color-text-low); margin-bottom:0.5rem; font-weight:600; text-align:center;">커플 이름 수정 💕</div>
+                <div style="display:flex; gap:0.5rem; margin-bottom:0.6rem;">
+                    <input id="edit-name-a" type="text" value="${partnerAName}" placeholder="A 이름" 
+                        style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
+                    <span style="display:flex; align-items:center; color:var(--color-primary); font-size:0.85rem;">♥</span>
+                    <input id="edit-name-b" type="text" value="${partnerBName}" placeholder="B 이름" 
+                        style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
+                </div>
+                <button id="btn-save-couple-names" style="width:100%; padding:0.45rem; border:none; background:linear-gradient(135deg, var(--color-primary) 0%, #FF85A1 100%); color:white; border-radius:10px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all 0.2s ease;">
+                    저장하기 💖
+                </button>
+            `;
+            
+            // Make parent relative for absolute positioning
+            coupleNamesEl.parentElement.style.position = "relative";
+            coupleNamesEl.parentElement.appendChild(popover);
+            
+            // Focus first input
+            setTimeout(() => document.getElementById("edit-name-a").focus(), 50);
+            
+            // Save handler
+            document.getElementById("btn-save-couple-names").addEventListener("click", () => {
+                const newA = document.getElementById("edit-name-a").value.trim() || "초코";
+                const newB = document.getElementById("edit-name-b").value.trim() || "딸기";
+                
+                partnerAName = newA;
+                partnerBName = newB;
+                localStorage.setItem("aura_partner_a_name", newA);
+                localStorage.setItem("aura_partner_b_name", newB);
+                
+                // Update settings input fields
+                document.getElementById("settings-partner-a-name").value = newA;
+                document.getElementById("settings-partner-b-name").value = newB;
+                
+                updatePartnerNamesUI();
+                popover.remove();
+                showToast(`커플 이름이 '${newA} ♥ ${newB}'(으)로 변경되었습니다! 💕`, "success");
+                triggerSyncUpload();
+            });
+            
+            // Enter key save support
+            const handleEnterKey = (ev) => {
+                if (ev.key === "Enter") {
+                    document.getElementById("btn-save-couple-names").click();
+                }
+            };
+            document.getElementById("edit-name-a").addEventListener("keypress", handleEnterKey);
+            document.getElementById("edit-name-b").addEventListener("keypress", handleEnterKey);
+            
+            // Close popover when clicking outside
+            const closePopover = (ev) => {
+                if (!popover.contains(ev.target) && ev.target !== coupleNamesEl && !coupleNamesEl.contains(ev.target)) {
+                    popover.remove();
+                    document.removeEventListener("click", closePopover);
+                }
+            };
+            setTimeout(() => document.addEventListener("click", closePopover), 10);
+        });
+    }
+
     // Visit logging modal logic
     document.getElementById("btn-close-visit-modal").addEventListener("click", closeVisitModal);
     document.getElementById("btn-cancel-visit-modal").addEventListener("click", closeVisitModal);
