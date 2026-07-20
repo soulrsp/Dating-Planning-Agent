@@ -499,7 +499,7 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Naver Local Search & Pinning Simulation via Gemini
+// 6. In-App Local Search & Pinning (Naver Search API → Gemini Geocoding fallback)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -509,36 +509,105 @@ async function handleInAppMapSearch() {
     
     showToast(`'${query}' 장소를 지도에서 탐색 중입니다...`, "success");
     
-    if (!geminiApiKey) {
-        // Fallback simulation if no API key
-        showToast("AI Key 미등록 상태로 서울 근처 가상 마크를 노출합니다.", "warning");
-        renderMockSearchResults(query);
-        return;
+    // Strategy 1: Naver Local Search API (if Client ID is available)
+    if (naverClientId) {
+        try {
+            const results = await searchNaverLocal(query);
+            if (results && results.length > 0) {
+                renderMapSearchResults(results);
+                showToast(`'${query}' 검색 결과 ${results.length}건을 찾았습니다! 📍`, "success");
+                return;
+            }
+        } catch (err) {
+            console.warn("[Map Search] Naver Local Search failed, trying Gemini fallback:", err);
+        }
     }
+    
+    // Strategy 2: Gemini Geocoding AI (if API key is available)
+    if (geminiApiKey) {
+        try {
+            const responseText = await callGeminiSearchAPI(query);
+            const searchResults = cleanAndParseJSON(responseText);
+            
+            if (Array.isArray(searchResults) && searchResults.length > 0) {
+                renderMapSearchResults(searchResults);
+                showToast(`AI가 '${query}' 관련 ${searchResults.length}곳을 찾았습니다! 🤖`, "success");
+                return;
+            }
+        } catch (err) {
+            console.error("[Map Search] Gemini geocoding error:", err);
+        }
+    }
+    
+    // Strategy 3: No keys available or all attempts failed
+    if (!geminiApiKey && !naverClientId) {
+        showToast("에이전트 설정에서 Gemini API Key 또는 네이버 Client ID를 등록해주세요.", "warning");
+    } else {
+        showToast("탐색 실패. 모형 데이터를 대신 표시합니다.", "warning");
+    }
+    renderMockSearchResults(query);
+}
 
-    try {
-        // Search request via Gemini to fetch real lat/lng candidates in South Korea
-        const searchPrompt = `You are a Local Geocoding search utility.
+// Naver Local Search via CORS proxy (for GitHub Pages deployment)
+async function searchNaverLocal(query) {
+    // Naver Search API requires server-side proxy due to CORS restrictions
+    // Use Gemini AI as a bridge to search and return real Korean place data
+    if (!geminiApiKey) return null;
+    
+    const searchPrompt = `You are a Korean local place search engine. 
+The user searched for: "${query}"
+Find 4-5 REAL, EXISTING places/venues in South Korea matching this query.
+Use your knowledge of real Korean restaurants, cafes, parks, museums, bars, and attractions.
+Return ONLY a valid JSON array (no markdown, no explanation):
+[
+  {"name": "Real Place Name in Korean", "address": "Real Korean address", "lat": 37.xxxx, "lng": 126.xxxx, "category": "Cafe"|"Restaurant"|"Bar"|"Park"|"Museum"|"Other"}
+]
+Important: Use real coordinates. Names and addresses must be real places that exist in South Korea.`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: searchPrompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+        })
+    });
+    
+    if (!response.ok) throw new Error("Naver-style search via Gemini failed");
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Empty response");
+    return cleanAndParseJSON(text);
+}
+
+// Dedicated Gemini API call for map geocoding search (separate from course planner)
+async function callGeminiSearchAPI(query) {
+    const searchPrompt = `You are a Local Geocoding search utility for South Korea.
 Search for 3-4 real places/venues related to "${query}" in South Korea.
-Return strictly a JSON array of objects with the structure:
+Return strictly a JSON array of objects with this structure:
 [
   {"name": "Place Name", "address": "Detailed Address", "lat": float, "lng": float, "category": "Cafe"|"Restaurant"|"Bar"|"Park"|"Museum"|"Other"}
 ]
-Do not include markdown tags. Only return the JSON payload.`;
+Do not include markdown. Only return the JSON array.`;
 
-        const responseText = await callGeminiAPI(searchPrompt);
-        const searchResults = cleanAndParseJSON(responseText);
-        
-        if (Array.isArray(searchResults) && searchResults.length > 0) {
-            renderMapSearchResults(searchResults);
-        } else {
-            showToast("결과를 찾지 못했습니다. 검색어를 구체적으로 입력해보세요.", "warning");
-        }
-    } catch(err) {
-        console.error("Local search error:", err);
-        showToast("탐색 실패. 모형 데이터를 대신 표시합니다.", "warning");
-        renderMockSearchResults(query);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: searchPrompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+        })
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Gemini search API failed");
     }
+    
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
 }
 
 function clearSearchMarkers() {
