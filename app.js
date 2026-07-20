@@ -340,7 +340,7 @@ function loadNaverMapScript(clientId) {
     
     const script = document.createElement("script");
     script.id = "naver-map-sdk-script";
-    script.src = `https://openapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
     script.onload = () => {
         console.log("[Map System] Naver Map SDK successfully injected.");
         initNaverMap();
