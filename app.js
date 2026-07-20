@@ -336,11 +336,16 @@ function updatePartnerNamesUI() {
 
 // 5. Dynamic Map Loader Engine
 function loadNaverMapScript(clientId) {
+    const cleanId = (clientId || "").trim();
+    if (!cleanId) {
+        initLeafletMap();
+        return;
+    }
     if (document.getElementById("naver-map-sdk-script")) return;
     
     const script = document.createElement("script");
     script.id = "naver-map-sdk-script";
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${clientId}`;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${encodeURIComponent(cleanId)}`;
     script.onload = () => {
         console.log("[Map System] Naver Map SDK successfully injected.");
         initNaverMap();
