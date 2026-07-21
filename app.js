@@ -1861,6 +1861,15 @@ async function renderPlacesList() {
                 const card = document.createElement("div");
                 card.className = "place-card card";
                 card.style.position = "relative";
+                
+                // Date formatting using robust parser
+                const rawDate = place.createdAt || place.date;
+                const parsedMs = parseAnyDate(rawDate);
+                const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+                
+                // Clean address
+                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+
                 let cardContent = `
                     <div class="place-card-top-actions">
                         <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
@@ -1871,15 +1880,21 @@ async function renderPlacesList() {
                         <span class="place-priority-dot priority-${place.priority}"></span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
-                `;
-                if (place.notes) {
-                    cardContent += `<p class="place-notes">${place.notes}</p>`;
-                }
-                cardContent += `
+                    
+                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
+                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : ''}
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
+                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
+                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="place-actions">
-                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 지도</a>` : ''}
+                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
                         <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, '${place.name}')">
-                            <i data-lucide="check"></i> 방문 완료
+                            <i data-lucide="check"></i> 방문 완료 📸
                         </button>
                     </div>
                 `;
