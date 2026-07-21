@@ -1401,16 +1401,19 @@ async function updateDashboardStats() {
             resultTextEl.textContent = "완벽하게 1/N 정산 완료! 💖";
         }
     }
-    
+
     // Visited quote box
     const visitedLogs = places.filter(p => p.isVisited === 1).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (visitedLogs.length > 0) {
-        document.getElementById("latest-visited-review").innerHTML = `
-            <strong>${visitedLogs[0].name}</strong>: 
-            "${visitedLogs[0].review}" <span style="display:block; font-size:0.75rem; margin-top:4px; color:var(--color-text-low);">${visitedLogs[0].rating}점 ★</span>
-        `;
-    } else {
-        document.getElementById("latest-visited-review").textContent = `"아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"`;
+    const latestReviewEl = document.getElementById("latest-visited-review");
+    if (latestReviewEl) {
+        if (visitedLogs.length > 0) {
+            latestReviewEl.innerHTML = `
+                <strong>${visitedLogs[0].name}</strong>: 
+                "${visitedLogs[0].review || '소감 없음'}" <span style="display:block; font-size:0.75rem; margin-top:4px; color:var(--color-text-low);">${visitedLogs[0].rating || 5}점 ★</span>
+            `;
+        } else {
+            latestReviewEl.textContent = `"아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"`;
+        }
     }
 }
 
@@ -1476,8 +1479,6 @@ async function saveToCloud() {
         };
         
         const bodyStr = JSON.stringify(payload);
-        if (bodyStr === lastSyncedDataString) return;
-        
         lastSyncedDataString = bodyStr;
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
         const response = await fetch(url, {
@@ -1497,14 +1498,9 @@ async function saveToCloud() {
     }
 }
 
+// Destructive db.places.clear() REMOVED! Replaced with safe Union Merge Engine.
 async function loadFromCloud() {
     if (!syncRoomId || isDownloading || isUploading) return;
-    
-    // Protection guard: If local changes occurred in the last 5 seconds, prioritize uploading local changes over cloud polling
-    if (Date.now() - localMutationTimestamp < 5000) {
-        await saveToCloud();
-        return;
-    }
 
     isDownloading = true;
     
@@ -1515,10 +1511,13 @@ async function loadFromCloud() {
         if (!response.ok) return;
         
         const resData = await response.json();
+        const localPlaces = await db.places.toArray();
         
         if (resData === null) {
-            // Room empty, initialize room with local data
-            await saveToCloud();
+            // Room empty in cloud, initialize cloud with local data
+            if (localPlaces.length > 0) {
+                await saveToCloud();
+            }
             return;
         }
 
