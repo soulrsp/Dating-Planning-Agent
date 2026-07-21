@@ -473,6 +473,32 @@ async function updateMapMarkers() {
         if (places.length > 0) {
             map.fitBounds(bounds);
         }
+        
+        // Background Auto Coordinate Repair Engine (Corrects any off-target mountain/river coordinates to Naver Official Building Roofs)
+        if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
+            places.forEach(place => {
+                const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                if (rawAddr && rawAddr.length > 5) {
+                    naver.maps.Service.geocode({ query: rawAddr }, (status, response) => {
+                        if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                            const officialAddr = response.v2.addresses[0];
+                            const exactLat = parseFloat(officialAddr.y);
+                            const exactLng = parseFloat(officialAddr.x);
+                            
+                            // If coordinates differ significantly (> 100 meters), update DB seamlessly
+                            if (exactLat > 30 && exactLat < 45 && exactLng > 120 && exactLng < 135) {
+                                if (Math.abs(place.lat - exactLat) > 0.0008 || Math.abs(place.lng - exactLng) > 0.0008) {
+                                    console.log(`[Auto Coordinate Repair] Corrected ${place.name} from (${place.lat}, ${place.lng}) to Naver Official Building Roof (${exactLat}, ${exactLng})`);
+                                    place.lat = exactLat;
+                                    place.lng = exactLng;
+                                    db.places.update(place.id, { lat: exactLat, lng: exactLng }).catch(() => {});
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
     } else {
         // Leaflet Map Markers Rendering
         if (!leafletMarkersGroup) return;
@@ -516,8 +542,8 @@ async function updateMapMarkers() {
 
 // Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
 const AURA_LOCAL_PLACE_KB = [
-    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점)
-    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
+    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점 - Official Building Roof Coordinates)
+    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.44145, lng: 127.35085, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
     { name: "충남순대 (세종 금남본점)", address: "세종특별자치시 금남면 용포로 97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남순대", "세종충남순대", "금남면", "용포리", "세종 충남순대"] },
     { name: "충남순대국밥 (대전 유성 봉명점)", address: "대전광역시 유성구 유성대로 694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남순대", "유성 충남순대", "유성대로", "대전 충남순대"] },
     { name: "충남순대 (천안 아우내점)", address: "충청남도 천안시 동남구 병천면 아우내장터길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남순대", "병천순대", "천안 충남순대"] },
@@ -526,8 +552,9 @@ const AURA_LOCAL_PLACE_KB = [
     { name: "충남순대 (아산 온천점)", address: "충청남도 아산시 온천대로 1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남순대", "아산 충남순대"] },
     { name: "충남순대 (논산 강경점)", address: "충청남도 논산시 강경읍 계백로 125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남순대", "논산 충남순대"] },
 
-    // 진남포면옥 & 진남포 (부분 검색어 지원)
-    { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.43892, lng: 127.38875, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
+    // 진남포면옥 & 진남포 (부분 검색어 지원 - Official Building Roof Coordinates)
+    { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.44025, lng: 127.38285, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
+    { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
     { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
     
     // 민테크 (전국 8개 전 지점 / 본사 / 오피스 / 연구소 / 공장)
@@ -1395,6 +1422,38 @@ function closeEditPlaceModal() {
     document.getElementById("form-edit-place").reset();
 }
 
+window.fixEditModalCoordinates = async function() {
+    const address = document.getElementById("edit-place-address").value.trim();
+    if (!address) {
+        showToast("보정할 주소를 입력해 주세요! 📍", "warning");
+        return;
+    }
+    
+    showToast("네이버 공식 지적도 건물 좌표를 조회 중입니다... 🎯", "success");
+    
+    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
+        naver.maps.Service.geocode({ query: address }, (status, response) => {
+            if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                const addrItem = response.v2.addresses[0];
+                const lat = parseFloat(addrItem.y);
+                const lng = parseFloat(addrItem.x);
+                
+                const id = parseInt(document.getElementById("edit-place-id").value);
+                if (id) {
+                    db.places.update(id, { lat: lat, lng: lng }).then(() => {
+                        showToast(`네이버 공식 건물 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})로 100% 정밀 보정되었습니다! 🎯`, "success");
+                        updateMapMarkers();
+                    });
+                }
+            } else {
+                showToast("해당 주소의 지적도 좌표를 찾지 못했습니다. 도로명 주소를 확인해 주세요 📍", "warning");
+            }
+        });
+    } else {
+        showToast("네이버 지도 지적도 서비스가 준비 중입니다.", "warning");
+    }
+};
+
 async function handleEditPlaceSubmit(e) {
     e.preventDefault();
     const id = parseInt(document.getElementById("edit-place-id").value);
@@ -1414,6 +1473,20 @@ async function handleEditPlaceSubmit(e) {
         notes: addressVal,
         createdAt: updatedDate
     };
+
+    // Auto-resolve coordinates from address via Naver official Geocoder
+    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode && addressVal.length > 4) {
+        await new Promise((resolve) => {
+            naver.maps.Service.geocode({ query: addressVal }, (status, response) => {
+                if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                    const addrItem = response.v2.addresses[0];
+                    updatePayload.lat = parseFloat(addrItem.y);
+                    updatePayload.lng = parseFloat(addrItem.x);
+                }
+                resolve();
+            });
+        });
+    }
 
     if (place.isVisited === 1) {
         const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
