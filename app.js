@@ -247,10 +247,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("visit-photo").addEventListener("change", handlePhotoUploadPreview);
 
     // In-app Map Direct Search logic
-    document.getElementById("btn-map-search").addEventListener("click", handleInAppMapSearch);
-    document.getElementById("map-search-query").addEventListener("keypress", (e) => {
-        if (e.key === "Enter") handleInAppMapSearch();
-    });
+    const btnMapSearch = document.getElementById("btn-map-search");
+    if (btnMapSearch) {
+        btnMapSearch.addEventListener("click", () => handleInAppMapSearch());
+    }
+    const inputMapSearch = document.getElementById("map-search-query");
+    if (inputMapSearch) {
+        inputMapSearch.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleInAppMapSearch();
+        });
+    }
 
     // AI Chatbot planner
     document.getElementById("chat-input-form").addEventListener("submit", handleChatSubmit);
@@ -789,7 +795,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
 }
 
 // 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
-window.handleInAppMapSearch = async function() {
+async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
     const query = inputEl.value.trim();
@@ -898,7 +904,8 @@ window.handleInAppMapSearch = async function() {
     } else {
         showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장 이름을 정확히 입력해 보세요 📍`, "warning");
     }
-};
+}
+window.handleInAppMapSearch = handleInAppMapSearch;
 
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
 async function searchNominatimFree(query) {
