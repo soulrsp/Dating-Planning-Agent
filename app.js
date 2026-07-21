@@ -610,18 +610,32 @@ function getUserCurrentLocation() {
             return;
         }
         if (navigator.geolocation) {
+            let done = false;
+            const timer = setTimeout(() => {
+                if (!done) {
+                    done = true;
+                    resolve(null);
+                }
+            }, 1000);
+
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
-                    currentUserLat = pos.coords.latitude;
-                    currentUserLng = pos.coords.longitude;
-                    console.log(`[Geolocation] Current user location detected: ${currentUserLat}, ${currentUserLng}`);
-                    resolve({ lat: currentUserLat, lng: currentUserLng });
+                    if (!done) {
+                        done = true;
+                        clearTimeout(timer);
+                        currentUserLat = pos.coords.latitude;
+                        currentUserLng = pos.coords.longitude;
+                        resolve({ lat: currentUserLat, lng: currentUserLng });
+                    }
                 },
                 (err) => {
-                    console.warn("[Geolocation] Location notice:", err.message);
-                    resolve(null);
+                    if (!done) {
+                        done = true;
+                        clearTimeout(timer);
+                        resolve(null);
+                    }
                 },
-                { timeout: 4000, enableHighAccuracy: true }
+                { timeout: 1000, enableHighAccuracy: false }
             );
         } else {
             resolve(null);
@@ -732,62 +746,77 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     return null;
 }
 
-// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng)
+// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 800ms safety timeout)
 function refineCoordinatesViaNaverGeocoder(address) {
     return new Promise((resolve) => {
         if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
             resolve(null);
             return;
         }
-        naver.maps.Service.geocode({ query: address }, (status, response) => {
-            if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
-                const addr = response.v2.addresses[0];
-                const lat = parseFloat(addr.y);
-                const lng = parseFloat(addr.x);
-                if (lat > 30 && lat < 45 && lng > 120 && lng < 135) {
-                    resolve({ lat, lng });
-                    return;
-                }
+        let done = false;
+        const timer = setTimeout(() => {
+            if (!done) {
+                done = true;
+                resolve(null);
             }
-            resolve(null);
-        });
+        }, 800);
+
+        try {
+            naver.maps.Service.geocode({ query: address }, (status, response) => {
+                if (!done) {
+                    done = true;
+                    clearTimeout(timer);
+                    if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                        const addr = response.v2.addresses[0];
+                        const lat = parseFloat(addr.y);
+                        const lng = parseFloat(addr.x);
+                        if (lat > 30 && lat < 45 && lng > 120 && lng < 135) {
+                            resolve({ lat, lng });
+                            return;
+                        }
+                    }
+                    resolve(null);
+                }
+            });
+        } catch (e) {
+            if (!done) {
+                done = true;
+                clearTimeout(timer);
+                resolve(null);
+            }
+        }
     });
 }
 
 // 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
-async function handleInAppMapSearch() {
-    const query = document.getElementById("map-search-query").value.trim();
-    if (!query) return;
+window.handleInAppMapSearch = async function() {
+    const inputEl = document.getElementById("map-search-query");
+    if (!inputEl) return;
+    const query = inputEl.value.trim();
+    if (!query) {
+        showToast("검색어를 입력해 주세요 📍", "warning");
+        return;
+    }
     
     // Clear old search markers and panel
     clearSearchMarkers();
     
-    showToast(`'${query}' 내 위치 주변 및 네이버 지도를 탐색 중입니다... 📍`, "success");
+    showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "info");
     
     let combinedResults = [];
-
-    // 0. Detect user's current GPS location for Proximity Search Ranking
-    const userLoc = await getUserCurrentLocation();
-    const userLat = userLoc ? userLoc.lat : null;
-    const userLng = userLoc ? userLoc.lng : null;
 
     // 1. Local Knowledge Base (Instant, reliable, pre-verified coordinates)
     const kbResults = searchLocalKnowledgeBase(query);
     if (kbResults.length > 0) {
-        // Refine KB coordinates via Naver Geocoder for maximum precision
-        for (const item of kbResults) {
-            if (item.address) {
-                const refined = await refineCoordinatesViaNaverGeocoder(item.address);
-                if (refined) {
-                    item.lat = refined.lat;
-                    item.lng = refined.lng;
-                }
-            }
-        }
         combinedResults.push(...kbResults);
     }
 
-    // 2. Real-time Naver Maps Dynamic POI/Business Search API
+    // 2. Detect user's current GPS location (max 1s timeout)
+    const userLoc = await getUserCurrentLocation();
+    const userLat = userLoc ? userLoc.lat : null;
+    const userLng = userLoc ? userLoc.lng : null;
+
+    // 3. Real-time Naver Maps Dynamic POI/Business Search API
     try {
         const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
         if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
@@ -797,7 +826,7 @@ async function handleInAppMapSearch() {
         console.warn("[Naver Dynamic Search]", err);
     }
 
-    // 3. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
+    // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
@@ -809,23 +838,12 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 4. AI Business Directory & Local Place Search (Finds restaurants & company branches)
-    if (geminiApiKey && combinedResults.length < 3) {
+    // 5. AI Business Directory & Local Place Search (Finds restaurants & company branches)
+    if (geminiApiKey && combinedResults.length < 2) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
-            
             if (Array.isArray(searchResults) && searchResults.length > 0) {
-                // Refine AI-provided coordinates via Naver Geocoder
-                for (const item of searchResults) {
-                    if (item.address) {
-                        const refined = await refineCoordinatesViaNaverGeocoder(item.address);
-                        if (refined) {
-                            item.lat = refined.lat;
-                            item.lng = refined.lng;
-                        }
-                    }
-                }
                 combinedResults.push(...searchResults);
             }
         } catch (err) {
@@ -833,7 +851,7 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 5. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
+    // 6. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
         try {
             const freeResults = await searchNominatimFree(query);
@@ -845,7 +863,7 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 6. Deduplicate combined results by name & location proximity
+    // Deduplicate combined results by name & location proximity
     const uniqueResults = [];
     const seenMap = new Set();
 
@@ -858,7 +876,6 @@ async function handleInAppMapSearch() {
         if (!seenMap.has(key)) {
             seenMap.add(key);
             
-            // Calculate distance to user location
             if (userLoc && item.lat && item.lng) {
                 item.distanceKm = calculateDistanceKm(userLoc.lat, userLoc.lng, item.lat, item.lng);
             } else {
@@ -869,7 +886,7 @@ async function handleInAppMapSearch() {
         }
     }
 
-    // 7. Sort by proximity: Nearest to current user position ranked at top!
+    // Sort by proximity: Nearest to current user position ranked at top!
     if (userLoc) {
         uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
     }
@@ -878,11 +895,10 @@ async function handleInAppMapSearch() {
         renderMapSearchResults(uniqueResults);
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
-        return;
+    } else {
+        showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장 이름을 정확히 입력해 보세요 📍`, "warning");
     }
-    
-    showToast("입력하신 검색어에 해당하는 장소를 찾지 못했습니다. '대전 유성구 구룡달전로 3-12'처럼 도로명 주소나 상호명을 구체적으로 입력해 보세요 📍", "warning");
-}
+};
 
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
 async function searchNominatimFree(query) {
