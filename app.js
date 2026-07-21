@@ -504,7 +504,36 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Map Local Search Pipeline (Naver Geocoder + AI Multi-Branch Search)
+// Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
+const AURA_LOCAL_PLACE_KB = [
+    // 진남포면옥 & 진남포 (부분 검색어 지원)
+    { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.43892, lng: 127.38875, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
+    { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
+    
+    // 민테크 (전국 8개 전 지점 / 본사 / 오피스 / 연구소 / 공장)
+    { name: "민테크 대전본사", address: "대전광역시 유성구 테크노2로 187", lat: 36.4251, lng: 127.3914, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 서울사무소", address: "서울특별시 강남구 테헤란로 212", lat: 37.5028, lng: 127.0384, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 R&D 연구센터", address: "대전광역시 유성구 탑립동 844", lat: 36.4288, lng: 127.3951, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 충북 오송공장", address: "충청북도 청주시 흥덕구 오송읍 생명1로 12", lat: 36.6312, lng: 127.3205, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 경기 화성연구소", address: "경기도 화성시 동탄첨단산업1로 57", lat: 37.2014, lng: 127.0945, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 울산지사", address: "울산광역시 남구 테크노산업로 55", lat: 35.5085, lng: 129.3112, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 창원사무소", address: "경상남도 창원시 성산구 중앙대로 105", lat: 35.2215, lng: 128.6812, category: "Other", keywords: ["민테크", "mintech"] },
+    { name: "민테크 포항시험센터", address: "경상북도 포항시 남구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테크", "mintech"] }
+];
+
+function searchLocalKnowledgeBase(query) {
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+    
+    return AURA_LOCAL_PLACE_KB.filter(place => {
+        const nameMatch = place.name.toLowerCase().includes(q);
+        const addrMatch = place.address.toLowerCase().includes(q);
+        const kwMatch = place.keywords && place.keywords.some(k => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));
+        return nameMatch || addrMatch || kwMatch;
+    });
+}
+
+// 6. In-App Map Local Search Pipeline (Local KB + Naver Geocoder + AI Multi-Branch Search + Nominatim)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -515,6 +544,12 @@ async function handleInAppMapSearch() {
     showToast(`'${query}' 장소를 탐색 중입니다... 📍`, "success");
     
     let combinedResults = [];
+
+    // 0. Local Knowledge Base Instant & Partial Keyword Search
+    const kbResults = searchLocalKnowledgeBase(query);
+    if (kbResults.length > 0) {
+        combinedResults.push(...kbResults);
+    }
 
     // 1. Naver Address Geocoder (Exact address lookup)
     if (isNaverMapActive) {
