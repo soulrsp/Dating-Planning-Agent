@@ -504,7 +504,7 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Local Search & Pinning (Naver Native Geocoder → Gemini Geocoding fallback)
+// 6. In-App Local Search & Pinning (Naver Geocoder → Gemini AI → OpenStreetMap Nominatim → Mock fallback)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -524,11 +524,11 @@ async function handleInAppMapSearch() {
                 return;
             }
         } catch (err) {
-            console.warn("[Map Search] Naver Geocoder failed, trying Gemini fallback:", err);
+            console.warn("[Map Search] Naver Geocoder failed:", err);
         }
     }
     
-    // Strategy 2: Gemini Geocoding AI (if API key is available)
+    // Strategy 2: Gemini Geocoding AI (if API key is available and not quota exceeded)
     if (geminiApiKey) {
         try {
             const responseText = await callGeminiSearchAPI(query);
@@ -540,18 +540,54 @@ async function handleInAppMapSearch() {
                 return;
             }
         } catch (err) {
-            console.error("[Map Search] Gemini geocoding error:", err);
-            showToast(`Gemini API 호출 실패: ${err.message}`, "warning");
+            console.warn("[Map Search] Gemini geocoding error:", err.message);
+            if (err.message.includes("quota") || err.message.includes("Quota") || err.message.includes("429")) {
+                showToast("Gemini API 무료 사용량이 초과되어 오픈지도로 자동 전환 탐색합니다 📍", "info");
+            }
         }
     }
     
-    // Strategy 3: Informative fallback & Mock results
-    if (!geminiApiKey) {
-        showToast("에이전트 설정에서 Gemini API Key를 추가하시면 AI 감성 장소 탐색도 가능해집니다! 💡", "info");
-    } else {
-        showToast("원하는 장소를 정확히 찾지 못해 샘플 위치를 표시합니다.", "warning");
+    // Strategy 3: Free OpenStreetMap Nominatim Geocoder (No API Key required, 100% free fallback)
+    try {
+        const freeResults = await searchNominatimFree(query);
+        if (Array.isArray(freeResults) && freeResults.length > 0) {
+            renderMapSearchResults(freeResults);
+            showToast(`'${query}' 오픈지도 검색 결과 ${freeResults.length}건을 찾았습니다! 📍`, "success");
+            return;
+        }
+    } catch (err) {
+        console.warn("[Map Search] OpenStreetMap search failed:", err);
     }
+    
+    // Strategy 4: Fallback to mock data if all search engines yield nothing
+    showToast("검색어에 맞는 좌표를 찾지 못해 샘플 위치를 표시합니다.", "warning");
     renderMockSearchResults(query);
+}
+
+// OpenStreetMap Nominatim Free Search Helper
+async function searchNominatimFree(query) {
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+            return data.map(item => {
+                const parts = (item.display_name || "").split(',');
+                const cleanTitle = parts[0].trim();
+                return {
+                    name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
+                    address: item.display_name,
+                    lat: parseFloat(item.lat),
+                    lng: parseFloat(item.lon),
+                    category: "Other"
+                };
+            });
+        }
+    } catch (e) {
+        console.warn("[Map Search] Nominatim fetch error:", e);
+    }
+    return null;
 }
 
 // Naver Native Geocoder Promise Wrapper
