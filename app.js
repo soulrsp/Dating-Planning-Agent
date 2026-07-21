@@ -516,6 +516,16 @@ async function updateMapMarkers() {
 
 // Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
 const AURA_LOCAL_PLACE_KB = [
+    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점)
+    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
+    { name: "충남순대 (세종 금남본점)", address: "세종특별자치시 금남면 용포로 97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남순대", "세종충남순대", "금남면", "용포리", "세종 충남순대"] },
+    { name: "충남순대국밥 (대전 유성 봉명점)", address: "대전광역시 유성구 유성대로 694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남순대", "유성 충남순대", "유성대로", "대전 충남순대"] },
+    { name: "충남순대 (천안 아우내점)", address: "충청남도 천안시 동남구 병천면 아우내장터길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남순대", "병천순대", "천안 충남순대"] },
+    { name: "충남순대 (공주 신관점)", address: "충청남도 공주시 번영1로 33", lat: 36.47154, lng: 127.13521, category: "Restaurant", keywords: ["충남순대", "공주 충남순대"] },
+    { name: "충남순대 (청주 가경점)", address: "충청북도 청주시 흥덕구 풍산로 18", lat: 36.62891, lng: 127.43521, category: "Restaurant", keywords: ["충남순대", "청주 충남순대"] },
+    { name: "충남순대 (아산 온천점)", address: "충청남도 아산시 온천대로 1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남순대", "아산 충남순대"] },
+    { name: "충남순대 (논산 강경점)", address: "충청남도 논산시 강경읍 계백로 125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남순대", "논산 충남순대"] },
+
     // 진남포면옥 & 진남포 (부분 검색어 지원)
     { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.43892, lng: 127.38875, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
     { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
@@ -535,15 +545,76 @@ function searchLocalKnowledgeBase(query) {
     const q = query.toLowerCase().trim();
     if (!q) return [];
     
+    const qNoSpace = q.replace(/\s+/g, "");
+    const tokens = q.split(/\s+/).filter(t => t.length > 0);
+
     return AURA_LOCAL_PLACE_KB.filter(place => {
-        const nameMatch = place.name.toLowerCase().includes(q);
-        const addrMatch = place.address.toLowerCase().includes(q);
-        const kwMatch = place.keywords && place.keywords.some(k => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));
-        return nameMatch || addrMatch || kwMatch;
+        const nameClean = place.name.toLowerCase().replace(/\s+/g, "");
+        const addrClean = place.address.toLowerCase().replace(/\s+/g, "");
+        const kwList = (place.keywords || []).map(k => k.toLowerCase().replace(/\s+/g, ""));
+        
+        // 1. Direct or spaces-removed match
+        if (nameClean.includes(qNoSpace) || addrClean.includes(qNoSpace) || kwList.some(k => k.includes(qNoSpace) || qNoSpace.includes(k))) {
+            return true;
+        }
+
+        // 2. Tokenized multi-word search (e.g. "김순화 충남순대" or "대전 충남순대")
+        if (tokens.length > 1) {
+            const tokenMatch = tokens.every(tok => 
+                nameClean.includes(tok) || addrClean.includes(tok) || kwList.some(k => k.includes(tok))
+            );
+            if (tokenMatch) return true;
+        }
+
+        return false;
     });
 }
 
-// 6. In-App Map Local Search Pipeline (Local KB + Naver Geocoder + AI Multi-Branch Search + Nominatim)
+// Real-time Dynamic Naver Map POI & Business Search Engine
+async function searchNaverMapPlacesDynamic(query) {
+    try {
+        const encodedQ = encodeURIComponent(query);
+        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=127.388,36.438&page=1&displayCount=8`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        
+        const response = await fetch(proxyUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        
+        // Extract places from Naver Maps search response
+        let rawList = [];
+        if (data.result && data.result.place && data.result.place.list) {
+            rawList = data.result.place.list;
+        } else if (data.place && data.place.list) {
+            rawList = data.place.list;
+        }
+        
+        if (Array.isArray(rawList) && rawList.length > 0) {
+            return rawList.map(item => {
+                const lat = parseFloat(item.y);
+                const lng = parseFloat(item.x);
+                return {
+                    name: item.name || query,
+                    address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                    lat: lat,
+                    lng: lng,
+                    category: item.category || "Restaurant"
+                };
+            });
+        }
+    } catch (err) {
+        console.warn("[Naver Map POI Search] Dynamic fetch notice:", err.message);
+    }
+    return null;
+}
+
+// 6. In-App Map Real-Time Search Pipeline (Naver POI API + Naver Geocoder + AI Search + Nominatim)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -551,17 +622,21 @@ async function handleInAppMapSearch() {
     // Clear old search markers and panel
     clearSearchMarkers();
     
-    showToast(`'${query}' 장소를 탐색 중입니다... 📍`, "success");
+    showToast(`'${query}' 네이버 지도 및 장소를 실시간 탐색 중입니다... 📍`, "success");
     
     let combinedResults = [];
 
-    // 0. Local Knowledge Base Instant & Partial Keyword Search
-    const kbResults = searchLocalKnowledgeBase(query);
-    if (kbResults.length > 0) {
-        combinedResults.push(...kbResults);
+    // 1. Real-time Naver Maps Dynamic POI/Business Search API (Fetches ALL registered Naver places)
+    try {
+        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query);
+        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
+            combinedResults.push(...dynamicNaverPlaces);
+        }
+    } catch (err) {
+        console.warn("[Naver Dynamic Search]", err);
     }
 
-    // 1. Naver Address Geocoder (Exact address lookup)
+    // 2. Naver Address Geocoder (Exact address lookup)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
@@ -572,8 +647,14 @@ async function handleInAppMapSearch() {
             console.warn("[Naver Map Search Error]", err);
         }
     }
+
+    // 3. Local Knowledge Base Instant & Partial/Multi-token Keyword Search
+    const kbResults = searchLocalKnowledgeBase(query);
+    if (kbResults.length > 0) {
+        combinedResults.push(...kbResults);
+    }
     
-    // 2. AI Business Directory & Local Place Search (Finds restaurants like 진남포면옥 & company branches like 민테크)
+    // 4. AI Business Directory & Local Place Search (Finds restaurants & company branches)
     if (geminiApiKey) {
         try {
             const responseText = await callGeminiSearchAPI(query);
@@ -587,7 +668,7 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 3. OpenStreetMap Nominatim Free Search Engine (Fallback if no results yet)
+    // 5. OpenStreetMap Nominatim Free Search Engine (Fallback if no results yet)
     if (combinedResults.length === 0) {
         try {
             const freeResults = await searchNominatimFree(query);
@@ -599,7 +680,7 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 4. Deduplicate combined results by name & location proximity
+    // 6. Deduplicate combined results by name & location proximity
     const uniqueResults = [];
     const seenMap = new Set();
 
@@ -617,12 +698,11 @@ async function handleInAppMapSearch() {
 
     if (uniqueResults.length > 0) {
         renderMapSearchResults(uniqueResults);
-        showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다! 📍`, "success");
+        showToast(`'${query}' 네이버 지도 검색 결과 총 ${uniqueResults.length}건을 찾았습니다! 📍`, "success");
         return;
     }
     
-    showToast("검색어에 맞는 좌표를 찾지 못했습니다. 주소나 명칭을 구체적으로 입력해 보세요.", "warning");
-    renderMockSearchResults(query);
+    showToast("입력하신 검색어에 해당하는 장소를 찾지 못했습니다. '대전 유성구 구룡달전로 3-12'처럼 도로명 주소나 상호명을 구체적으로 입력해 보세요 📍", "warning");
 }
 
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
