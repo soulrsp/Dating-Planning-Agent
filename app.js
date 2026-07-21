@@ -1469,9 +1469,9 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
                 let cardContent = `
-                    <div style="position:absolute; top:0.75rem; right:0.75rem; display:flex; gap:0.35rem; z-index:5;">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-text-high); font-size:12px; transition:0.2s;"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-danger); font-size:12px; transition:0.2s;"><i data-lucide="trash-2"></i></button>
+                    <div class="place-card-top-actions">
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
@@ -1531,9 +1531,9 @@ async function renderPlacesList() {
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
                 let cardContent = `
-                    <div style="position:absolute; top:0.75rem; right:0.75rem; display:flex; gap:0.35rem; z-index:5;">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-text-high); font-size:12px; transition:0.2s;"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-danger); font-size:12px; transition:0.2s;"><i data-lucide="trash-2"></i></button>
+                    <div class="place-card-top-actions">
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
