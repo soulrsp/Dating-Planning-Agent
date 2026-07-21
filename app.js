@@ -504,7 +504,7 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Local Search & Pinning (Naver Geocoder → Gemini AI → OpenStreetMap Nominatim → Mock fallback)
+// 6. In-App Naver Maps Local Search & Pinning (100% Native Naver Geocoder)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -512,42 +512,28 @@ async function handleInAppMapSearch() {
     // Clear old search markers
     clearSearchMarkers();
     
-    showToast(`'${query}' 장소를 지도에서 탐색 중입니다...`, "success");
+    showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "success");
     
-    // Strategy 1: Naver Native JS Geocoder (if Naver Map SDK is active)
+    // 1. Naver Dynamic Map Active: Search exclusively via Naver Maps Engine
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
             if (Array.isArray(naverResults) && naverResults.length > 0) {
                 renderMapSearchResults(naverResults);
-                showToast(`'${query}' 네이버 지도 탐색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
+                showToast(`'${query}' 네이버 지도 검색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
+                return;
+            } else {
+                showToast(`네이버 지도에서 '${query}' 주소를 찾지 못했습니다. 도로명 주소나 위치(예: 테헤란로 212, 역삼동)를 검색해 보세요.`, "warning");
                 return;
             }
         } catch (err) {
-            console.warn("[Map Search] Naver Geocoder failed:", err);
+            console.warn("[Naver Map Search Error]", err);
+            showToast("네이버 지도 탐색 중 오류가 발생했습니다.", "warning");
+            return;
         }
     }
     
-    // Strategy 2: Gemini Geocoding AI (if API key is available and not quota exceeded)
-    if (geminiApiKey) {
-        try {
-            const responseText = await callGeminiSearchAPI(query);
-            const searchResults = cleanAndParseJSON(responseText);
-            
-            if (Array.isArray(searchResults) && searchResults.length > 0) {
-                renderMapSearchResults(searchResults);
-                showToast(`AI가 '${query}' 관련 ${searchResults.length}곳을 찾았습니다! 🤖`, "success");
-                return;
-            }
-        } catch (err) {
-            console.warn("[Map Search] Gemini geocoding error:", err.message);
-            if (err.message.includes("quota") || err.message.includes("Quota") || err.message.includes("429")) {
-                showToast("Gemini API 무료 사용량이 초과되어 오픈지도로 자동 전환 탐색합니다 📍", "info");
-            }
-        }
-    }
-    
-    // Strategy 3: Free OpenStreetMap Nominatim Geocoder (No API Key required, 100% free fallback)
+    // 2. Leaflet Fallback (No Naver Client ID): Use OpenStreetMap Nominatim Free Geocoder
     try {
         const freeResults = await searchNominatimFree(query);
         if (Array.isArray(freeResults) && freeResults.length > 0) {
@@ -556,15 +542,13 @@ async function handleInAppMapSearch() {
             return;
         }
     } catch (err) {
-        console.warn("[Map Search] OpenStreetMap search failed:", err);
+        console.warn("[OpenStreetMap Search Error]", err);
     }
     
-    // Strategy 4: Fallback to mock data if all search engines yield nothing
-    showToast("검색어에 맞는 좌표를 찾지 못해 샘플 위치를 표시합니다.", "warning");
-    renderMockSearchResults(query);
+    showToast("검색어에 맞는 좌표를 찾지 못했습니다. 구체적인 주소를 입력해 보세요.", "warning");
 }
 
-// OpenStreetMap Nominatim Free Search Helper
+// OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
 async function searchNominatimFree(query) {
     try {
         const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5`;
@@ -594,28 +578,38 @@ async function searchNominatimFree(query) {
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
         if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
-            console.warn("[Map System] Naver Geocoder submodule unavailable.");
+            console.warn("[Naver Map] Geocoder submodule unavailable.");
             resolve(null);
             return;
         }
         
         naver.maps.Service.geocode({ query: query }, (status, response) => {
             if (status !== naver.maps.Service.Status.OK) {
-                console.warn("[Map System] Naver Geocode API status:", status);
+                console.warn("[Naver Map] Geocode API status:", status);
                 resolve(null);
                 return;
             }
             if (!response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
-                console.info("[Map System] Naver Geocode found no address match for:", query);
+                console.info("[Naver Map] Geocode found no address match for:", query);
                 resolve(null);
                 return;
             }
             
             const results = response.v2.addresses.map((addr) => {
+                let buildingName = "";
+                if (addr.addressElements) {
+                    const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
+                    if (el && el.longName) {
+                        buildingName = el.longName;
+                    }
+                }
+                
                 const shortAddr = addr.roadAddress || addr.jibunAddress || "";
+                const displayTitle = buildingName ? `${query} (${buildingName})` : (shortAddr ? `${query}` : query);
+                
                 return {
-                    name: query,
-                    address: shortAddr || "주소 정보",
+                    name: displayTitle,
+                    address: shortAddr || "네이버 지도 주소",
                     lat: parseFloat(addr.y),
                     lng: parseFloat(addr.x),
                     category: "Other"
