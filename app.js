@@ -542,8 +542,11 @@ async function updateMapMarkers() {
 
 // Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
 const AURA_LOCAL_PLACE_KB = [
-    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점 - Official Building Roof Coordinates)
-    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.44145, lng: 127.35085, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
+    // 부원냉삼집 (대전 관평동 / 배울1로 호반써밋프라자점)
+    { name: "부원냉삼집 (대전 관평동점)", address: "대전광역시 유성구 배울1로 126 호반써밋프라자 107호", lat: 36.42580, lng: 127.39420, category: "Restaurant", keywords: ["부원", "부원냉삼", "부원냉삼집", "관평동", "배울1로", "호반써밋", "용산동", "관평동맛집"] },
+
+    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점 - Naver Map POI Building Coordinates)
+    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
     { name: "충남순대 (세종 금남본점)", address: "세종특별자치시 금남면 용포로 97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남순대", "세종충남순대", "금남면", "용포리", "세종 충남순대"] },
     { name: "충남순대국밥 (대전 유성 봉명점)", address: "대전광역시 유성구 유성대로 694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남순대", "유성 충남순대", "유성대로", "대전 충남순대"] },
     { name: "충남순대 (천안 아우내점)", address: "충청남도 천안시 동남구 병천면 아우내장터길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남순대", "병천순대", "천안 충남순대"] },
@@ -552,9 +555,8 @@ const AURA_LOCAL_PLACE_KB = [
     { name: "충남순대 (아산 온천점)", address: "충청남도 아산시 온천대로 1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남순대", "아산 충남순대"] },
     { name: "충남순대 (논산 강경점)", address: "충청남도 논산시 강경읍 계백로 125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남순대", "논산 충남순대"] },
 
-    // 진남포면옥 & 진남포 (부분 검색어 지원 - Official Building Roof Coordinates)
+    // 진남포면옥 & 진남포 (부분 검색어 지원 - Naver Map POI Building Coordinates)
     { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.44025, lng: 127.38285, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
-    { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
     { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
     
     // 민테크 (전국 8개 전 지점 / 본사 / 오피스 / 연구소 / 공장)
@@ -585,7 +587,7 @@ function searchLocalKnowledgeBase(query) {
             return true;
         }
 
-        // 2. Tokenized multi-word search (e.g. "김순화 충남순대" or "대전 충남순대")
+        // 2. Tokenized multi-word search (e.g. "부원냉삼집 대전 관평동점" or "김순화 충남순대")
         if (tokens.length > 1) {
             const tokenMatch = tokens.every(tok => 
                 nameClean.includes(tok) || addrClean.includes(tok) || kwList.some(k => k.includes(tok))
@@ -667,48 +669,65 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine with User Proximity Center
+// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Query Fallback Loop
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
-    try {
-        const encodedQ = encodeURIComponent(query);
-        const centerLng = userLng || 127.388;
-        const centerLat = userLat || 36.438;
-        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        
-        const response = await fetch(proxyUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
+    const tryQueries = [query];
+    
+    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
+    const words = query.trim().split(/\s+/);
+    if (words.length > 1) {
+        tryQueries.push(words[0]);
+        if (words.length > 2) {
+            tryQueries.push(`${words[0]} ${words[1]}`);
+        }
+    }
+    
+    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
+    if (cleanBrand && !tryQueries.includes(cleanBrand)) {
+        tryQueries.push(cleanBrand);
+    }
 
-        if (!response.ok) return null;
-        
-        const data = await response.json();
-        
-        // Extract places from Naver Maps search response
-        let rawList = [];
-        if (data.result && data.result.place && data.result.place.list) {
-            rawList = data.result.place.list;
-        } else if (data.place && data.place.list) {
-            rawList = data.place.list;
+    for (const q of tryQueries) {
+        try {
+            const encodedQ = encodeURIComponent(q);
+            const centerLng = userLng || 127.388;
+            const centerLat = userLat || 36.438;
+            const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            
+            const response = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) continue;
+            
+            const data = await response.json();
+            
+            let rawList = [];
+            if (data.result && data.result.place && data.result.place.list) {
+                rawList = data.result.place.list;
+            } else if (data.place && data.place.list) {
+                rawList = data.place.list;
+            }
+            
+            if (Array.isArray(rawList) && rawList.length > 0) {
+                return rawList.map(item => {
+                    const lat = parseFloat(item.y);
+                    const lng = parseFloat(item.x);
+                    return {
+                        name: item.name || query,
+                        address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                        lat: lat,
+                        lng: lng,
+                        category: item.category || "Restaurant"
+                    };
+                });
+            }
+        } catch (err) {
+            console.warn(`[Naver Map POI Search] Dynamic fetch notice for '${q}':`, err.message);
         }
-        
-        if (Array.isArray(rawList) && rawList.length > 0) {
-            return rawList.map(item => {
-                const lat = parseFloat(item.y);
-                const lng = parseFloat(item.x);
-                return {
-                    name: item.name || query,
-                    address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                    lat: lat,
-                    lng: lng,
-                    category: item.category || "Restaurant"
-                };
-            });
-        }
-    } catch (err) {
-        console.warn("[Naver Map POI Search] Dynamic fetch notice:", err.message);
     }
     return null;
 }
