@@ -590,7 +590,71 @@ function searchNaverGeocoder(query) {
     });
 }
 
-// Dedicated Gemini API call for map geocoding search (separate from course planner)
+// Dynamic Gemini Model Candidate List (Auto-fallback engine)
+const GEMINI_CANDIDATE_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-exp"
+];
+
+// Core robust Gemini API Caller with automatic model fallback
+async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = true) {
+    if (!geminiApiKey) throw new Error("Gemini API Key가 등록되지 않았습니다.");
+
+    let lastError = null;
+    
+    for (const modelName of GEMINI_CANDIDATE_MODELS) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+            const parts = [];
+            if (systemInstruction) {
+                parts.push({ text: systemInstruction });
+            }
+            parts.push({ text: userPrompt });
+
+            const requestBody = {
+                contents: [{ parts: parts }]
+            };
+
+            if (isJsonMode) {
+                requestBody.generationConfig = { responseMimeType: "application/json" };
+            }
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                const errMsg = errJson.error?.message || `HTTP ${response.status}`;
+                if (response.status === 404 || errMsg.includes("not found") || errMsg.includes("not supported")) {
+                    console.warn(`[Gemini API] Model ${modelName} not available (${errMsg}), trying next candidate...`);
+                    lastError = new Error(errMsg);
+                    continue;
+                }
+                throw new Error(errMsg);
+            }
+
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) throw new Error("AI 응답 데이터가 비어있습니다.");
+            return text;
+        } catch (err) {
+            lastError = err;
+            if (err.message && (err.message.includes("not found") || err.message.includes("not supported") || err.message.includes("404"))) {
+                continue;
+            }
+            throw err;
+        }
+    }
+    
+    throw lastError || new Error("모든 Gemini 모델 호출에 실패했습니다.");
+}
+
+// Dedicated Gemini API call for map geocoding search
 async function callGeminiSearchAPI(query) {
     const searchPrompt = `You are a Local Geocoding search utility for South Korea.
 Search for 3-4 real places/venues related to "${query}" in South Korea.
@@ -600,23 +664,7 @@ Return strictly a JSON array of objects with this structure:
 ]
 Do not include markdown. Only return the JSON array.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: searchPrompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        })
-    });
-    
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "Gemini search API failed");
-    }
-    
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    return await callGeminiRaw(`User query: ${query}`, searchPrompt, true);
 }
 
 function clearSearchMarkers() {
@@ -1484,35 +1532,7 @@ JSON Schema format:
   ]
 }`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-    
-    const requestBody = {
-        contents: [
-            {
-                parts: [
-                    { text: systemInstruction },
-                    { text: `User request: ${userPrompt}` }
-                ]
-            }
-        ],
-        generationConfig: {
-            responseMimeType: "application/json"
-        }
-    };
-
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "Failed API call");
-    }
-
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    return await callGeminiRaw(`User request: ${userPrompt}`, systemInstruction, true);
 }
 
 function cleanAndParseJSON(rawText) {
