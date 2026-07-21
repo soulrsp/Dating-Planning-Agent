@@ -689,7 +689,7 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Query Fallback Loop
+// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
     
@@ -707,50 +707,102 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
         tryQueries.push(cleanBrand);
     }
 
-    for (const q of tryQueries) {
-        try {
-            const encodedQ = encodeURIComponent(q);
-            const centerLng = userLng || 127.388;
-            const centerLat = userLat || 36.438;
-            const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-            
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
-            
-            const response = await fetch(proxyUrl, { signal: controller.signal });
-            clearTimeout(timeoutId);
+    const proxyGenerators = [
+        (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+        (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+    ];
 
-            if (!response.ok) continue;
-            
-            const data = await response.json();
-            
-            let rawList = [];
-            if (data.result && data.result.place && data.result.place.list) {
-                rawList = data.result.place.list;
-            } else if (data.place && data.place.list) {
-                rawList = data.place.list;
+    for (const q of tryQueries) {
+        const encodedQ = encodeURIComponent(q);
+        const centerLng = userLng || 127.388;
+        const centerLat = userLat || 36.438;
+        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
+
+        for (const makeProxy of proxyGenerators) {
+            try {
+                const proxyUrl = makeProxy(targetUrl);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                
+                const response = await fetch(proxyUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) continue;
+                
+                const data = await response.json();
+                
+                let rawList = [];
+                if (data.result && data.result.place && data.result.place.list) {
+                    rawList = data.result.place.list;
+                } else if (data.place && data.place.list) {
+                    rawList = data.place.list;
+                }
+                
+                if (Array.isArray(rawList) && rawList.length > 0) {
+                    return rawList.map(item => {
+                        const lat = parseFloat(item.y);
+                        const lng = parseFloat(item.x);
+                        return {
+                            name: item.name || query,
+                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                            lat: lat,
+                            lng: lng,
+                            category: item.category || "Restaurant"
+                        };
+                    });
+                }
+            } catch (err) {
+                // Try next proxy candidate
             }
-            
-            if (Array.isArray(rawList) && rawList.length > 0) {
-                return rawList.map(item => {
-                    const lat = parseFloat(item.y);
-                    const lng = parseFloat(item.x);
-                    return {
-                        name: item.name || query,
-                        address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                        lat: lat,
-                        lng: lng,
-                        category: item.category || "Restaurant"
-                    };
-                });
-            }
-        } catch (err) {
-            console.warn(`[Naver Map POI Search] Dynamic fetch notice for '${q}':`, err.message);
         }
     }
     return null;
 }
+
+// Reset & Re-Geocode All Saved Place Pins to Official Building Roof Coordinates
+window.resetAllPlaceMapPins = async function() {
+    showToast("저장된 장소의 지도 핀 위치를 네이버 공식 건물 좌표로 리셋 중입니다... 🔄", "info");
+    const places = await db.places.toArray();
+    let updatedCount = 0;
+    
+    for (const place of places) {
+        const pName = (place.name || "").toLowerCase();
+        const pNotes = (place.notes || "").toLowerCase();
+
+        // Match against KB exact building coordinates first
+        const kbMatch = AURA_LOCAL_PLACE_KB.find(kb => {
+            const kbName = kb.name.toLowerCase();
+            const kwList = (kb.keywords || []).map(k => k.toLowerCase());
+            return (pName.includes("김순화") && kbName.includes("김순화")) ||
+                   (pName.includes("부원") && kbName.includes("부원")) ||
+                   (pName.includes("진남포") && kbName.includes("진남포")) ||
+                   kwList.some(k => k.length > 1 && (pName.includes(k) || pNotes.includes(k)));
+        });
+
+        if (kbMatch) {
+            await db.places.update(place.id, {
+                lat: kbMatch.lat,
+                lng: kbMatch.lng
+            });
+            updatedCount++;
+        } else if (place.notes || place.address) {
+            const cleanAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+            if (cleanAddr.length > 4) {
+                const refined = await refineCoordinatesViaNaverGeocoder(cleanAddr);
+                if (refined) {
+                    await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
+                    updatedCount++;
+                }
+            }
+        }
+    }
+
+    await updateDashboardStats();
+    await renderPlacesList();
+    updateMapMarkers();
+    showToast(`저장된 다녀온 곳 & 장소 핀 ${updatedCount}개를 네이버 공식 건물 위치로 리셋 및 재설정 완료했습니다! 📍✨`, "success");
+};
 
 // Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 800ms safety timeout)
 function refineCoordinatesViaNaverGeocoder(address) {
