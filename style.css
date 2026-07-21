@@ -600,6 +600,8 @@ body {
 .search-result-actions {
     display: flex;
     gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     flex-shrink: 0;
 }
 
@@ -912,27 +914,52 @@ body {
     border: 1px solid var(--color-card-border);
 }
 
-.delete-card-btn {
+/* Card Top Action Buttons Container (Edit & Delete side by side) */
+.place-card-top-actions {
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    background: none;
-    border: none;
-    color: var(--color-text-low);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    z-index: 10;
+}
+
+.edit-card-btn,
+.delete-card-btn {
+    position: static !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
     transition: var(--transition-base);
-    opacity: 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
-.place-card:hover .delete-card-btn {
-    opacity: 1;
+.edit-card-btn {
+    color: var(--color-text-high);
+}
+.edit-card-btn:hover {
+    color: var(--color-primary);
+    background: rgba(255, 101, 132, 0.15);
+    border-color: rgba(255, 101, 132, 0.4);
+    transform: scale(1.1);
 }
 
+.delete-card-btn {
+    color: var(--color-text-med);
+}
 .delete-card-btn:hover {
     color: var(--color-danger);
-    background: rgba(239, 71, 111, 0.1);
+    background: rgba(239, 71, 111, 0.15);
+    border-color: rgba(239, 71, 111, 0.4);
+    transform: scale(1.1);
 }
 
 /* AI Planner Chat Screen (Lovely Pastel Blurs) */
