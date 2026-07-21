@@ -345,7 +345,7 @@ function loadNaverMapScript(clientId) {
     
     const script = document.createElement("script");
     script.id = "naver-map-sdk-script";
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(cleanId)}&ncpClientId=${encodeURIComponent(cleanId)}`;
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(cleanId)}&ncpClientId=${encodeURIComponent(cleanId)}&submodules=geocoder`;
     script.onload = () => {
         console.log("[Map System] Naver Map SDK successfully injected.");
         initNaverMap();
@@ -504,7 +504,7 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Local Search & Pinning (Naver Search API → Gemini Geocoding fallback)
+// 6. In-App Local Search & Pinning (Naver Native Geocoder → Gemini Geocoding fallback)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -514,17 +514,17 @@ async function handleInAppMapSearch() {
     
     showToast(`'${query}' 장소를 지도에서 탐색 중입니다...`, "success");
     
-    // Strategy 1: Naver Local Search API (if Client ID is available)
-    if (naverClientId) {
+    // Strategy 1: Naver Native JS Geocoder (if Naver Map SDK is active)
+    if (isNaverMapActive) {
         try {
-            const results = await searchNaverLocal(query);
-            if (results && results.length > 0) {
-                renderMapSearchResults(results);
-                showToast(`'${query}' 검색 결과 ${results.length}건을 찾았습니다! 📍`, "success");
+            const naverResults = await searchNaverGeocoder(query);
+            if (Array.isArray(naverResults) && naverResults.length > 0) {
+                renderMapSearchResults(naverResults);
+                showToast(`'${query}' 네이버 지도 탐색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
                 return;
             }
         } catch (err) {
-            console.warn("[Map Search] Naver Local Search failed, trying Gemini fallback:", err);
+            console.warn("[Map Search] Naver Geocoder failed, trying Gemini fallback:", err);
         }
     }
     
@@ -544,46 +544,42 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // Strategy 3: No keys available or all attempts failed
-    if (!geminiApiKey && !naverClientId) {
-        showToast("에이전트 설정에서 Gemini API Key 또는 네이버 Client ID를 등록해주세요.", "warning");
+    // Strategy 3: Informative fallback & Mock results
+    if (!geminiApiKey) {
+        showToast("에이전트 설정에서 Gemini API Key를 추가하시면 AI 감성 장소 탐색도 가능해집니다! 💡", "info");
     } else {
-        showToast("탐색 실패. 모형 데이터를 대신 표시합니다.", "warning");
+        showToast("원하는 장소를 정확히 찾지 못해 샘플 위치를 표시합니다.", "warning");
     }
     renderMockSearchResults(query);
 }
 
-// Naver Local Search via CORS proxy (for GitHub Pages deployment)
-async function searchNaverLocal(query) {
-    // Naver Search API requires server-side proxy due to CORS restrictions
-    // Use Gemini AI as a bridge to search and return real Korean place data
-    if (!geminiApiKey) return null;
-    
-    const searchPrompt = `You are a Korean local place search engine. 
-The user searched for: "${query}"
-Find 4-5 REAL, EXISTING places/venues in South Korea matching this query.
-Use your knowledge of real Korean restaurants, cafes, parks, museums, bars, and attractions.
-Return ONLY a valid JSON array (no markdown, no explanation):
-[
-  {"name": "Real Place Name in Korean", "address": "Real Korean address", "lat": 37.xxxx, "lng": 126.xxxx, "category": "Cafe"|"Restaurant"|"Bar"|"Park"|"Museum"|"Other"}
-]
-Important: Use real coordinates. Names and addresses must be real places that exist in South Korea.`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: searchPrompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        })
+// Naver Native Geocoder Promise Wrapper
+function searchNaverGeocoder(query) {
+    return new Promise((resolve) => {
+        if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
+            resolve(null);
+            return;
+        }
+        
+        naver.maps.Service.geocode({ query: query }, (status, response) => {
+            if (status !== naver.maps.Service.Status.OK || !response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
+                resolve(null);
+                return;
+            }
+            
+            const results = response.v2.addresses.map((addr) => {
+                const shortAddr = addr.roadAddress || addr.jibunAddress || "";
+                return {
+                    name: query.length < 10 ? `${query} (${shortAddr})` : shortAddr,
+                    address: shortAddr || "주소 정보",
+                    lat: parseFloat(addr.y),
+                    lng: parseFloat(addr.x),
+                    category: "Other"
+                };
+            });
+            resolve(results);
+        });
     });
-    
-    if (!response.ok) throw new Error("Naver-style search via Gemini failed");
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Empty response");
-    return cleanAndParseJSON(text);
 }
 
 // Dedicated Gemini API call for map geocoding search (separate from course planner)
