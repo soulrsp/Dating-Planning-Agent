@@ -698,22 +698,82 @@ Do not include markdown. Only return the JSON array.`;
 }
 
 function clearSearchMarkers() {
+    // Remove search results panel if exists
+    const panel = document.getElementById("map-search-results-panel");
+    if (panel) panel.remove();
+
     if (isNaverMapActive) {
         naverSearchMarkers.forEach(m => m.setMap(null));
         naverSearchMarkers = [];
     } else {
-        // For Leaflet, we can clear and redraw standard markers
+        // For Leaflet, clear search markers
         updateMapMarkers();
     }
 }
 
+window.focusMapSearchResult = function(index, lat, lng) {
+    if (isNaverMapActive && map) {
+        map.setCenter(new naver.maps.LatLng(lat, lng));
+        map.setZoom(16);
+        if (naverSearchMarkers[index]) {
+            naver.maps.Event.trigger(naverSearchMarkers[index], "click");
+        }
+    } else if (map) {
+        map.setView([lat, lng], 16);
+    }
+};
+
 function renderMapSearchResults(results) {
+    clearSearchMarkers();
+
+    if (!results || results.length === 0) return;
+
+    // Create interactive search results panel below search bar
+    const searchBar = document.querySelector(".map-search-bar");
+    if (searchBar) {
+        const panel = document.createElement("div");
+        panel.id = "map-search-results-panel";
+        panel.className = "map-search-results-panel";
+
+        let cardsHtml = "";
+        results.forEach((res, idx) => {
+            const encodedData = encodeURIComponent(JSON.stringify(res));
+            cardsHtml += `
+                <div class="search-result-card" id="search-res-item-${idx}">
+                    <div class="search-result-info">
+                        <div class="search-result-title">${idx + 1}. ${res.name}</div>
+                        <div class="search-result-addr">${res.address}</div>
+                    </div>
+                    <div class="search-result-actions">
+                        <button class="btn btn-outline" style="padding:0.25rem 0.55rem; font-size:0.7rem;" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
+                            위치보기 🎯
+                        </button>
+                        <button class="btn btn-primary" style="padding:0.25rem 0.55rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">
+                            위시리스트 💖
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        panel.innerHTML = `
+            <div class="search-results-header">
+                <span>📍 네이버 지도 검색 결과 (${results.length}건)</span>
+                <button class="btn-close-results" onclick="clearSearchMarkers()">닫기 ✖</button>
+            </div>
+            <div class="search-results-list">
+                ${cardsHtml}
+            </div>
+        `;
+        searchBar.parentElement.insertBefore(panel, searchBar.nextSibling);
+    }
+
     if (isNaverMapActive) {
         const bounds = new naver.maps.LatLngBounds();
-        results.forEach(res => {
+        results.forEach((res, idx) => {
             const markerColor = "#FFB703"; // Yellow search markers
             const contentHtml = `
-                <div class="search-naver-marker animate-marker" style="background-color:${markerColor}; width:18px; height:18px; border-radius:50%; border:2.5px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3); transform:translate(-9px, -9px); animation: markerBounce 1s infinite alternate;"></div>
+                <div class="search-naver-marker animate-marker" style="background-color:${markerColor}; width:22px; height:22px; border-radius:50%; border:2.5px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3); transform:translate(-11px, -11px); display:flex; align-items:center; justify-content:center; color:black; font-size:11px; font-weight:800; font-family:var(--font-heading);">${idx + 1}</div>
             `;
             
             const marker = new naver.maps.Marker({
@@ -721,17 +781,17 @@ function renderMapSearchResults(results) {
                 map: map,
                 icon: {
                     content: contentHtml,
-                    anchor: new naver.maps.Point(9, 9)
+                    anchor: new naver.maps.Point(11, 11)
                 }
             });
             
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const infowindow = new naver.maps.InfoWindow({
                 content: `
-                    <div style="padding: 10px; font-family:var(--font-body); width:200px; background:white; border-radius:12px; border:2px solid var(--color-warning);">
-                        <strong style="color:var(--color-text-high); font-size:0.85rem;">${res.name}</strong>
-                        <div style="font-size:0.7rem; color:#FF9F1C;">${res.category} | ${res.address}</div>
-                        <button class="btn btn-primary" style="margin-top:6px; padding:0.3rem 0.6rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
+                    <div style="padding: 10px; font-family:var(--font-body); width:210px; background:white; border-radius:12px; border:2px solid var(--color-warning);">
+                        <strong style="color:var(--color-text-high); font-size:0.85rem;">${idx + 1}. ${res.name}</strong>
+                        <div style="font-size:0.7rem; color:#FF9F1C; margin-top:2px;">${res.address}</div>
+                        <button class="btn btn-primary" style="margin-top:6px; padding:0.35rem 0.6rem; font-size:0.75rem; width:100%; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
                             <i data-lucide="plus" style="width:12px; height:12px;"></i> 위시리스트에 담기
                         </button>
                     </div>
@@ -749,21 +809,27 @@ function renderMapSearchResults(results) {
             naverSearchMarkers.push(marker);
             bounds.extend(marker.getPosition());
         });
-        map.fitBounds(bounds);
+        
+        if (results.length === 1) {
+            map.setCenter(new naver.maps.LatLng(results[0].lat, results[0].lng));
+            map.setZoom(16);
+        } else {
+            map.fitBounds(bounds);
+        }
     } else {
         // Fallback rendering inside Leaflet
-        results.forEach(res => {
+        results.forEach((res, idx) => {
             const customIcon = L.divIcon({
                 className: 'custom-search-marker',
-                html: `<div style="background-color:#FFB703; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
+                html: `<div style="background-color:#FFB703; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:bold; color:black;">${idx + 1}</div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
             });
             
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const popupContent = `
                 <div style="font-family:var(--font-body); min-width:160px; padding:4px;">
-                    <strong style="font-size: 0.85rem; color: var(--color-text-high);">${res.name}</strong>
+                    <strong style="font-size: 0.85rem; color: var(--color-text-high);">${idx + 1}. ${res.name}</strong>
                     <div style="font-size: 0.7rem; color: var(--color-text-low); margin-top:2px;">${res.address}</div>
                     <button class="btn btn-primary" style="margin-top:6px; padding:0.3rem 0.6rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
                         위시리스트 저장
@@ -775,7 +841,6 @@ function renderMapSearchResults(results) {
                 .bindPopup(popupContent)
                 .addTo(map);
             
-            // Trigger leaflet bounds update
             map.setView([res.lat, res.lng], 14);
         });
     }
