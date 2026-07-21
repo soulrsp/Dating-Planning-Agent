@@ -732,7 +732,29 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     return null;
 }
 
-// 6. In-App Map Real-Time Search Pipeline (Proximity Ranking + Naver POI API + Naver Geocoder + AI Search + Nominatim)
+// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng)
+function refineCoordinatesViaNaverGeocoder(address) {
+    return new Promise((resolve) => {
+        if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
+            resolve(null);
+            return;
+        }
+        naver.maps.Service.geocode({ query: address }, (status, response) => {
+            if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                const addr = response.v2.addresses[0];
+                const lat = parseFloat(addr.y);
+                const lng = parseFloat(addr.x);
+                if (lat > 30 && lat < 45 && lng > 120 && lng < 135) {
+                    resolve({ lat, lng });
+                    return;
+                }
+            }
+            resolve(null);
+        });
+    });
+}
+
+// 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -749,7 +771,23 @@ async function handleInAppMapSearch() {
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
 
-    // 1. Real-time Naver Maps Dynamic POI/Business Search API (Pass user location center for proximity search)
+    // 1. Local Knowledge Base (Instant, reliable, pre-verified coordinates)
+    const kbResults = searchLocalKnowledgeBase(query);
+    if (kbResults.length > 0) {
+        // Refine KB coordinates via Naver Geocoder for maximum precision
+        for (const item of kbResults) {
+            if (item.address) {
+                const refined = await refineCoordinatesViaNaverGeocoder(item.address);
+                if (refined) {
+                    item.lat = refined.lat;
+                    item.lng = refined.lng;
+                }
+            }
+        }
+        combinedResults.push(...kbResults);
+    }
+
+    // 2. Real-time Naver Maps Dynamic POI/Business Search API
     try {
         const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
         if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
@@ -759,7 +797,7 @@ async function handleInAppMapSearch() {
         console.warn("[Naver Dynamic Search]", err);
     }
 
-    // 2. Naver Address Geocoder (Exact address lookup)
+    // 3. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
@@ -770,20 +808,24 @@ async function handleInAppMapSearch() {
             console.warn("[Naver Map Search Error]", err);
         }
     }
-
-    // 3. Local Knowledge Base Instant & Partial/Multi-token Keyword Search
-    const kbResults = searchLocalKnowledgeBase(query);
-    if (kbResults.length > 0) {
-        combinedResults.push(...kbResults);
-    }
     
     // 4. AI Business Directory & Local Place Search (Finds restaurants & company branches)
-    if (geminiApiKey) {
+    if (geminiApiKey && combinedResults.length < 3) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
             
             if (Array.isArray(searchResults) && searchResults.length > 0) {
+                // Refine AI-provided coordinates via Naver Geocoder
+                for (const item of searchResults) {
+                    if (item.address) {
+                        const refined = await refineCoordinatesViaNaverGeocoder(item.address);
+                        if (refined) {
+                            item.lat = refined.lat;
+                            item.lng = refined.lng;
+                        }
+                    }
+                }
                 combinedResults.push(...searchResults);
             }
         } catch (err) {
@@ -791,7 +833,7 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 5. OpenStreetMap Nominatim Free Search Engine (Fallback if no results yet)
+    // 5. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
         try {
             const freeResults = await searchNominatimFree(query);
@@ -1168,15 +1210,7 @@ function renderMapSearchResults(results) {
     }
 }
 
-function renderMockSearchResults(query) {
-    const lat = 37.5665 + (Math.random() - 0.5) * 0.02;
-    const lng = 126.9780 + (Math.random() - 0.5) * 0.02;
-    const mocks = [
-        { name: `${query} 러블리 핫플레이스`, address: "서울 중구 태평로1가", lat: lat, lng: lng, category: "Cafe" },
-        { name: `${query} 로맨틱 다이닝`, address: "서울 중구 태평로2가", lat: lat + 0.004, lng: lng - 0.005, category: "Restaurant" }
-    ];
-    renderMapSearchResults(mocks);
-}
+// Mock search results removed — all searches now use real Naver POI/Geocoder data only
 
 // Copy Naver Map direct URL for a search result
 window.copyNaverMapUrl = function(encoded) {
@@ -1186,11 +1220,23 @@ window.copyNaverMapUrl = function(encoded) {
     showToast(`'${data.name}' 네이버 지도 URL 복사 완료! 📋 (신규 추가에 붙여넣어 보세요)`, "success");
 };
 
-// Save search result directly to Wishlist
+// Save search result directly to Wishlist (with Naver Geocoder coordinate refinement)
 window.saveMapSearchResult = async function(encoded) {
     const data = JSON.parse(decodeURIComponent(encoded));
     try {
-        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
+        // Refine coordinates via Naver Geocoder for building-level precision
+        let saveLat = data.lat;
+        let saveLng = data.lng;
+        if (data.address) {
+            const refined = await refineCoordinatesViaNaverGeocoder(data.address);
+            if (refined) {
+                saveLat = refined.lat;
+                saveLng = refined.lng;
+                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+            }
+        }
+
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
         const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
         if (existing) {
             showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
@@ -1202,8 +1248,8 @@ window.saveMapSearchResult = async function(encoded) {
             name: data.name,
             category: data.category || "Other",
             url: naverUrl,
-            lat: data.lat,
-            lng: data.lng,
+            lat: saveLat,
+            lng: saveLng,
             priority: "medium",
             notes: `${data.address || ''} - AURA 네이버 지도 저장 💖`.trim(),
             isVisited: 0,
@@ -1228,11 +1274,23 @@ window.saveMapSearchResult = async function(encoded) {
     }
 };
 
-// Save search result directly to Visited Places
+// Save search result directly to Visited Places (with Naver Geocoder coordinate refinement)
 window.saveMapSearchResultVisited = async function(encoded) {
     const data = JSON.parse(decodeURIComponent(encoded));
     try {
-        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
+        // Refine coordinates via Naver Geocoder for building-level precision
+        let saveLat = data.lat;
+        let saveLng = data.lng;
+        if (data.address) {
+            const refined = await refineCoordinatesViaNaverGeocoder(data.address);
+            if (refined) {
+                saveLat = refined.lat;
+                saveLng = refined.lng;
+                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+            }
+        }
+
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
         const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
         if (existing) {
             if (existing.isVisited === 1) {
@@ -1244,7 +1302,9 @@ window.saveMapSearchResultVisited = async function(encoded) {
                     isVisited: 1,
                     rating: 5,
                     review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
-                    url: existing.url || naverUrl
+                    url: existing.url || naverUrl,
+                    lat: saveLat,
+                    lng: saveLng
                 });
                 showToast(`'${data.name}'을(를) 다녀온 곳으로 변경 완료했습니다! 📸`, "success");
                 clearSearchMarkers();
@@ -1260,8 +1320,8 @@ window.saveMapSearchResultVisited = async function(encoded) {
             name: data.name,
             category: data.category || "Restaurant",
             url: naverUrl,
-            lat: data.lat,
-            lng: data.lng,
+            lat: saveLat,
+            lng: saveLng,
             priority: "medium",
             notes: `${data.address || ''} - AURA 러브맵 다녀온 곳 📸`.trim(),
             isVisited: 1,
