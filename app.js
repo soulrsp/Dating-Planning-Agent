@@ -37,9 +37,11 @@ function getFirebaseDbUrl() {
 
 let lastSyncedDataString = "";
 let lastSyncedTimestamp = 0;
+let localMutationTimestamp = 0;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
-let isSyncing = false;
+let isUploading = false;
+let isDownloading = false;
 
 let defaultMapCoords = [37.5665, 126.9780]; // Seoul Central
 
@@ -1455,28 +1457,28 @@ function startCloudSyncLoop() {
 }
 
 async function saveToCloud() {
-    if (!syncRoomId || isSyncing) return;
+    if (!syncRoomId || isUploading) return;
+    isUploading = true;
     
-    const places = await db.places.toArray();
-    
-    // Strip heavy image Base64 data from main sync payload to prevent connection timeouts
-    const cleanPlaces = places.map(p => {
-        const copy = { ...p };
-        delete copy.photo;
-        delete copy.photos;
-        return copy;
-    });
-
-    const payload = {
-        placesData: JSON.stringify(cleanPlaces),
-        timestamp: Date.now()
-    };
-    
-    const bodyStr = JSON.stringify(payload);
-    if (bodyStr === lastSyncedDataString) return;
-    
-    lastSyncedDataString = bodyStr;
     try {
+        const places = await db.places.toArray();
+        const cleanPlaces = places.map(p => {
+            const copy = { ...p };
+            delete copy.photo;
+            delete copy.photos;
+            return copy;
+        });
+
+        const now = Date.now();
+        const payload = {
+            placesData: JSON.stringify(cleanPlaces),
+            timestamp: now
+        };
+        
+        const bodyStr = JSON.stringify(payload);
+        if (bodyStr === lastSyncedDataString) return;
+        
+        lastSyncedDataString = bodyStr;
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
         const response = await fetch(url, {
             method: 'PUT',
@@ -1484,32 +1486,37 @@ async function saveToCloud() {
             body: bodyStr
         });
         if (response.ok) {
-            lastSyncedTimestamp = payload.timestamp;
+            lastSyncedTimestamp = now;
         } else {
             console.error('Firebase save failed:', response.status);
         }
     } catch (e) {
         console.error('Firebase save error:', e);
+    } finally {
+        isUploading = false;
     }
 }
 
 async function loadFromCloud() {
-    if (!syncRoomId || isSyncing) return;
-    isSyncing = true;
+    if (!syncRoomId || isDownloading || isUploading) return;
+    
+    // Protection guard: If local changes occurred in the last 5 seconds, prioritize uploading local changes over cloud polling
+    if (Date.now() - localMutationTimestamp < 5000) {
+        await saveToCloud();
+        return;
+    }
+
+    isDownloading = true;
     
     try {
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json?t=${Date.now()}`;
         const response = await fetch(url, { cache: 'no-store' });
         
-        if (!response.ok) {
-            isSyncing = false;
-            return;
-        }
+        if (!response.ok) return;
         
         const resData = await response.json();
         
         if (resData === null) {
-            isSyncing = false;
             // Room empty, initialize room with local data
             await saveToCloud();
             return;
@@ -1524,17 +1531,13 @@ async function loadFromCloud() {
             }
 
             if (Array.isArray(fetchedPlaces)) {
-                // Local DB refresh
                 const localPlaces = await db.places.toArray();
-                
-                // Compare to verify if write actually needed
                 const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
                 const fetchedCompareStr = JSON.stringify(fetchedPlaces);
                 
                 if (localCompareStr !== fetchedCompareStr) {
                     console.log("[Sync Engine] Server data differs. Syncing to local DB...");
                     
-                    // Maintain existing local photos to prevent overwriting with blank sync
                     fetchedPlaces.forEach(fp => {
                         const localItem = localPlaces.find(lp => lp.name === fp.name && lp.createdAt === fp.createdAt);
                         if (localItem) {
@@ -1556,17 +1559,16 @@ async function loadFromCloud() {
     } catch (e) {
         console.error('Firebase load error:', e);
     } finally {
-        isSyncing = false;
-        // Check if local changes occurred and upload them
-        await saveToCloud();
+        isDownloading = false;
     }
 }
 
-// stand-alone trigger to force immediate sync uploads on edits
+// Standalone trigger to force immediate sync uploads on local edits
 function triggerSyncUpload() {
+    localMutationTimestamp = Date.now();
     setTimeout(async () => {
         await saveToCloud();
-    }, 100);
+    }, 50);
 }
 
 // ── Firebase Photos REST API sync ──
