@@ -934,6 +934,14 @@ function renderMockSearchResults(query) {
 window.saveMapSearchResult = async function(encoded) {
     const data = JSON.parse(decodeURIComponent(encoded));
     try {
+        // Duplicate check to avoid redundant additions
+        const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
+        if (existing) {
+            showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
+            clearSearchMarkers();
+            return;
+        }
+
         await db.places.add({
             name: data.name,
             category: data.category || "Other",
@@ -941,7 +949,7 @@ window.saveMapSearchResult = async function(encoded) {
             lat: data.lat,
             lng: data.lng,
             priority: "medium",
-            notes: `${data.address} - AURA 검색 저장 장소 💖`,
+            notes: `${data.address || ''} - AURA 네이버 지도 저장 💖`.trim(),
             isVisited: 0,
             rating: 0,
             review: "",
@@ -952,11 +960,14 @@ window.saveMapSearchResult = async function(encoded) {
             createdAt: new Date().toISOString()
         });
         
-        showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다!`, "success");
+        showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
         clearSearchMarkers();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
+        
+        // Trigger immediate cloud upload to prevent background poll from overwriting new item
+        triggerSyncUpload();
     } catch(err) {
         showToast("장소 저장 실패: " + err.message, "danger");
     }
@@ -1472,7 +1483,9 @@ async function saveToCloud() {
             headers: { 'Content-Type': 'application/json' },
             body: bodyStr
         });
-        if (!response.ok) {
+        if (response.ok) {
+            lastSyncedTimestamp = payload.timestamp;
+        } else {
             console.error('Firebase save failed:', response.status);
         }
     } catch (e) {
