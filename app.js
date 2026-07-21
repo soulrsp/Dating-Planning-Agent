@@ -504,7 +504,7 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Map Local Search Pipeline (Naver Geocoder → Gemini AI Branch Finder → OpenStreetMap Nominatim)
+// 6. In-App Map Local Search Pipeline (Naver Geocoder + AI Multi-Branch Search)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -514,49 +514,70 @@ async function handleInAppMapSearch() {
     
     showToast(`'${query}' 장소를 탐색 중입니다... 📍`, "success");
     
+    let combinedResults = [];
+
     // 1. Naver Address Geocoder (Exact address lookup)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
             if (Array.isArray(naverResults) && naverResults.length > 0) {
-                renderMapSearchResults(naverResults);
-                showToast(`'${query}' 네이버 주소 검색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
-                return;
+                combinedResults.push(...naverResults);
             }
         } catch (err) {
             console.warn("[Naver Map Search Error]", err);
         }
     }
     
-    // 2. Gemini AI Multi-Branch & Keyword Place Search (Finds 4-8 company branches / venues)
+    // 2. AI Business Directory & Local Place Search (Finds restaurants like 진남포면옥 & company branches like 민테크)
     if (geminiApiKey) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
             
             if (Array.isArray(searchResults) && searchResults.length > 0) {
-                renderMapSearchResults(searchResults);
-                showToast(`AI가 '${query}' 관련 장소/지점 ${searchResults.length}곳을 찾았습니다! 🤖`, "success");
-                return;
+                combinedResults.push(...searchResults);
             }
         } catch (err) {
-            console.warn("[Map Search] Gemini AI search failed, trying OpenStreetMap:", err.message);
+            console.warn("[Map Search] Gemini AI search failed:", err.message);
         }
     }
     
-    // 3. OpenStreetMap Nominatim Free Search Engine
-    try {
-        const freeResults = await searchNominatimFree(query);
-        if (Array.isArray(freeResults) && freeResults.length > 0) {
-            renderMapSearchResults(freeResults);
-            showToast(`'${query}' 오픈지도 검색 결과 ${freeResults.length}건을 찾았습니다! 📍`, "success");
-            return;
+    // 3. OpenStreetMap Nominatim Free Search Engine (Fallback if no results yet)
+    if (combinedResults.length === 0) {
+        try {
+            const freeResults = await searchNominatimFree(query);
+            if (Array.isArray(freeResults) && freeResults.length > 0) {
+                combinedResults.push(...freeResults);
+            }
+        } catch (err) {
+            console.warn("[OpenStreetMap Search Error]", err);
         }
-    } catch (err) {
-        console.warn("[OpenStreetMap Search Error]", err);
+    }
+    
+    // 4. Deduplicate combined results by name & location proximity
+    const uniqueResults = [];
+    const seenMap = new Set();
+
+    for (const item of combinedResults) {
+        if (!item.lat || !item.lng) continue;
+        const latFixed = parseFloat(item.lat).toFixed(3);
+        const lngFixed = parseFloat(item.lng).toFixed(3);
+        const key = `${(item.name || "").trim()}_${latFixed}_${lngFixed}`;
+        
+        if (!seenMap.has(key)) {
+            seenMap.add(key);
+            uniqueResults.push(item);
+        }
+    }
+
+    if (uniqueResults.length > 0) {
+        renderMapSearchResults(uniqueResults);
+        showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다! 📍`, "success");
+        return;
     }
     
     showToast("검색어에 맞는 좌표를 찾지 못했습니다. 주소나 명칭을 구체적으로 입력해 보세요.", "warning");
+    renderMockSearchResults(query);
 }
 
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
