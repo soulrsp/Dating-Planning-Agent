@@ -1441,6 +1441,32 @@ async function handleEditPlaceSubmit(e) {
     }
 }
 
+// Robust Date Parser for Descending Date Sorting across all string/timestamp formats
+function parseAnyDate(val) {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    
+    const s = String(val).trim();
+    if (!s) return 0;
+
+    // Handle YYYY. MM. DD or YYYY.MM.DD or YYYY-MM-DD
+    let normalized = s.replace(/\./g, '-').replace(/\s+/g, '');
+    let parsed = Date.parse(normalized);
+    if (!isNaN(parsed)) return parsed;
+
+    // Direct ISO parse
+    parsed = Date.parse(s);
+    if (!isNaN(parsed)) return parsed;
+
+    // Regex extraction YYYY-MM-DD
+    const match = s.match(/(\d{4})[-.\s]+(\d{1,2})[-.\s]+(\d{1,2})/);
+    if (match) {
+        return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3])).getTime();
+    }
+    
+    return 0;
+}
+
 // Switch to Dashboard and pan/zoom Naver Love Map to place coordinates
 window.viewPlaceOnLoveMap = function(lat, lng, encodedName) {
     const name = decodeURIComponent(encodedName);
@@ -1488,8 +1514,13 @@ async function renderPlacesList() {
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
         const wishlistPlaces = await db.places.where("isVisited").equals(0).toArray();
-        // Sort wishlist by creation date descending (newest first)
-        wishlistPlaces.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        // Strict Descending Sort by creation date with ID tie-breaker
+        wishlistPlaces.sort((a, b) => {
+            const timeA = parseAnyDate(a.createdAt || a.date);
+            const timeB = parseAnyDate(b.createdAt || b.date);
+            if (timeB !== timeA) return timeB - timeA;
+            return (b.id || 0) - (a.id || 0);
+        });
 
         const filteredWishlist = wishlistPlaces.filter(place => {
             return place.name.toLowerCase().includes(searchVal) || 
@@ -1544,8 +1575,13 @@ async function renderPlacesList() {
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
         const visitedPlaces = await db.places.where("isVisited").equals(1).toArray();
-        // Sort visited places by visit date (createdAt) descending (newest visit at top)
-        visitedPlaces.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        // Strict Descending Sort by visit date (createdAt/date) with ID tie-breaker for 1st, 2nd, 3rd ... Nth
+        visitedPlaces.sort((a, b) => {
+            const timeA = parseAnyDate(a.createdAt || a.date);
+            const timeB = parseAnyDate(b.createdAt || b.date);
+            if (timeB !== timeA) return timeB - timeA;
+            return (b.id || 0) - (a.id || 0);
+        });
 
         const filteredVisited = visitedPlaces.filter(place => {
             return place.name.toLowerCase().includes(searchVal) || 
@@ -1566,9 +1602,10 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
                 
-                // Date formatting
-                const dateObj = new Date(place.createdAt);
-                const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+                // Date formatting using robust parser
+                const rawDate = place.createdAt || place.date;
+                const parsedMs = parseAnyDate(rawDate);
+                const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
                 
                 // Clean address
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
