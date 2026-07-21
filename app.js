@@ -597,11 +597,83 @@ function searchLocalKnowledgeBase(query) {
     });
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine
-async function searchNaverMapPlacesDynamic(query) {
+// Geolocation & Distance Proximity Search Helpers
+let currentUserLat = null;
+let currentUserLng = null;
+
+function getUserCurrentLocation() {
+    return new Promise((resolve) => {
+        if (currentUserLat && currentUserLng) {
+            resolve({ lat: currentUserLat, lng: currentUserLng });
+            return;
+        }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    currentUserLat = pos.coords.latitude;
+                    currentUserLng = pos.coords.longitude;
+                    console.log(`[Geolocation] Current user location detected: ${currentUserLat}, ${currentUserLng}`);
+                    resolve({ lat: currentUserLat, lng: currentUserLng });
+                },
+                (err) => {
+                    console.warn("[Geolocation] Location notice:", err.message);
+                    resolve(null);
+                },
+                { timeout: 4000, enableHighAccuracy: true }
+            );
+        } else {
+            resolve(null);
+        }
+    });
+}
+
+// Move map directly to user's current GPS position
+window.moveToUserCurrentLocation = async function() {
+    showToast("현재 내 위치를 탐색 중입니다... 🎯", "success");
+    const loc = await getUserCurrentLocation();
+    if (!loc) {
+        showToast("위치 권한이 필요하거나 내 위치를 가져올 수 없습니다 📍", "warning");
+        return;
+    }
+    
+    if (isNaverMapActive && map) {
+        const pos = new naver.maps.LatLng(loc.lat, loc.lng);
+        map.setCenter(pos);
+        map.setZoom(16);
+    } else if (map) {
+        map.setView([loc.lat, loc.lng], 16);
+    }
+    showToast("현재 내 위치 중심으로 러브 맵이 이동했습니다! 🎯", "success");
+};
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function formatDistanceStr(km) {
+    if (km === Infinity || isNaN(km)) return "";
+    if (km < 1) {
+        return `${Math.round(km * 1000)}m`;
+    }
+    return `${km.toFixed(1)}km`;
+}
+
+// Real-time Dynamic Naver Map POI & Business Search Engine with User Proximity Center
+async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     try {
         const encodedQ = encodeURIComponent(query);
-        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=127.388,36.438&page=1&displayCount=8`;
+        const centerLng = userLng || 127.388;
+        const centerLat = userLat || 36.438;
+        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
         const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
         
         const controller = new AbortController();
@@ -641,7 +713,7 @@ async function searchNaverMapPlacesDynamic(query) {
     return null;
 }
 
-// 6. In-App Map Real-Time Search Pipeline (Naver POI API + Naver Geocoder + AI Search + Nominatim)
+// 6. In-App Map Real-Time Search Pipeline (Proximity Ranking + Naver POI API + Naver Geocoder + AI Search + Nominatim)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
@@ -649,13 +721,18 @@ async function handleInAppMapSearch() {
     // Clear old search markers and panel
     clearSearchMarkers();
     
-    showToast(`'${query}' 네이버 지도 및 장소를 실시간 탐색 중입니다... 📍`, "success");
+    showToast(`'${query}' 내 위치 주변 및 네이버 지도를 탐색 중입니다... 📍`, "success");
     
     let combinedResults = [];
 
-    // 1. Real-time Naver Maps Dynamic POI/Business Search API (Fetches ALL registered Naver places)
+    // 0. Detect user's current GPS location for Proximity Search Ranking
+    const userLoc = await getUserCurrentLocation();
+    const userLat = userLoc ? userLoc.lat : null;
+    const userLng = userLoc ? userLoc.lng : null;
+
+    // 1. Real-time Naver Maps Dynamic POI/Business Search API (Pass user location center for proximity search)
     try {
-        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query);
+        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
         if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
             combinedResults.push(...dynamicNaverPlaces);
         }
@@ -719,13 +796,27 @@ async function handleInAppMapSearch() {
         
         if (!seenMap.has(key)) {
             seenMap.add(key);
+            
+            // Calculate distance to user location
+            if (userLoc && item.lat && item.lng) {
+                item.distanceKm = calculateDistanceKm(userLoc.lat, userLoc.lng, item.lat, item.lng);
+            } else {
+                item.distanceKm = Infinity;
+            }
+            
             uniqueResults.push(item);
         }
     }
 
+    // 7. Sort by proximity: Nearest to current user position ranked at top!
+    if (userLoc) {
+        uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
+    }
+
     if (uniqueResults.length > 0) {
         renderMapSearchResults(uniqueResults);
-        showToast(`'${query}' 네이버 지도 검색 결과 총 ${uniqueResults.length}건을 찾았습니다! 📍`, "success");
+        const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
+        showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
         return;
     }
     
@@ -930,10 +1021,14 @@ function renderMapSearchResults(results) {
         let cardsHtml = "";
         results.forEach((res, idx) => {
             const encodedData = encodeURIComponent(JSON.stringify(res));
+            const distBadge = (res.distanceKm && res.distanceKm !== Infinity) 
+                ? `<span style="font-size:0.68rem; color:var(--color-primary); background:rgba(255,101,132,0.1); border:1px solid rgba(255,101,132,0.25); padding:1px 6px; border-radius:8px; margin-left:6px; font-weight:normal; display:inline-block;">📍 내 위치에서 ${formatDistanceStr(res.distanceKm)}</span>` 
+                : '';
+
             cardsHtml += `
                 <div class="search-result-card" id="search-res-item-${idx}">
                     <div class="search-result-info">
-                        <div class="search-result-title">${idx + 1}. ${res.name}</div>
+                        <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
                         <div class="search-result-addr">${res.address}</div>
                     </div>
                     <div class="search-result-actions">
