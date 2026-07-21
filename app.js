@@ -541,6 +541,7 @@ async function handleInAppMapSearch() {
             }
         } catch (err) {
             console.error("[Map Search] Gemini geocoding error:", err);
+            showToast(`Gemini API 호출 실패: ${err.message}`, "warning");
         }
     }
     
@@ -557,12 +558,19 @@ async function handleInAppMapSearch() {
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
         if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
+            console.warn("[Map System] Naver Geocoder submodule unavailable.");
             resolve(null);
             return;
         }
         
         naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if (status !== naver.maps.Service.Status.OK || !response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
+            if (status !== naver.maps.Service.Status.OK) {
+                console.warn("[Map System] Naver Geocode API status:", status);
+                resolve(null);
+                return;
+            }
+            if (!response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
+                console.info("[Map System] Naver Geocode found no address match for:", query);
                 resolve(null);
                 return;
             }
@@ -570,7 +578,7 @@ function searchNaverGeocoder(query) {
             const results = response.v2.addresses.map((addr) => {
                 const shortAddr = addr.roadAddress || addr.jibunAddress || "";
                 return {
-                    name: query.length < 10 ? `${query} (${shortAddr})` : shortAddr,
+                    name: query,
                     address: shortAddr || "주소 정보",
                     lat: parseFloat(addr.y),
                     lng: parseFloat(addr.x),
@@ -592,7 +600,7 @@ Return strictly a JSON array of objects with this structure:
 ]
 Do not include markdown. Only return the JSON array.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
     const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1476,7 +1484,7 @@ JSON Schema format:
   ]
 }`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
     
     const requestBody = {
         contents: [
