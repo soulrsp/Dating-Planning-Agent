@@ -504,36 +504,47 @@ async function updateMapMarkers() {
     }
 }
 
-// 6. In-App Naver Maps Local Search & Pinning (100% Native Naver Geocoder)
+// 6. In-App Map Local Search Pipeline (Naver Geocoder → Gemini AI Branch Finder → OpenStreetMap Nominatim)
 async function handleInAppMapSearch() {
     const query = document.getElementById("map-search-query").value.trim();
     if (!query) return;
     
-    // Clear old search markers
+    // Clear old search markers and panel
     clearSearchMarkers();
     
-    showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "success");
+    showToast(`'${query}' 장소를 탐색 중입니다... 📍`, "success");
     
-    // 1. Naver Dynamic Map Active: Search exclusively via Naver Maps Engine
+    // 1. Naver Address Geocoder (Exact address lookup)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
             if (Array.isArray(naverResults) && naverResults.length > 0) {
                 renderMapSearchResults(naverResults);
-                showToast(`'${query}' 네이버 지도 검색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
-                return;
-            } else {
-                showToast(`네이버 지도에서 '${query}' 주소를 찾지 못했습니다. 도로명 주소나 위치(예: 테헤란로 212, 역삼동)를 검색해 보세요.`, "warning");
+                showToast(`'${query}' 네이버 주소 검색 결과 ${naverResults.length}건을 찾았습니다! 📍`, "success");
                 return;
             }
         } catch (err) {
             console.warn("[Naver Map Search Error]", err);
-            showToast("네이버 지도 탐색 중 오류가 발생했습니다.", "warning");
-            return;
         }
     }
     
-    // 2. Leaflet Fallback (No Naver Client ID): Use OpenStreetMap Nominatim Free Geocoder
+    // 2. Gemini AI Multi-Branch & Keyword Place Search (Finds 4-8 company branches / venues)
+    if (geminiApiKey) {
+        try {
+            const responseText = await callGeminiSearchAPI(query);
+            const searchResults = cleanAndParseJSON(responseText);
+            
+            if (Array.isArray(searchResults) && searchResults.length > 0) {
+                renderMapSearchResults(searchResults);
+                showToast(`AI가 '${query}' 관련 장소/지점 ${searchResults.length}곳을 찾았습니다! 🤖`, "success");
+                return;
+            }
+        } catch (err) {
+            console.warn("[Map Search] Gemini AI search failed, trying OpenStreetMap:", err.message);
+        }
+    }
+    
+    // 3. OpenStreetMap Nominatim Free Search Engine
     try {
         const freeResults = await searchNominatimFree(query);
         if (Array.isArray(freeResults) && freeResults.length > 0) {
@@ -545,7 +556,7 @@ async function handleInAppMapSearch() {
         console.warn("[OpenStreetMap Search Error]", err);
     }
     
-    showToast("검색어에 맞는 좌표를 찾지 못했습니다. 구체적인 주소를 입력해 보세요.", "warning");
+    showToast("검색어에 맞는 좌표를 찾지 못했습니다. 주소나 명칭을 구체적으로 입력해 보세요.", "warning");
 }
 
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
@@ -684,17 +695,25 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
     throw lastError || new Error("모든 Gemini 모델 호출에 실패했습니다.");
 }
 
-// Dedicated Gemini API call for map geocoding search
+// Dedicated Gemini API call for map geocoding & multi-branch search
 async function callGeminiSearchAPI(query) {
-    const searchPrompt = `You are a Local Geocoding search utility for South Korea.
-Search for 3-4 real places/venues related to "${query}" in South Korea.
-Return strictly a JSON array of objects with this structure:
-[
-  {"name": "Place Name", "address": "Detailed Address", "lat": float, "lng": float, "category": "Cafe"|"Restaurant"|"Bar"|"Park"|"Museum"|"Other"}
-]
-Do not include markdown. Only return the JSON array.`;
+    const searchPrompt = `You are a Local Geocoding & Business Search utility for South Korea.
+The user searched for: "${query}"
+Find 4-8 REAL, SPECIFIC, EXISTING company branches, stores, offices, venues, or locations matching "${query}" in South Korea.
+For example, if the query is a company or brand name (such as "민테크", "스타벅스", "CGV"), list 4-8 of their REAL distinct branches/offices/locations across South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
 
-    return await callGeminiRaw(`User query: ${query}`, searchPrompt, true);
+Return STRICTLY a JSON array of objects with this format (no markdown, no preamble):
+[
+  {
+    "name": "Exact Branch or Location Name in Korean (e.g., 민테크 대전본사, 민테크 서울사무소)",
+    "address": "Detailed Real Korean Address",
+    "lat": 37.xxxx or 36.xxxx (latitude in South Korea),
+    "lng": 127.xxxx or 128.xxxx (longitude in South Korea),
+    "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other"
+  }
+]`;
+
+    return await callGeminiRaw(`Search query: ${query}`, searchPrompt, true);
 }
 
 function clearSearchMarkers() {
