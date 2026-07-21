@@ -498,10 +498,88 @@
         </div>
     </div>
 
+    <!-- Modal: Edit Place Details (Visited & Wishlist) -->
+    <div class="modal-overlay" id="modal-edit-place">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>✏️ 장소 및 데이트 기록 수정</h3>
+                <button class="modal-close" id="btn-close-edit-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-edit-place">
+                <input type="hidden" id="edit-place-id">
+                
+                <div class="form-group">
+                    <label for="edit-place-name">장소명 *</label>
+                    <input type="text" id="edit-place-name" required placeholder="장소 이름">
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="edit-place-category">카테고리 *</label>
+                        <select id="edit-place-category">
+                            <option value="Restaurant">음식점 (Restaurant)</option>
+                            <option value="Cafe">카페 (Cafe)</option>
+                            <option value="Bar">주류 (Bar)</option>
+                            <option value="Park">공원/산책 (Park)</option>
+                            <option value="Museum">전시/문화 (Museum)</option>
+                            <option value="Other">기타 (Other)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-place-date">방문/등록 날짜 *</label>
+                        <input type="date" id="edit-place-date" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-place-address">주소 (또는 메모)</label>
+                    <input type="text" id="edit-place-address" placeholder="주소를 입력하세요 (예: 대전 유성구 봉산로36번길 34)">
+                </div>
+
+                <div id="edit-visited-fields">
+                    <div class="form-group">
+                        <label>평점 *</label>
+                        <div class="rating-input-row">
+                            <input type="radio" name="edit-rating" id="edit-star5" value="5"><label for="edit-star5" title="5점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star4" value="4"><label for="edit-star4" title="4점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star3" value="3"><label for="edit-star3" title="3점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star2" value="2"><label for="edit-star2" title="2점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star1" value="1"><label for="edit-star1" title="1점"><i data-lucide="star"></i></label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-place-review">오늘의 즐거웠던 소감/후기 *</label>
+                        <textarea id="edit-place-review" rows="3" placeholder="남기고 싶은 소감을 적어주세요 💖"></textarea>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="edit-place-expense">결제한 비용 (원)</label>
+                            <input type="number" id="edit-place-expense" placeholder="금액" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-place-payer">누가 결제했나요?</label>
+                            <select id="edit-place-payer">
+                                <option value="A" id="edit-opt-partner-a">초코(A)</option>
+                                <option value="B" id="edit-opt-partner-b">딸기(B)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal: Photo Viewer (Lightbox) -->
     <div class="modal-overlay" id="modal-photo-viewer">
         <div class="lightbox-card">
-            <button class="modal-close lightbox-close" id="btn-close-viewer"><i data-lucide="x"></i></button>
+            <button class="modal-close" id="btn-close-viewer"><i data-lucide="x"></i></button>
             <img src="" id="lightbox-img" alt="Enlarged Memory">
         </div>
     </div>
