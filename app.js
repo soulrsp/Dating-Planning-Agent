@@ -822,11 +822,17 @@ function renderMapSearchResults(results) {
                         <div class="search-result-addr">${res.address}</div>
                     </div>
                     <div class="search-result-actions">
-                        <button class="btn btn-outline" style="padding:0.25rem 0.55rem; font-size:0.7rem;" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
+                        <button class="btn btn-outline" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
                             위치보기 🎯
                         </button>
-                        <button class="btn btn-primary" style="padding:0.25rem 0.55rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">
+                        <button class="btn btn-primary" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">
                             위시리스트 💖
+                        </button>
+                        <button class="btn btn-secondary" style="padding:0.2rem 0.45rem; font-size:0.7rem; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                            다녀온 곳 📸
+                        </button>
+                        <button class="btn btn-outline" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="copyNaverMapUrl('${encodedData}')">
+                            URL 복사 📋
                         </button>
                     </div>
                 </div>
@@ -865,11 +871,19 @@ function renderMapSearchResults(results) {
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const infowindow = new naver.maps.InfoWindow({
                 content: `
-                    <div style="padding: 10px; font-family:var(--font-body); width:210px; background:white; border-radius:12px; border:2px solid var(--color-warning);">
-                        <strong style="color:var(--color-text-high); font-size:0.85rem;">${idx + 1}. ${res.name}</strong>
-                        <div style="font-size:0.7rem; color:#FF9F1C; margin-top:2px;">${res.address}</div>
-                        <button class="btn btn-primary" style="margin-top:6px; padding:0.35rem 0.6rem; font-size:0.75rem; width:100%; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
-                            <i data-lucide="plus" style="width:12px; height:12px;"></i> 위시리스트에 담기
+                    <div style="padding: 10px; font-family:var(--font-body); width:230px; background:white; border-radius:14px; border:2px solid var(--color-warning); box-shadow: 0 8px 24px rgba(0,0,0,0.15);">
+                        <strong style="color:var(--color-text-high); font-size:0.85rem; display:block; margin-bottom:2px;">${idx + 1}. ${res.name}</strong>
+                        <div style="font-size:0.7rem; color:#FF9F1C; margin-bottom:8px;">${res.address}</div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px; margin-bottom:4px;">
+                            <button class="btn btn-primary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
+                                💖 위시리스트
+                            </button>
+                            <button class="btn btn-secondary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                                📸 다녀온 곳
+                            </button>
+                        </div>
+                        <button class="btn btn-outline" style="padding:0.3rem 0.4rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="copyNaverMapUrl('${encodedData}')">
+                            📋 네이버 지도 URL 복사
                         </button>
                     </div>
                 `,
@@ -905,12 +919,14 @@ function renderMapSearchResults(results) {
             
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const popupContent = `
-                <div style="font-family:var(--font-body); min-width:160px; padding:4px;">
-                    <strong style="font-size: 0.85rem; color: var(--color-text-high);">${idx + 1}. ${res.name}</strong>
-                    <div style="font-size: 0.7rem; color: var(--color-text-low); margin-top:2px;">${res.address}</div>
-                    <button class="btn btn-primary" style="margin-top:6px; padding:0.3rem 0.6rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
-                        위시리스트 저장
-                    </button>
+                <div style="font-family:var(--font-body); min-width:180px; padding:4px;">
+                    <strong style="font-size: 0.85rem; color: var(--color-text-high); display:block;">${idx + 1}. ${res.name}</strong>
+                    <div style="font-size: 0.7rem; color: var(--color-text-low); margin-bottom:6px;">${res.address}</div>
+                    <div style="display:flex; gap:4px; margin-bottom:4px;">
+                        <button class="btn btn-primary" style="padding:0.25rem 0.4rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">💖 위시리스트</button>
+                        <button class="btn btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.7rem; background:#FF9F1C; color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">📸 다녀온 곳</button>
+                    </div>
+                    <button class="btn btn-outline" style="padding:0.25rem 0.4rem; font-size:0.7rem; width:100%;" onclick="copyNaverMapUrl('${encodedData}')">📋 URL 복사</button>
                 </div>
             `;
             
@@ -933,10 +949,19 @@ function renderMockSearchResults(query) {
     renderMapSearchResults(mocks);
 }
 
+// Copy Naver Map direct URL for a search result
+window.copyNaverMapUrl = function(encoded) {
+    const data = JSON.parse(decodeURIComponent(encoded));
+    const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
+    copyShareLinkToClipboard(naverUrl);
+    showToast(`'${data.name}' 네이버 지도 URL 복사 완료! 📋 (신규 추가에 붙여넣어 보세요)`, "success");
+};
+
+// Save search result directly to Wishlist
 window.saveMapSearchResult = async function(encoded) {
     const data = JSON.parse(decodeURIComponent(encoded));
     try {
-        // Duplicate check to avoid redundant additions
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
         const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
         if (existing) {
             showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
@@ -947,7 +972,7 @@ window.saveMapSearchResult = async function(encoded) {
         await db.places.add({
             name: data.name,
             category: data.category || "Other",
-            url: "",
+            url: naverUrl,
             lat: data.lat,
             lng: data.lng,
             priority: "medium",
@@ -968,10 +993,66 @@ window.saveMapSearchResult = async function(encoded) {
         await renderPlacesList();
         updateMapMarkers();
         
-        // Trigger immediate cloud upload to prevent background poll from overwriting new item
         triggerSyncUpload();
     } catch(err) {
         showToast("장소 저장 실패: " + err.message, "danger");
+    }
+};
+
+// Save search result directly to Visited Places
+window.saveMapSearchResultVisited = async function(encoded) {
+    const data = JSON.parse(decodeURIComponent(encoded));
+    try {
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
+        const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
+        if (existing) {
+            if (existing.isVisited === 1) {
+                showToast(`'${data.name}'은(는) 이미 다녀온 곳에 등록되어 있습니다! 📸`, "info");
+                clearSearchMarkers();
+                return;
+            } else {
+                await db.places.update(existing.id, {
+                    isVisited: 1,
+                    rating: 5,
+                    review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
+                    url: existing.url || naverUrl
+                });
+                showToast(`'${data.name}'을(를) 다녀온 곳으로 변경 완료했습니다! 📸`, "success");
+                clearSearchMarkers();
+                await updateDashboardStats();
+                await renderPlacesList();
+                updateMapMarkers();
+                triggerSyncUpload();
+                return;
+            }
+        }
+
+        await db.places.add({
+            name: data.name,
+            category: data.category || "Restaurant",
+            url: naverUrl,
+            lat: data.lat,
+            lng: data.lng,
+            priority: "medium",
+            notes: `${data.address || ''} - AURA 러브맵 다녀온 곳 📸`.trim(),
+            isVisited: 1,
+            rating: 5,
+            review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
+            expense: 0,
+            payer: "A",
+            peopleCount: 2,
+            photo: "",
+            createdAt: new Date().toISOString()
+        });
+        
+        showToast(`'${data.name}'을(를) 함께 다녀온 곳에 기록했습니다! 📸`, "success");
+        clearSearchMarkers();
+        await updateDashboardStats();
+        await renderPlacesList();
+        updateMapMarkers();
+        triggerSyncUpload();
+    } catch(err) {
+        showToast("다녀온 곳 저장 실패: " + err.message, "danger");
     }
 };
 
