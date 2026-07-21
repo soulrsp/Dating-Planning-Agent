@@ -98,6 +98,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("form-place-add").addEventListener("submit", handleAddPlaceSubmit);
     document.getElementById("add-place-url").addEventListener("input", handleMapUrlInput);
 
+    // Edit Place Modal Listeners
+    const closeEditBtn = document.getElementById("btn-close-edit-modal");
+    if (closeEditBtn) closeEditBtn.addEventListener("click", closeEditPlaceModal);
+    const cancelEditBtn = document.getElementById("btn-cancel-edit-modal");
+    if (cancelEditBtn) cancelEditBtn.addEventListener("click", closeEditPlaceModal);
+    const formEdit = document.getElementById("form-edit-place");
+    if (formEdit) formEdit.addEventListener("submit", handleEditPlaceSubmit);
+
     // Search input listeners for Wishlist and Visited tabs
     const wishSearch = document.getElementById("wishlist-search-input");
     if (wishSearch) wishSearch.addEventListener("input", renderPlacesList);
@@ -1264,6 +1272,95 @@ async function handleVisitLogSubmit(e) {
     }
 }
 
+// Edit Place Modal Controls
+async function openEditPlaceModal(id) {
+    const place = await db.places.get(id);
+    if (!place) return;
+
+    document.getElementById("edit-place-id").value = place.id;
+    document.getElementById("edit-place-name").value = place.name;
+    document.getElementById("edit-place-category").value = place.category || "Restaurant";
+    
+    // Format date for <input type="date"> (YYYY-MM-DD)
+    const dateObj = new Date(place.createdAt);
+    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+    document.getElementById("edit-place-date").value = dateStr;
+
+    // Clean address from notes
+    const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    document.getElementById("edit-place-address").value = cleanAddress;
+
+    document.getElementById("edit-opt-partner-a").textContent = partnerAName;
+    document.getElementById("edit-opt-partner-b").textContent = partnerBName;
+
+    const visitedFields = document.getElementById("edit-visited-fields");
+    if (place.isVisited === 1) {
+        if (visitedFields) visitedFields.style.display = "block";
+        const ratingVal = place.rating || 5;
+        const ratingRadio = document.querySelector(`input[name="edit-rating"][value="${ratingVal}"]`);
+        if (ratingRadio) ratingRadio.checked = true;
+        document.getElementById("edit-place-review").value = place.review || "";
+        document.getElementById("edit-place-expense").value = place.expense || 0;
+        document.getElementById("edit-place-payer").value = place.payer || "A";
+    } else {
+        if (visitedFields) visitedFields.style.display = "none";
+    }
+
+    document.getElementById("modal-edit-place").classList.add("active");
+    setTimeout(() => lucide.createIcons(), 50);
+}
+
+function closeEditPlaceModal() {
+    document.getElementById("modal-edit-place").classList.remove("active");
+    document.getElementById("form-edit-place").reset();
+}
+
+async function handleEditPlaceSubmit(e) {
+    e.preventDefault();
+    const id = parseInt(document.getElementById("edit-place-id").value);
+    const name = document.getElementById("edit-place-name").value.trim();
+    const category = document.getElementById("edit-place-category").value;
+    const dateVal = document.getElementById("edit-place-date").value;
+    const addressVal = document.getElementById("edit-place-address").value.trim();
+    
+    const place = await db.places.get(id);
+    if (!place) return;
+
+    const updatedDate = dateVal ? new Date(dateVal).toISOString() : place.createdAt;
+
+    let updatePayload = {
+        name: name,
+        category: category,
+        notes: addressVal,
+        createdAt: updatedDate
+    };
+
+    if (place.isVisited === 1) {
+        const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
+        const rating = ratingEl ? parseInt(ratingEl.value) : 5;
+        const review = document.getElementById("edit-place-review").value.trim();
+        const expense = parseInt(document.getElementById("edit-place-expense").value) || 0;
+        const payer = document.getElementById("edit-place-payer").value;
+
+        updatePayload.rating = rating;
+        updatePayload.review = review;
+        updatePayload.expense = expense;
+        updatePayload.payer = payer;
+    }
+
+    try {
+        await db.places.update(id, updatePayload);
+        showToast(`'${name}' 수정사항이 반영되었습니다! 💖`, "success");
+        closeEditPlaceModal();
+        await updateDashboardStats();
+        await renderPlacesList();
+        updateMapMarkers();
+        triggerSyncUpload();
+    } catch(err) {
+        showToast("수정 실패: " + err.message, "danger");
+    }
+}
+
 // 10. Places Render List
 async function renderPlacesList() {
     // 1. Render Wishlist Tab
@@ -1290,13 +1387,17 @@ async function renderPlacesList() {
             filteredWishlist.forEach(place => {
                 const card = document.createElement("div");
                 card.className = "place-card card";
+                card.style.position = "relative";
                 let cardContent = `
-                    <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제"><i data-lucide="trash-2"></i></button>
+                    <div style="position:absolute; top:0.75rem; right:0.75rem; display:flex; gap:0.35rem; z-index:5;">
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-text-high); font-size:12px; transition:0.2s;"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-danger); font-size:12px; transition:0.2s;"><i data-lucide="trash-2"></i></button>
+                    </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
                         <span class="place-priority-dot priority-${place.priority}"></span>
                     </div>
-                    <h4 class="place-title">${place.name}</h4>
+                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                 `;
                 if (place.notes) {
                     cardContent += `<p class="place-notes">${place.notes}</p>`;
@@ -1340,16 +1441,32 @@ async function renderPlacesList() {
             filteredVisited.forEach(place => {
                 const card = document.createElement("div");
                 card.className = "place-card card";
+                card.style.position = "relative";
                 
+                // Date formatting
+                const dateObj = new Date(place.createdAt);
+                const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+                
+                // Clean address
+                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+
                 let cardContent = `
-                    <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제"><i data-lucide="trash-2"></i></button>
+                    <div style="position:absolute; top:0.75rem; right:0.75rem; display:flex; gap:0.35rem; z-index:5;">
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-text-high); font-size:12px; transition:0.2s;"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제" style="background:rgba(255,255,255,0.9); border:1px solid rgba(0,0,0,0.12); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--color-danger); font-size:12px; transition:0.2s;"><i data-lucide="trash-2"></i></button>
+                    </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
                     </div>
-                    <h4 class="place-title">${place.name}</h4>
+                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
+                    
+                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.25rem; background:rgba(255,101,132,0.04); padding:0.5rem 0.65rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
+                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
+                        ${cleanAddress ? `<div><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress}</div>` : ''}
+                    </div>
                 `;
                 
-                // Render photos grid if multiple images exist
+                // Render photos grid
                 if (place.photos && place.photos.length > 0) {
                     cardContent += `<div class="place-card-photos-grid">`;
                     place.photos.forEach(photo => {
@@ -1360,25 +1477,27 @@ async function renderPlacesList() {
                     cardContent += `<img class="place-card-photo" src="${place.photo}" onclick="openLightbox(this.src)" alt="${place.name}">`;
                 }
 
-                if (place.notes) {
-                    cardContent += `<p class="place-notes">💡 메모: ${place.notes}</p>`;
-                }
-                
                 let stars = '';
                 for(let i=1; i<=5; i++) {
-                    stars += `<i data-lucide="star" style="${i <= place.rating ? '' : 'fill:none; color:var(--color-text-low);'}"></i>`;
+                    stars += `<i data-lucide="star" style="${i <= (place.rating || 5) ? '' : 'fill:none; color:var(--color-text-low);'}"></i>`;
                 }
                 
                 const payerName = place.payer === "B" ? partnerBName : partnerAName;
                 
                 cardContent += `
-                    <div class="place-card-stars">
+                    <div class="place-card-stars" style="margin-top:0.4rem;">
                         ${stars}
                     </div>
-                    <p class="visited-review-snippet">"${place.review}"</p>
-                    <div class="place-meta-item">
+                    <p class="visited-review-snippet" style="margin-top:0.3rem; margin-bottom:0.5rem;">"${place.review || '즐거운 데이트 추억! 💖'}"</p>
+                    <div class="place-meta-item" style="font-size:0.78rem;">
                         <i data-lucide="coins"></i>
-                        <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense)})</span>
+                        <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
+                    </div>
+                    <div style="margin-top:0.65rem; display:flex; gap:0.4rem;">
+                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="flex:1; padding:0.35rem; font-size:0.72rem; justify-content:center;"><i data-lucide="external-link"></i> 지도 보기</a>` : ''}
+                        <button class="btn btn-secondary" style="flex:1; padding:0.35rem; font-size:0.72rem; justify-content:center; background:rgba(255,101,132,0.12); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3);" onclick="openEditPlaceModal(${place.id})">
+                            <i data-lucide="edit-3"></i> 내용/소감 수정
+                        </button>
                     </div>
                 `;
                 
