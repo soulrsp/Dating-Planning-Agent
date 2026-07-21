@@ -1573,12 +1573,6 @@ async function renderPlacesList() {
                         <i data-lucide="coins"></i>
                         <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
                     </div>
-                    <div style="margin-top:0.65rem; display:flex; gap:0.4rem;">
-                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="flex:1; padding:0.35rem; font-size:0.72rem; justify-content:center;"><i data-lucide="external-link"></i> 지도 보기</a>` : ''}
-                        <button class="btn btn-secondary" style="flex:1; padding:0.35rem; font-size:0.72rem; justify-content:center; background:rgba(255,101,132,0.12); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3);" onclick="openEditPlaceModal(${place.id})">
-                            <i data-lucide="edit-3"></i> 내용/소감 수정
-                        </button>
-                    </div>
                 `;
                 
                 card.innerHTML = cardContent;
