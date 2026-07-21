@@ -1441,6 +1441,43 @@ async function handleEditPlaceSubmit(e) {
     }
 }
 
+// Switch to Dashboard and pan/zoom Naver Love Map to place coordinates
+window.viewPlaceOnLoveMap = function(lat, lng, encodedName) {
+    const name = decodeURIComponent(encodedName);
+    
+    // 1. Switch to Dashboard tab
+    switchTab("dashboard");
+    
+    // 2. Smoothly scroll to the map container
+    const mapEl = document.getElementById("map");
+    if (mapEl) {
+        mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // 3. Center map & trigger popup
+    setTimeout(() => {
+        if (isNaverMapActive && map) {
+            const pos = new naver.maps.LatLng(lat, lng);
+            map.setCenter(pos);
+            map.setZoom(16);
+            
+            // Search for marker at coordinates
+            if (Array.isArray(naverMarkers)) {
+                const targetMarker = naverMarkers.find(m => {
+                    const p = m.getPosition();
+                    return Math.abs(p.lat() - lat) < 0.0005 && Math.abs(p.lng() - lng) < 0.0005;
+                });
+                if (targetMarker) {
+                    naver.maps.Event.trigger(targetMarker, "click");
+                }
+            }
+        } else if (map) {
+            map.setView([lat, lng], 16);
+        }
+        showToast(`'${name}' 위치로 러브 맵이 이동했습니다! 📍`, "success");
+    }, 300);
+};
+
 // 10. Places Render List
 async function renderPlacesList() {
     // 1. Render Wishlist Tab
@@ -1540,9 +1577,14 @@ async function renderPlacesList() {
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
-                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.25rem; background:rgba(255,101,132,0.04); padding:0.5rem 0.65rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
+                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
                         ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
-                        ${cleanAddress ? `<div><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress}</div>` : ''}
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
+                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
+                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
+                            </button>
+                        </div>
                     </div>
                 `;
                 
