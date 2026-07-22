@@ -83,14 +83,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         initLeafletMap();
     }
 
-    // Cleanup legacy test comments if present
-    await cleanupLegacyComments();
-
-    // Auto-restore seed places if local DB is completely empty (Data Loss Protection)
-    const count = await db.places.count();
-    if (count === 0) {
-        await restoreSeedPlaces(false);
-    }
+    // Cleanup legacy test comments & deduplicate junk places if present
+    await cleanJunkData(false);
 
     // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
     if (syncRoomId && (naverClientId || geminiApiKey)) {
@@ -2584,44 +2578,28 @@ async function loadFromCloud() {
 
                 const localPlaces = await db.places.toArray();
 
-                // SAFE UNION MERGE: If cloud has 0 places but local has places, DO NOT CLEAR LOCAL DB!
-                if (fetchedPlaces.length === 0 && localPlaces.length > 0) {
-                    console.log("[Sync Engine] Cloud has 0 places while local DB has items. Uploading local DB to cloud...");
-                    await saveToCloud();
-                } else if (fetchedPlaces.length > 0) {
-                    const mergedMap = new Map();
-                    fetchedPlaces.forEach(fp => {
-                        const key = `${fp.name}_${fp.createdAt}`;
-                        mergedMap.set(key, fp);
-                    });
-                    localPlaces.forEach(lp => {
-                        const key = `${lp.name}_${lp.createdAt}`;
-                        if (!mergedMap.has(key)) {
-                            const copy = { ...lp };
-                            delete copy.photo;
-                            delete copy.photos;
-                            mergedMap.set(key, copy);
-                        } else {
-                            const existing = mergedMap.get(key);
-                            if (lp.photo && !existing.photo) existing.photo = lp.photo;
-                            if (lp.photos && (!existing.photos || existing.photos.length === 0)) existing.photos = lp.photos;
-                        }
-                    });
-
-                    const mergedList = Array.from(mergedMap.values());
-                    const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
-                    const mergedCompareStr = JSON.stringify(mergedList);
-
-                    if (localCompareStr !== mergedCompareStr) {
-                        console.log("[Sync Engine] Updating local DB with merged places...");
-                        await db.places.clear();
-                        await db.places.bulkAdd(mergedList);
-
-                        await updateDashboardStats();
-                        await renderPlacesList();
-                        updateMapMarkers();
-                        await saveToCloud();
+                // Preserve local photo attachments for matching places
+                fetchedPlaces.forEach(fp => {
+                    const localMatch = localPlaces.find(lp => lp.name === fp.name);
+                    if (localMatch) {
+                        if (localMatch.photo && !fp.photo) fp.photo = localMatch.photo;
+                        if (localMatch.photos && (!fp.photos || fp.photos.length === 0)) fp.photos = localMatch.photos;
                     }
+                });
+
+                const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
+                const fetchedCompareStr = JSON.stringify(fetchedPlaces);
+
+                if (localCompareStr !== fetchedCompareStr) {
+                    console.log("[Sync Engine] Updating local DB to match synced cloud state...");
+                    await db.places.clear();
+                    if (fetchedPlaces.length > 0) {
+                        await db.places.bulkAdd(fetchedPlaces);
+                    }
+
+                    await updateDashboardStats();
+                    await renderPlacesList();
+                    updateMapMarkers();
                 }
             }
             lastSyncedTimestamp = resData.timestamp;
@@ -3209,25 +3187,59 @@ function sanitizePlaceObject(p) {
 }
 
 async function cleanupLegacyComments() {
+    await cleanJunkData(false);
+}
+
+async function cleanJunkData(showToastMsg = false) {
     try {
         const places = await db.places.toArray();
-        let anyModified = false;
+        const seenNames = new Set();
+        const cleanList = [];
+        let removedCount = 0;
+
         for (const p of places) {
-            const beforeStr = JSON.stringify(p);
+            // 1. Strip legacy test strings
             sanitizePlaceObject(p);
-            const afterStr = JSON.stringify(p);
-            if (beforeStr !== afterStr) {
-                await db.places.update(p.id, { notes: p.notes, review: p.review, commentA: p.commentA, commentB: p.commentB });
-                anyModified = true;
+
+            // 2. Filter out invalid/junk places
+            const cleanName = (p.name || "").trim();
+            if (!cleanName || cleanName.length < 2) {
+                removedCount++;
+                continue;
             }
+
+            // 3. Deduplicate by lowercased place name
+            const nameKey = cleanName.toLowerCase();
+            if (seenNames.has(nameKey)) {
+                removedCount++;
+                continue;
+            }
+
+            seenNames.add(nameKey);
+            cleanList.push(p);
         }
-        if (anyModified) {
+
+        if (removedCount > 0 || cleanList.length !== places.length) {
+            await db.places.clear();
+            if (cleanList.length > 0) {
+                await db.places.bulkAdd(cleanList);
+            }
+            await updateDashboardStats();
+            await renderPlacesList();
+            updateMapMarkers();
             triggerSyncUpload();
+
+            if (showToastMsg) {
+                showToast(`${removedCount}개의 중복 및 이상 장소 데이터가 정갈하게 정화되었습니다! 🧹`, "success");
+            }
+        } else if (showToastMsg) {
+            showToast("이상 데이터가 없으며 목록이 매우 깨끗합니다! 💖", "info");
         }
     } catch(e) {
-        console.error("Cleanup legacy comments error:", e);
+        console.error("Clean junk data error:", e);
     }
 }
+window.cleanJunkData = cleanJunkData;
 
 window.toggleCustomCategoryInput = function(type) {
     const selectEl = document.getElementById(`${type}-place-category`);
@@ -3256,70 +3268,7 @@ window.toggleCardPhotos = function(placeId) {
     }
 };
 
-async function restoreSeedPlaces(showToastMsg = true) {
-    const defaultPlaces = [
-        {
-            name: "부원냉삼집 대전관평동점",
-            category: "Restaurant",
-            lat: 36.42580,
-            lng: 127.39420,
-            priority: "High",
-            notes: "대전 유성구 배울1로 126 호반써밋프라자 107호",
-            isVisited: 1,
-            rating: 5,
-            commentA: "관평동 맛집 냉삼 대만족! 💕",
-            commentB: "고기 육즙 대박 다음에 또 오자! ✨",
-            expense: 45000,
-            payer: "DUTCH",
-            createdAt: new Date(Date.now() - 86400000 * 3).toISOString()
-        },
-        {
-            name: "김순화 충남순대",
-            category: "Restaurant",
-            lat: 36.42582,
-            lng: 127.35124,
-            priority: "High",
-            notes: "대전 유성구 유성대로 3-12",
-            isVisited: 1,
-            rating: 5,
-            commentA: "국물이 진하고 시원한 인생 순대국밥 🍲",
-            commentB: "추운 날 따뜻하게 먹기 최고! ✨",
-            expense: 22000,
-            payer: "A",
-            createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
-        },
-        {
-            name: "진남포면옥",
-            category: "Restaurant",
-            lat: 37.55432,
-            lng: 127.01084,
-            priority: "Medium",
-            notes: "서울 중구 다산로 108",
-            isVisited: 0,
-            rating: 0,
-            commentA: "백숙이랑 이북식 찜닭 꼭 먹어보고 싶어! 💕",
-            commentB: "비오는 날 같이 가자 ✨",
-            createdAt: new Date(Date.now() - 86400000 * 1).toISOString()
-        }
-    ];
 
-    try {
-        await db.places.clear();
-        await db.places.bulkAdd(defaultPlaces);
-        if (showToastMsg) {
-            showToast("기본 데이트 장소 데이터가 원복되었습니다! 💖", "success");
-        }
-        await updateDashboardStats();
-        await renderPlacesList();
-        updateMapMarkers();
-        triggerSyncUpload();
-    } catch(e) {
-        if (showToastMsg) {
-            showToast("복원 중 오류 발생: " + e.message, "danger");
-        }
-    }
-}
-window.restoreSeedPlaces = restoreSeedPlaces;
 
 // ==========================================
 // 13. Date Calendar & Memory Gallery Engines
