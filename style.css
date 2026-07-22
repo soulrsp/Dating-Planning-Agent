@@ -1909,6 +1909,31 @@ body {
         padding: 0.85rem;
     }
 
+    /* Mobile Calendar Responsive Adjustments */
+    .calendar-days-grid {
+        gap: 3px !important;
+    }
+
+    .calendar-day-cell {
+        min-height: 65px !important;
+        padding: 0.25rem 0.2rem !important;
+        border-radius: 8px !important;
+    }
+
+    .cal-badge {
+        font-size: 0.6rem !important;
+        padding: 0.1rem 0.2rem !important;
+    }
+
+    .gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+        gap: 0.75rem !important;
+    }
+
+    .gallery-img-wrapper {
+        height: 140px !important;
+    }
+
     /* Modals on Mobile */
     .modal-card {
         width: 94% !important;
