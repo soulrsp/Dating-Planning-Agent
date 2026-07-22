@@ -814,6 +814,31 @@
         </div>
     </div>
 
+    <!-- Modal: Lovely Memory Lightbox Viewer with Navigation, Close & Delete -->
+    <div class="modal-overlay" id="modal-memory-lightbox">
+        <div class="gallery-slider-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
+                <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px); cursor:pointer;" onclick="deleteCurrentMemoryPhoto()">
+                    <i data-lucide="trash-2" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 사진 삭제 🗑️
+                </button>
+                <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeMemoryLightboxModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="gallery-slider-main" style="margin-top:20px;">
+                <button class="slider-arrow-btn prev" onclick="navigateMemoryLightbox(-1)"><i data-lucide="chevron-left"></i></button>
+                <div class="slider-img-container">
+                    <img id="memory-lightbox-main-img" src="" alt="Lovely Memory Photo">
+                </div>
+                <button class="slider-arrow-btn next" onclick="navigateMemoryLightbox(1)"><i data-lucide="chevron-right"></i></button>
+            </div>
+
+            <div class="gallery-slider-info" style="text-align:center;">
+                <h4 style="margin:0; font-size:1rem; color:var(--color-primary);">우리의 러블리 메모리 💖</h4>
+                <div class="gallery-slider-meta" id="memory-lightbox-meta" style="margin-top:4px;">1 / 5</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Photo Viewer (Lightbox) -->
     <div class="modal-overlay" id="modal-photo-viewer">
         <div class="lightbox-card">
