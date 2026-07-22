@@ -1989,18 +1989,53 @@ body {
 
     /* Mobile Calendar Responsive Adjustments */
     .calendar-days-grid {
+        grid-template-columns: repeat(7, 1fr) !important;
         gap: 3px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .calendar-day-cell {
-        min-height: 65px !important;
-        padding: 0.25rem 0.2rem !important;
+        min-height: 58px !important;
+        padding: 0.2rem 0.15rem !important;
         border-radius: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
     }
 
-    .cal-badge {
+    .cal-btn-visited {
         font-size: 0.6rem !important;
-        padding: 0.1rem 0.2rem !important;
+        font-weight: 700;
+        padding: 0.12rem 0.25rem !important;
+        border-radius: 6px;
+        background: rgba(255, 101, 132, 0.15);
+        color: var(--color-primary);
+        border: 1px solid rgba(255, 101, 132, 0.25);
+        cursor: pointer;
+        width: 100%;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+    }
+
+    .cal-btn-wishlist {
+        font-size: 0.6rem !important;
+        font-weight: 700;
+        padding: 0.12rem 0.25rem !important;
+        border-radius: 6px;
+        background: rgba(162, 155, 254, 0.15);
+        color: #6C5CE7;
+        border: 1px solid rgba(162, 155, 254, 0.25);
+        cursor: pointer;
+        width: 100%;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
     }
 
     .gallery-grid {
