@@ -67,11 +67,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if ((queryRoom === "77" || syncRoomId === "77") && (partnerAName === "초코" || partnerAName === "A")) {
         partnerAName = "SH";
-        partnerBName = "SN";
+        partnerBName = "SA";
         localStorage.setItem("aura_partner_a_name", "SH");
-        localStorage.setItem("aura_partner_b_name", "SN");
+        localStorage.setItem("aura_partner_b_name", "SA");
         document.getElementById("settings-partner-a-name").value = "SH";
-        document.getElementById("settings-partner-b-name").value = "SN";
+        document.getElementById("settings-partner-b-name").value = "SA";
     }
 
     updatePartnerNamesUI();
@@ -94,6 +94,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Refresh UI Data
     await updateDashboardStats();
     await renderPlacesList();
+    renderLovelyMemoryGallery();
     checkApiKeyAlert();
     startCloudSyncLoop();
 
@@ -491,7 +492,7 @@ function initNaverMap() {
         zoom: 13,
         zoomControl: true,
         zoomControlOptions: {
-            position: naver.maps.Position.BOTTOM_RIGHT
+            position: naver.maps.Position.RIGHT_CENTER
         }
     });
     
@@ -2253,8 +2254,8 @@ async function renderPlacesList() {
                                 </button>
                             </div>
                             <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
-                                ${photoList.map(pSrc => `
-                                    <img src="${pSrc}" alt="추억 사진" onclick="openLightbox('${pSrc}')" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+                                ${photoList.map((pSrc, pIdx) => `
+                                    <img src="${pSrc}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
                                 `).join('')}
                             </div>
                         </div>
@@ -3387,30 +3388,26 @@ async function renderCalendar() {
             renderSelectedDateDetails(fullDateStr, places);
         });
 
-        // Match places with date
-        const datePlaces = places.filter(p => {
-            const pDate = p.createdAt || p.date;
-            const ms = parseAnyDate(pDate);
-            if (ms <= 0) return false;
-            const iso = new Date(ms).toISOString().split("T")[0];
-            return iso === fullDateStr;
-        });
+        // Match places with date & group by type (Visited vs Wishlist)
+        const visitedPlaces = datePlaces.filter(p => p.isVisited === 1);
+        const wishlistPlaces = datePlaces.filter(p => p.isVisited === 0);
 
         let badgesHtml = "";
-        if (datePlaces.length > 0) {
-            badgesHtml += `<div class="calendar-badges-list">`;
-            datePlaces.slice(0, 3).forEach(dp => {
-                const isVis = dp.isVisited === 1;
-                const icon = isVis ? "🌸" : "💌";
-                const badgeClass = isVis ? "visited" : "wishlist";
+        if (visitedPlaces.length > 0 || wishlistPlaces.length > 0) {
+            badgesHtml += `<div style="display:flex; flex-direction:column; gap:2px; margin-top:2px;">`;
+            if (visitedPlaces.length > 0) {
                 badgesHtml += `
-                    <div class="cal-badge ${badgeClass}" onclick="event.stopPropagation(); openEditPlaceModal(${dp.id})" title="${escapeHtml(dp.name)}">
-                        <span>${icon} ${escapeHtml(dp.name)}</span>
-                    </div>
+                    <button class="cal-btn-visited" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'visited')">
+                        🌸 다녀옴 (${visitedPlaces.length})
+                    </button>
                 `;
-            });
-            if (datePlaces.length > 3) {
-                badgesHtml += `<div style="font-size:0.65rem; color:var(--color-primary); font-weight:700;">+${datePlaces.length - 3}개 더보기</div>`;
+            }
+            if (wishlistPlaces.length > 0) {
+                badgesHtml += `
+                    <button class="cal-btn-wishlist" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'wishlist')">
+                        💌 위시 (${wishlistPlaces.length})
+                    </button>
+                `;
             }
             badgesHtml += `</div>`;
         }
@@ -3418,7 +3415,6 @@ async function renderCalendar() {
         cell.innerHTML = `
             <div class="day-number-row">
                 <span class="day-number">${d}</span>
-                ${datePlaces.length > 0 ? `<span style="font-size:0.65rem; color:var(--color-primary); font-weight:700;">♥ ${datePlaces.length}</span>` : ''}
             </div>
             ${badgesHtml}
         `;
@@ -3565,9 +3561,12 @@ async function renderGallery() {
                     <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar" style="margin-top:4px;">
-                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
+                <div class="gallery-action-bar" style="display:flex; gap:6px; margin-top:4px;">
+                    <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
                         ✏️ 사진 수정 / 추가
+                    </button>
+                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.5rem; height:28px; border-color:var(--color-secondary); color:var(--color-secondary);" onclick="downloadPlacePhotosZip(${p.id})">
+                        📥 다운로드 (${photoCount}장)
                     </button>
                 </div>
             </div>
@@ -3669,6 +3668,207 @@ window.selectGallerySliderImage = function(idx) {
 window.closeGallerySliderModal = function() {
     const modal = document.getElementById("modal-gallery-slider");
     if (modal) modal.classList.remove("active");
+};
+
+// Single & Place Photo Download Engines
+window.downloadPlacePhotosZip = async function(placeId) {
+    const place = await db.places.get(placeId);
+    if (!place) return;
+    const photoList = place.photos || (place.photo ? [place.photo] : []);
+    if (photoList.length === 0) {
+        showToast("다운로드할 사진이 없습니다 📷", "warning");
+        return;
+    }
+
+    if (photoList.length === 1) {
+        downloadBase64Image(photoList[0], `${place.name}_추억사진.jpg`);
+        showToast(`'${place.name}' 사진 1장이 다운로드되었습니다! 📥`, "success");
+    } else {
+        try {
+            showToast(`'${place.name}' 추억 사진 ${photoList.length}장을 압축 다운로드합니다... 📦`, "info");
+            const zip = new JSZip();
+            const cleanName = place.name.replace(/[/\\?%*:|"<>. ]/g, "_");
+            photoList.forEach((pSrc, idx) => {
+                const base64Data = pSrc.split(',')[1];
+                zip.file(`${cleanName}_추억_${idx + 1}.jpg`, base64Data, { base64: true });
+            });
+            const content = await zip.generateAsync({ type: "blob" });
+            const downloadAnchor = document.createElement("a");
+            downloadAnchor.href = URL.createObjectURL(content);
+            downloadAnchor.download = `${cleanName}_추억사진_${photoList.length}장.zip`;
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            document.body.removeChild(downloadAnchor);
+            showToast("모든 사진 다운로드 완료! 💖", "success");
+        } catch(e) {
+            photoList.forEach((pSrc, idx) => downloadBase64Image(pSrc, `${place.name}_${idx+1}.jpg`));
+            showToast("사진 다운로드가 시작되었습니다! 📥", "success");
+        }
+    }
+};
+
+window.downloadCurrentSliderPhoto = function() {
+    if (!activeGalleryPhotos || activeGalleryPhotos.length === 0) return;
+    const currentSrc = activeGalleryPhotos[activePhotoIndex];
+    const placeTitle = activePlaceInfo ? activePlaceInfo.name : "추억사진";
+    downloadBase64Image(currentSrc, `${placeTitle}_사진_${activePhotoIndex + 1}.jpg`);
+    showToast("현재 확대된 고화질 사진이 다운로드되었습니다! 📥", "success");
+};
+
+function downloadBase64Image(base64Str, filename) {
+    const a = document.createElement("a");
+    a.href = base64Str;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ==========================================
+// 13. Calendar Date Details Modal Engine
+// ==========================================
+window.openDateDetailsModal = async function(dateStr, type = 'all') {
+    const places = await db.places.toArray();
+    const datePlaces = places.filter(p => {
+        if (p.isDeleted === 1 || p.isVisited === -1) return false;
+        const pDate = p.createdAt || p.date;
+        const ms = parseAnyDate(pDate);
+        if (ms <= 0) return false;
+        return new Date(ms).toISOString().split("T")[0] === dateStr;
+    });
+
+    const filtered = datePlaces.filter(p => {
+        if (type === 'visited') return p.isVisited === 1;
+        if (type === 'wishlist') return p.isVisited === 0;
+        return true;
+    });
+
+    const titleEl = document.getElementById("modal-date-details-title");
+    const bodyEl = document.getElementById("modal-date-details-body");
+    
+    if (titleEl) {
+        const dObj = new Date(dateStr);
+        const typeLabel = type === 'visited' ? '🌸 함께 다녀온 장소' : (type === 'wishlist' ? '💌 데이트 위시리스트' : '기록');
+        titleEl.textContent = `${dObj.getFullYear()}년 ${dObj.getMonth() + 1}월 ${dObj.getDate()}일 ${typeLabel} (${filtered.length}건)`;
+    }
+
+    if (bodyEl) {
+        if (filtered.length === 0) {
+            bodyEl.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--color-text-med);">해당 날짜에 등록된 내역이 없습니다.</div>`;
+        } else {
+            let html = "";
+            filtered.forEach(p => {
+                const isVis = p.isVisited === 1;
+                const badge = isVis ? `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">🌸 다녀온 곳</span>` : `<span style="background:rgba(162,155,254,0.15); color:#6C5CE7; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">💌 위시리스트</span>`;
+                html += `
+                    <div style="background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.15); border-radius:12px; padding:0.75rem; margin-bottom:0.6rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+                            <div>${badge} <strong style="margin-left:4px; font-size:0.9rem; color:var(--color-text-high);">${escapeHtml(p.name)}</strong></div>
+                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="closeDateDetailsModal(); openEditPlaceModal(${p.id});">✏️ 수정</button>
+                        </div>
+                        ${p.notes ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:0.2rem;">📍 ${escapeHtml(p.notes)}</div>` : ''}
+                        ${p.commentA || p.commentB ? `<div style="font-size:0.75rem; color:var(--color-primary); margin-top:0.35rem; background:rgba(255,255,255,0.7); padding:0.25rem 0.45rem; border-radius:6px; border-left:3px solid var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
+                    </div>
+                `;
+            });
+            bodyEl.innerHTML = html;
+        }
+    }
+
+    const modal = document.getElementById("modal-date-details");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+window.closeDateDetailsModal = function() {
+    const modal = document.getElementById("modal-date-details");
+    if (modal) modal.classList.remove("active");
+};
+
+// ==========================================
+// 14. Dashboard Lovely Memory Gallery Engine
+// ==========================================
+let customMemoryPhotos = JSON.parse(localStorage.getItem("aura_lovely_memories") || "[]");
+
+function renderLovelyMemoryGallery() {
+    const grid = document.getElementById("dashboard-memory-grid");
+    if (!grid) return;
+
+    const defaultImages = [
+        "images/couple1.jpg",
+        "images/couple2.jpg",
+        "images/couple3.jpg",
+        "images/couple4.jpg",
+        "images/couple5.jpg"
+    ];
+
+    const displayImages = (customMemoryPhotos && customMemoryPhotos.length > 0) ? customMemoryPhotos : defaultImages;
+
+    grid.innerHTML = "";
+    displayImages.forEach((imgSrc, idx) => {
+        const item = document.createElement("div");
+        item.className = "memory-item";
+        item.innerHTML = `<img src="${imgSrc}" alt="Lovely Memory ${idx + 1}" class="gallery-img" onclick="openLightbox('${imgSrc}')">`;
+        grid.appendChild(item);
+    });
+}
+
+window.openEditMemoryGalleryModal = function() {
+    const previewBox = document.getElementById("memory-gallery-preview-box");
+    if (previewBox) {
+        if (customMemoryPhotos.length > 0) {
+            previewBox.innerHTML = "";
+            customMemoryPhotos.forEach(src => {
+                const img = document.createElement("img");
+                img.src = src;
+                img.style.cssText = "width:50px; height:50px; object-fit:cover; border-radius:8px; margin:2px;";
+                previewBox.appendChild(img);
+            });
+        } else {
+            previewBox.innerHTML = `<span>여기를 클릭해 대시보드 메인 사진을 추가/수정하세요 (여러 장 선택 가능) 📸</span>`;
+        }
+    }
+    const modal = document.getElementById("modal-edit-memory-gallery");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+window.closeEditMemoryGalleryModal = function() {
+    const modal = document.getElementById("modal-edit-memory-gallery");
+    if (modal) modal.classList.remove("active");
+};
+
+window.saveMemoryGalleryPhotos = async function() {
+    const fileInput = document.getElementById("memory-gallery-files");
+    const files = fileInput ? fileInput.files : null;
+    
+    if (files && files.length > 0) {
+        const newPhotos = [];
+        for (let i = 0; i < files.length; i++) {
+            const reader = new FileReader();
+            const base64 = await new Promise((res) => {
+                reader.onload = (e) => res(e.target.result);
+                reader.readAsDataURL(files[i]);
+            });
+            const compressed = await compressBase64Image(base64, 1920, 1920, 0.85);
+            if (compressed) newPhotos.push(compressed);
+        }
+        if (newPhotos.length > 0) {
+            customMemoryPhotos = newPhotos;
+            localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+            renderLovelyMemoryGallery();
+            showToast(`우리의 러블리 메모리 사진 ${newPhotos.length}장이 메인 화면에 저장되었습니다! 💖`, "success");
+            closeEditMemoryGalleryModal();
+            return;
+        }
+    }
+    
+    showToast("새로 선택된 사진이 없습니다.", "info");
+    closeEditMemoryGalleryModal();
 };
 
 // ==========================================
