@@ -2412,7 +2412,7 @@ async function updateDashboardStats() {
 }
 
 // 12. Real-Time Couple Sync Engine (Firebase REST Polling)
-function startCloudSyncLoop() {
+async function startCloudSyncLoop() {
     if (syncIntervalId) clearInterval(syncIntervalId);
     if (photoSyncIntervalId) clearInterval(photoSyncIntervalId);
     
@@ -2448,6 +2448,7 @@ function startCloudSyncLoop() {
     // Establish 5-second interval loop for main DB state sync
     syncIntervalId = setInterval(async () => {
         await loadFromCloud();
+        await loadPhotosFromCloud();
     }, 5000);
     
     // Establish 10-second interval loop for heavy photos syncing
@@ -2456,7 +2457,8 @@ function startCloudSyncLoop() {
     }, 10000);
 
     // Run immediately on start
-    loadFromCloud();
+    await loadFromCloud();
+    await loadPhotosFromCloud();
 }
 
 async function saveToCloud() {
@@ -3610,6 +3612,7 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
     
     activePlaceInfo = {
+        id: place.id,
         name: place.name,
         meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
         comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
@@ -3676,6 +3679,128 @@ window.selectGallerySliderImage = function(idx) {
 window.closeGallerySliderModal = function() {
     const modal = document.getElementById("modal-gallery-slider");
     if (modal) modal.classList.remove("active");
+};
+
+// Delete Current Photo in Lightbox Slider Modal
+window.deleteCurrentSliderPhoto = async function() {
+    if (!activePlaceInfo || !activePlaceInfo.id) {
+        showToast("삭제할 장소 정보가 없습니다.", "warning");
+        return;
+    }
+    if (!confirm("이 추억 사진을 삭제하시겠습니까?")) return;
+
+    const placeId = activePlaceInfo.id;
+    const place = await db.places.get(placeId);
+    if (!place) return;
+
+    let photoList = place.photos || (place.photo ? [place.photo] : []);
+    if (photoList.length === 0) return;
+
+    photoList.splice(activePhotoIndex, 1);
+
+    await db.places.update(placeId, {
+        photo: photoList[0] || "",
+        photos: photoList
+    });
+
+    if (syncRoomId) {
+        await uploadPhotoToCloud(placeId, photoList);
+    }
+
+    showToast("사진이 삭제되었습니다.", "success");
+
+    await updateDashboardStats();
+    await renderPlacesList();
+    if (currentActiveTab === "gallery") {
+        await renderGallery();
+    }
+
+    if (photoList.length === 0) {
+        closeGallerySliderModal();
+    } else {
+        if (activePhotoIndex >= photoList.length) {
+            activePhotoIndex = photoList.length - 1;
+        }
+        activeGalleryPhotos = photoList;
+        updateGallerySliderUI();
+    }
+};
+
+// API Key & Naver Client ID Step-by-Step Guide Modal Handler
+window.openApiGuideModal = function(type) {
+    const titleEl = document.getElementById("modal-api-guide-title");
+    const bodyEl = document.getElementById("modal-api-guide-body");
+    
+    if (type === 'gemini') {
+        if (titleEl) titleEl.textContent = "🤖 Gemini API Key 발급 및 설정 가이드";
+        if (bodyEl) {
+            bodyEl.innerHTML = `
+                <div style="background:rgba(255,101,132,0.06); padding:0.85rem; border-radius:14px; border:1px solid rgba(255,101,132,0.2); margin-bottom:0.9rem;">
+                    <strong>✨ Gemini API Key란?</strong><br>
+                    AURA 러블리 AI 플래너가 맞춤 데이트 코스를 추천할 때 사용되는 100% 무료 Google AI 키입니다.
+                </div>
+                <h4 style="margin:0.8rem 0 0.4rem 0; color:var(--color-primary);">📌 발급 절차 (1분 소요 / 100% 무료)</h4>
+                <ol style="padding-left:1.2rem; margin:0;">
+                    <li style="margin-bottom:0.4rem;">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--color-primary); font-weight:700; text-decoration:underline;">Google AI Studio API Key 발급 페이지 (클릭)</a>에 접속합니다.
+                    </li>
+                    <li style="margin-bottom:0.4rem;">구글 계정으로 로그인 후 <strong>[Create API key]</strong> 버튼을 클릭합니다.</li>
+                    <li style="margin-bottom:0.4rem;">발급된 <code>AIza...</code> 형태의 키 문자열을 복사합니다.</li>
+                    <li>설정 탭의 <strong>Gemini API Key</strong> 입력란에 붙여넣고 하단 <strong>[설정 저장하기]</strong>를 눌러주세요!</li>
+                </ol>
+            `;
+        }
+    } else {
+        if (titleEl) titleEl.textContent = "🗺️ 네이버 지도 Client ID 발급 및 설정 가이드";
+        if (bodyEl) {
+            bodyEl.innerHTML = `
+                <div style="background:rgba(162,155,254,0.08); padding:0.85rem; border-radius:14px; border:1px solid rgba(162,155,254,0.25); margin-bottom:0.9rem;">
+                    <strong>🗺️ 네이버 지도 Client ID란?</strong><br>
+                    국내 주요 맛집/카페 장소 검색 및 고화질 네이버 벡터 지도를 로드하기 위한 클라우드 Key입니다. (미입력 시 글로벌 기본 지도로 작동합니다)
+                </div>
+                <h4 style="margin:0.8rem 0 0.4rem 0; color:#6C5CE7;">📌 발급 절차 (네이버 회원 무료)</h4>
+                <ol style="padding-left:1.2rem; margin:0;">
+                    <li style="margin-bottom:0.4rem;">
+                        <a href="https://www.ncloud.com" target="_blank" style="color:#6C5CE7; font-weight:700; text-decoration:underline;">네이버 클라우드 플랫폼 (ncloud.com) (클릭)</a>에 접속하여 로그인합니다.
+                    </li>
+                    <li style="margin-bottom:0.4rem;">우측 상단 <strong>[콘솔]</strong> ➔ 좌측 메뉴 <strong>[AI·NAVER API]</strong> ➔ <strong>[Application 등록]</strong>을 클릭합니다.</li>
+                    <li style="margin-bottom:0.4rem;">서비스 중 <strong>Web Dynamic Map</strong> 항목을 체크합니다.</li>
+                    <li style="margin-bottom:0.4rem;">서비스 URL에 <code>https://soulrsp.github.io</code> 및 <code>http://localhost</code>를 추가 등록합니다.</li>
+                    <li>발급 완료 후 <strong>Client ID</strong> (영문/숫자 조합)를 복사하여 설정 탭에 붙여넣어 주세요!</li>
+                </ol>
+            `;
+        }
+    }
+    
+    const modal = document.getElementById("modal-api-guide");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+window.closeApiGuideModal = function() {
+    const modal = document.getElementById("modal-api-guide");
+    if (modal) modal.classList.remove("active");
+};
+
+// Toggle Undated Date Checkbox for Add/Edit Modals
+window.toggleUndatedDate = function(mode) {
+    if (mode === 'add') {
+        const chk = document.getElementById("add-place-undated");
+        const dateInput = document.getElementById("add-place-date");
+        if (chk && dateInput) {
+            dateInput.disabled = chk.checked;
+            if (chk.checked) dateInput.value = "";
+        }
+    } else if (mode === 'edit') {
+        const chk = document.getElementById("edit-place-undated");
+        const dateInput = document.getElementById("edit-place-date");
+        if (chk && dateInput) {
+            dateInput.disabled = chk.checked;
+            if (chk.checked) dateInput.value = "";
+        }
+    }
 };
 
 // Single & Place Photo Download Engines
