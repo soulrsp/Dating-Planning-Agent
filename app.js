@@ -2993,55 +2993,7 @@ function importData(e) {
     reader.readAsText(file);
 }
 
-async function clearAllData() {
-    if (!confirm("경고: 모든 커플 데이트 정보 및 클라우드 연동 정보가 완전 삭제됩니다. 초기화하시겠습니까?")) return;
-    
-    await db.places.clear();
-    
-    // Purge cloud room data on Firebase
-    if (syncRoomId) {
-        try {
-            const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
-            await fetch(url, { method: 'DELETE' });
-        } catch(e){
-            console.error("Cloud room purge error:", e);
-        }
-    }
 
-    localStorage.removeItem("aura_gemini_key");
-    localStorage.removeItem("aura_naver_client_id");
-    localStorage.removeItem("aura_budget_limit");
-    localStorage.removeItem("aura_partner_a_name");
-    localStorage.removeItem("aura_partner_b_name");
-    localStorage.removeItem("aura_sync_room_id");
-    localStorage.removeItem("aura_firebase_url");
-    
-    geminiApiKey = "";
-    naverClientId = "";
-    budgetLimit = 500000;
-    partnerAName = "초코";
-    partnerBName = "딸기";
-    syncRoomId = "";
-    customFirebaseUrl = "";
-    
-    document.getElementById("settings-gemini-key").value = "";
-    document.getElementById("settings-naver-client-id").value = "";
-    document.getElementById("settings-budget-limit").value = 500000;
-    document.getElementById("settings-partner-a-name").value = "초코";
-    document.getElementById("settings-partner-b-name").value = "딸기";
-    document.getElementById("settings-sync-room-id").value = "";
-    document.getElementById("settings-firebase-url").value = "";
-    
-    document.getElementById("budget-limit-text").textContent = formatCurrency(500000);
-    updatePartnerNamesUI();
-    
-    showToast("AURA의 모든 데이터 및 클라우드 동기화 룸이 소멸되었습니다.", "warning");
-    checkApiKeyAlert();
-    await updateDashboardStats();
-    await renderPlacesList();
-    initLeafletMap();
-    startCloudSyncLoop();
-}
 
 // 15. UI Helpers
 function formatCurrency(amount) {
@@ -3557,26 +3509,23 @@ async function renderGallery() {
         const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
 
         card.innerHTML = `
-            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)">
+            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">
                 <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
                 <div class="gallery-img-overlay">
                     <span>🔍 추억 갤러리 감상하기</span>
                 </div>
-                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3);">🖼️ ${photoCount}장</span>` : ''}
+                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3); pointer-events:none;">🖼️ ${photoCount}장</span>` : ''}
             </div>
             <div class="gallery-card-body">
-                <h5 class="gallery-place-title">${escapeHtml(p.name)}</h5>
+                <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
                     <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar" style="display:flex; gap:6px; margin-top:4px;">
-                    <button class="btn btn-primary" style="flex:1; font-size:0.75rem; padding:0.25rem; height:28px;" onclick="openGallerySliderModal(${p.id}, 0)">
-                        🖼️ 사진 감상 (${photoCount}장)
-                    </button>
-                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
-                        ✏️ 수정
+                <div class="gallery-action-bar" style="margin-top:4px;">
+                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
+                        ✏️ 사진 수정 / 추가
                     </button>
                 </div>
             </div>
@@ -3593,7 +3542,14 @@ let activePhotoIndex = 0;
 let activePlaceInfo = {};
 
 window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
-    const place = await db.places.get(placeId);
+    let place = null;
+    if (typeof placeId === 'number') {
+        place = await db.places.get(placeId);
+    }
+    if (!place) {
+        const visitedPlaces = await db.places.where("isVisited").equals(1).toArray();
+        place = visitedPlaces.find(p => p.id == placeId || p.id === placeId);
+    }
     if (!place) return;
 
     activeGalleryPhotos = place.photos || (place.photo ? [place.photo] : []);
