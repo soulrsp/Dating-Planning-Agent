@@ -86,6 +86,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Cleanup legacy test comments if present
     await cleanupLegacyComments();
 
+    // Auto-restore seed places if local DB is completely empty (Data Loss Protection)
+    const count = await db.places.count();
+    if (count === 0) {
+        await restoreSeedPlaces(false);
+    }
+
     // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
     if (syncRoomId && (naverClientId || geminiApiKey)) {
         setTimeout(() => triggerSyncUpload(), 300);
@@ -2415,6 +2421,21 @@ async function saveToCloud() {
             return copy;
         });
 
+        // Protection: Prevent empty local DB from overwriting populated cloud room
+        if (cleanPlaces.length === 0) {
+            try {
+                const checkUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
+                const checkRes = await fetch(checkUrl);
+                if (checkRes.ok) {
+                    const checkData = await checkRes.json();
+                    if (checkData && checkData.placesData && checkData.placesData !== "[]") {
+                        console.log("[Sync Guard] Prevented empty local DB from overwriting populated cloud room!");
+                        return;
+                    }
+                }
+            } catch(e){}
+        }
+
         const now = Date.now();
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
@@ -2520,26 +2541,45 @@ async function loadFromCloud() {
                 fetchedPlaces.forEach(fp => sanitizePlaceObject(fp));
 
                 const localPlaces = await db.places.toArray();
-                const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
-                const fetchedCompareStr = JSON.stringify(fetchedPlaces);
-                
-                if (localCompareStr !== fetchedCompareStr) {
-                    console.log("[Sync Engine] Server data differs. Syncing to local DB...");
-                    
+
+                // SAFE UNION MERGE: If cloud has 0 places but local has places, DO NOT CLEAR LOCAL DB!
+                if (fetchedPlaces.length === 0 && localPlaces.length > 0) {
+                    console.log("[Sync Engine] Cloud has 0 places while local DB has items. Uploading local DB to cloud...");
+                    await saveToCloud();
+                } else if (fetchedPlaces.length > 0) {
+                    const mergedMap = new Map();
                     fetchedPlaces.forEach(fp => {
-                        const localItem = localPlaces.find(lp => lp.name === fp.name && lp.createdAt === fp.createdAt);
-                        if (localItem) {
-                            if (localItem.photo) fp.photo = localItem.photo;
-                            if (localItem.photos) fp.photos = localItem.photos;
+                        const key = `${fp.name}_${fp.createdAt}`;
+                        mergedMap.set(key, fp);
+                    });
+                    localPlaces.forEach(lp => {
+                        const key = `${lp.name}_${lp.createdAt}`;
+                        if (!mergedMap.has(key)) {
+                            const copy = { ...lp };
+                            delete copy.photo;
+                            delete copy.photos;
+                            mergedMap.set(key, copy);
+                        } else {
+                            const existing = mergedMap.get(key);
+                            if (lp.photo && !existing.photo) existing.photo = lp.photo;
+                            if (lp.photos && (!existing.photos || existing.photos.length === 0)) existing.photos = lp.photos;
                         }
                     });
 
-                    await db.places.clear();
-                    await db.places.bulkAdd(fetchedPlaces);
+                    const mergedList = Array.from(mergedMap.values());
+                    const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
+                    const mergedCompareStr = JSON.stringify(mergedList);
 
-                    await updateDashboardStats();
-                    await renderPlacesList();
-                    updateMapMarkers();
+                    if (localCompareStr !== mergedCompareStr) {
+                        console.log("[Sync Engine] Updating local DB with merged places...");
+                        await db.places.clear();
+                        await db.places.bulkAdd(mergedList);
+
+                        await updateDashboardStats();
+                        await renderPlacesList();
+                        updateMapMarkers();
+                        await saveToCloud();
+                    }
                 }
             }
             lastSyncedTimestamp = resData.timestamp;
@@ -3173,3 +3213,68 @@ window.toggleCardPhotos = function(placeId) {
         if (textEl) textEl.textContent = textEl.textContent.replace("숨기기 🔽", "보기 🔼");
     }
 };
+
+async function restoreSeedPlaces(showToastMsg = true) {
+    const defaultPlaces = [
+        {
+            name: "부원냉삼집 대전관평동점",
+            category: "Restaurant",
+            lat: 36.42580,
+            lng: 127.39420,
+            priority: "High",
+            notes: "대전 유성구 배울1로 126 호반써밋프라자 107호",
+            isVisited: 1,
+            rating: 5,
+            commentA: "관평동 맛집 냉삼 대만족! 💕",
+            commentB: "고기 육즙 대박 다음에 또 오자! ✨",
+            expense: 45000,
+            payer: "DUTCH",
+            createdAt: new Date(Date.now() - 86400000 * 3).toISOString()
+        },
+        {
+            name: "김순화 충남순대",
+            category: "Restaurant",
+            lat: 36.42582,
+            lng: 127.35124,
+            priority: "High",
+            notes: "대전 유성구 유성대로 3-12",
+            isVisited: 1,
+            rating: 5,
+            commentA: "국물이 진하고 시원한 인생 순대국밥 🍲",
+            commentB: "추운 날 따뜻하게 먹기 최고! ✨",
+            expense: 22000,
+            payer: "A",
+            createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+        },
+        {
+            name: "진남포면옥",
+            category: "Restaurant",
+            lat: 37.55432,
+            lng: 127.01084,
+            priority: "Medium",
+            notes: "서울 중구 다산로 108",
+            isVisited: 0,
+            rating: 0,
+            commentA: "백숙이랑 이북식 찜닭 꼭 먹어보고 싶어! 💕",
+            commentB: "비오는 날 같이 가자 ✨",
+            createdAt: new Date(Date.now() - 86400000 * 1).toISOString()
+        }
+    ];
+
+    try {
+        await db.places.clear();
+        await db.places.bulkAdd(defaultPlaces);
+        if (showToastMsg) {
+            showToast("기본 데이트 장소 데이터가 원복되었습니다! 💖", "success");
+        }
+        await updateDashboardStats();
+        await renderPlacesList();
+        updateMapMarkers();
+        triggerSyncUpload();
+    } catch(e) {
+        if (showToastMsg) {
+            showToast("복원 중 오류 발생: " + e.message, "danger");
+        }
+    }
+}
+window.restoreSeedPlaces = restoreSeedPlaces;
