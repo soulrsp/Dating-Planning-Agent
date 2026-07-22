@@ -763,35 +763,47 @@ body {
 
 .search-box {
     position: relative;
+    display: flex;
+    align-items: center;
     width: 320px;
 }
 
-.search-box i {
+.search-box i,
+.search-box svg {
     position: absolute;
     left: 1rem;
     top: 50%;
     transform: translateY(-50%);
     width: 18px;
     height: 18px;
-    color: var(--color-text-low);
+    color: var(--color-primary);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .search-box input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid var(--color-card-border);
-    border-radius: 16px;
-    padding: 0.65rem 1rem 0.65rem 2.75rem;
+    height: 42px;
+    line-height: 42px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1.5px solid rgba(255, 112, 150, 0.25);
+    border-radius: 21px;
+    padding: 0 1rem 0 2.85rem;
     color: var(--color-text-high);
     font-family: var(--font-body);
     font-size: 0.85rem;
     transition: var(--transition-base);
+    box-shadow: 0 2px 10px rgba(255, 101, 132, 0.05);
 }
 
 .search-box input:focus {
     outline: none;
-    border-color: rgba(255, 101, 132, 0.4);
-    background: rgba(255, 255, 255, 0.8);
+    border-color: var(--color-primary);
+    background: #ffffff;
+    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.18);
 }
 
 .places-grid {
@@ -1701,4 +1713,215 @@ body {
     background: white;
     color: var(--color-primary);
     transform: scale(1.1);
+}
+
+/* -------------------------------------------------------------
+ * Mobile Responsive & Smartphone PWA UI System
+ * ------------------------------------------------------------- */
+.mobile-top-bar {
+    display: none;
+}
+
+.mobile-bottom-nav {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    /* Hide Desktop Sidebar on Mobile */
+    .sidebar {
+        display: none !important;
+    }
+
+    .topbar {
+        display: none !important;
+    }
+
+    /* Show Mobile Top Bar */
+    .mobile-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 52px;
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(255, 101, 132, 0.15);
+        padding: 0 1rem;
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(255, 101, 132, 0.08);
+    }
+
+    .mobile-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: var(--color-primary);
+    }
+
+    .mobile-couple-names {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--color-text-high);
+        background: rgba(255, 101, 132, 0.08);
+        padding: 0.25rem 0.65rem;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .mobile-sync-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--color-primary);
+        background: rgba(255, 101, 132, 0.1);
+        padding: 0.25rem 0.55rem;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        cursor: pointer;
+    }
+
+    /* Show Mobile Bottom Navigation Bar */
+    .mobile-bottom-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 64px;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid rgba(255, 101, 132, 0.2);
+        z-index: 1000;
+        justify-content: space-around;
+        align-items: center;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+        box-shadow: 0 -4px 20px rgba(255, 101, 132, 0.12);
+    }
+
+    .mobile-nav-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        color: var(--color-text-low);
+        font-size: 0.68rem;
+        font-weight: 600;
+        gap: 3px;
+        cursor: pointer;
+        padding: 0.4rem 0;
+        transition: var(--transition-base);
+        position: relative;
+    }
+
+    .mobile-nav-item i {
+        width: 20px;
+        height: 20px;
+        transition: var(--transition-base);
+    }
+
+    .mobile-nav-item.active {
+        color: var(--color-primary);
+        font-weight: 700;
+    }
+
+    .mobile-nav-item.active i {
+        transform: translateY(-2px) scale(1.15);
+        color: var(--color-primary);
+    }
+
+    .mobile-nav-item.active::after {
+        content: '';
+        position: absolute;
+        bottom: 4px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--color-primary);
+    }
+
+    /* Layout & Containers on Mobile */
+    .app-container {
+        flex-direction: column;
+        padding-top: 52px;
+        padding-bottom: 64px;
+        min-height: 100vh;
+    }
+
+    .main-content {
+        padding: 0.85rem;
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    /* Map on Mobile */
+    #map {
+        height: 380px !important;
+        min-height: 340px !important;
+        border-radius: 16px;
+    }
+
+    .map-search-bar {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .map-search-bar input {
+        flex: 1 1 100%;
+        font-size: 0.85rem;
+    }
+
+    .map-search-bar button {
+        flex: 1;
+        font-size: 0.78rem;
+        padding: 0.4rem 0.5rem;
+    }
+
+    /* Grids & Cards on Mobile */
+    .dashboard-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.85rem;
+    }
+
+    .stats-row {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.5rem;
+    }
+
+    .places-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .place-card {
+        padding: 0.85rem;
+    }
+
+    /* Modals on Mobile */
+    .modal-card {
+        width: 94% !important;
+        max-width: 94% !important;
+        margin: 0 auto;
+        max-height: 88vh;
+        overflow-y: auto;
+        padding: 1.1rem;
+        border-radius: 20px;
+    }
+
+    .form-group-row {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
 }
