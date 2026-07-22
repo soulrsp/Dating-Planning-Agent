@@ -115,8 +115,11 @@
         <!-- Main Content Area -->
         <main class="main-content">
             <!-- Topbar Header -->
-            <header class="topbar">
+            <header class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <h1 class="page-title" id="page-title-text">러블리 대시보드</h1>
+                <button type="button" class="btn btn-outline" onclick="openShareRoomModal()" style="font-size:0.8rem; padding:0.32rem 0.75rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); gap:6px;">
+                    <i data-lucide="smartphone"></i> 스마트폰 연동 📱
+                </button>
             </header>
 
             <!-- Tab: Dashboard -->
@@ -686,6 +689,43 @@
                     <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal: Mobile Smartphone Pair & QR Share -->
+    <div class="modal-overlay" id="modal-share-room">
+        <div class="modal-card" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3>📱 스마트폰 모바일 연동</h3>
+                <button class="modal-close" onclick="closeShareRoomModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <div style="font-size:0.85rem; color:var(--color-text-med); margin-bottom:1rem; line-height:1.4;">
+                    스마트폰 카메라로 아래 <strong>QR 코드</strong>를 스캔하거나,<br>공유 링크를 카카오톡/문자로 전달하세요 💌
+                </div>
+
+                <div style="background: white; padding: 1rem; border-radius: 16px; display: inline-block; box-shadow: 0 4px 16px rgba(255,101,132,0.15); border: 1px solid rgba(255,101,132,0.2); margin-bottom: 1rem;">
+                    <img id="qr-code-img" src="" alt="Smartphone Sync QR Code" style="width: 180px; height: 180px; display: block; border-radius: 8px;">
+                </div>
+
+                <div class="form-group" style="text-align: left;">
+                    <label>스마트폰 직접 접속 URL</label>
+                    <div style="display: flex; gap: 6px;">
+                        <input type="text" id="share-room-url" readonly style="font-size: 0.8rem; background: rgba(255,101,132,0.04);">
+                        <button class="btn btn-primary" onclick="copyShareRoomUrl()" style="white-space: nowrap; font-size: 0.78rem; padding: 0.4rem 0.75rem;">
+                            📋 복사
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.2rem; padding: 0.75rem; background: rgba(255, 101, 132, 0.08); border-radius: 12px; border: 1px dashed rgba(255, 101, 132, 0.3); font-size: 0.78rem; color: var(--color-primary); text-align: left;">
+                    <strong>📱 스마트폰 앱처럼 사용하는 꿀팁!</strong><br>
+                    스마트폰 브라우저(사파리/크롬)로 접속 후 <strong>[공유] ➔ "홈 화면에 추가"</strong>를 누르시면 앱 아이콘이 생겨 스마트폰 앱으로 간편하게 구동하실 수 있습니다! ✨
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" style="width:100%; justify-content:center;" onclick="closeShareRoomModal()">닫기</button>
+            </div>
         </div>
     </div>
 
