@@ -241,11 +241,16 @@
 
                             <!-- Couple Memory Gallery Widget -->
                             <div class="memory-gallery-widget">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:6px;">
                                     <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
-                                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openEditMemoryGalleryModal()">
-                                        ✏️ 메모리 수정/추가
-                                    </button>
+                                    <div style="display:flex; gap:6px;">
+                                        <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06);" onclick="downloadAllMemoryGalleryPhotos()">
+                                            📥 전체 다운로드
+                                        </button>
+                                        <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openEditMemoryGalleryModal()">
+                                            ✏️ 추가/수정
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="memory-grid" id="dashboard-memory-grid">
                                     <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
