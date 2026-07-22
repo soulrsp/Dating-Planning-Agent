@@ -163,17 +163,21 @@
                             </div>
                             
                             <!-- Embedded Local Search Inside Map -->
-                            <div class="map-search-bar">
-                                <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query">
-                                <button class="btn btn-primary" id="btn-map-search" onclick="handleInAppMapSearch()">
-                                    <i data-lucide="search"></i> 검색
-                                </button>
-                                <button class="btn btn-outline" id="btn-my-location" onclick="moveToUserCurrentLocation()" title="현재 내 위치 중심" style="padding:0.4rem 0.65rem; background:white; font-size:0.8rem; border-color:var(--color-primary); color:var(--color-primary); display:inline-flex; align-items:center; gap:3px;">
-                                    <i data-lucide="crosshair" style="width:14px; height:14px;"></i> 내위치 🎯
-                                </button>
-                                <button class="btn btn-outline" id="btn-reset-pins" onclick="resetAllPlaceMapPins()" title="저장된 지도 핀 위치 리셋 및 건물 위치 정밀 보정" style="padding:0.4rem 0.65rem; background:white; font-size:0.8rem; border-color:var(--color-secondary); color:var(--color-secondary); display:inline-flex; align-items:center; gap:3px;">
-                                    <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i> 핀 리셋 🔄
-                                </button>
+                            <div class="map-search-bar" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
+                                <div style="display:flex; gap:0.4rem; width:100%;">
+                                    <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query" style="flex-grow:1;">
+                                    <button class="btn btn-primary" id="btn-map-search" onclick="handleInAppMapSearch()" style="white-space:nowrap;">
+                                        <i data-lucide="search"></i> 검색
+                                    </button>
+                                </div>
+                                <div style="display:flex; gap:0.4rem; width:100%;">
+                                    <button class="btn btn-outline" id="btn-my-location" onclick="moveToUserCurrentLocation()" title="현재 내 위치 중심" style="flex:1; justify-content:center; padding:0.4rem 0.5rem; background:white; font-size:0.78rem; border-color:var(--color-primary); color:var(--color-primary); display:inline-flex; align-items:center; gap:3px;">
+                                        <i data-lucide="crosshair" style="width:14px; height:14px;"></i> 내위치 🎯
+                                    </button>
+                                    <button class="btn btn-outline" id="btn-reset-pins" onclick="resetAllPlaceMapPins()" title="저장된 지도 핀 위치 리셋 및 건물 위치 정밀 보정" style="flex:1; justify-content:center; padding:0.4rem 0.5rem; background:white; font-size:0.78rem; border-color:var(--color-secondary); color:var(--color-secondary); display:inline-flex; align-items:center; gap:3px;">
+                                        <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i> 핀 리셋 🔄
+                                    </button>
+                                </div>
                             </div>
                             
                             <div class="map-container-wrapper">
@@ -440,11 +444,9 @@
                         <div class="form-group">
                             <label>데이터 수동 관리</label>
                             <div class="btn-row">
-                                <button class="btn btn-outline" id="btn-clean-junk-data" onclick="cleanJunkData(true)" style="border-color:#6C5CE7; color:#6C5CE7; background:rgba(108,92,231,0.08);"><i data-lucide="sparkles"></i> 중복/이상 데이터 정화 🧹</button>
                                 <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 데이터 내보내기</button>
                                 <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 데이터 가져오기</button>
                                 <input type="file" id="file-import-data" class="hidden" accept=".json">
-                                <button class="btn btn-danger" id="btn-clear-data"><i data-lucide="trash-2"></i> 데이터 전체 삭제</button>
                             </div>
                         </div>
 
@@ -725,6 +727,31 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline" style="width:100%; justify-content:center;" onclick="closeShareRoomModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Gallery Multi-Photo Lightbox Slider -->
+    <div class="modal-overlay" id="modal-gallery-slider">
+        <div class="gallery-slider-card">
+            <button class="modal-close" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
+
+            <div class="gallery-slider-main">
+                <button class="slider-arrow-btn prev" onclick="navigateGallerySlider(-1)"><i data-lucide="chevron-left"></i></button>
+                <div class="slider-img-container">
+                    <img id="gallery-slider-main-img" src="" alt="Main Memory Photo">
+                </div>
+                <button class="slider-arrow-btn next" onclick="navigateGallerySlider(1)"><i data-lucide="chevron-right"></i></button>
+            </div>
+
+            <div class="gallery-slider-info">
+                <h4 id="gallery-slider-place-name">장소명</h4>
+                <div class="gallery-slider-meta" id="gallery-slider-place-meta">방문 날짜 · 5점 ★</div>
+                <div class="gallery-slider-comments" id="gallery-slider-comments"></div>
+            </div>
+
+            <div class="gallery-slider-thumbs" id="gallery-slider-thumbs">
+                <!-- Thumbnails inserted dynamically -->
             </div>
         </div>
     </div>
