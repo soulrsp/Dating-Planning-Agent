@@ -1243,22 +1243,20 @@ function renderMapSearchResults(results) {
 
             cardsHtml += `
                 <div class="search-result-card" id="search-res-item-${idx}">
-                    <div class="search-result-info">
-                        <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
-                        <div class="search-result-addr">${res.address}</div>
-                    </div>
+                    <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
+                    <div class="search-result-addr">${res.address}</div>
                     <div class="search-result-actions">
-                        <button class="btn btn-outline" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
-                            위치보기 🎯
+                        <button class="btn btn-outline search-btn-sm" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
+                            🎯 위치보기
                         </button>
-                        <button class="btn btn-primary" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">
-                            위시리스트 💖
+                        <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult('${encodedData}')">
+                            💖 위시리스트
                         </button>
-                        <button class="btn btn-secondary" style="padding:0.2rem 0.45rem; font-size:0.7rem; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
-                            다녀온 곳 📸
+                        <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                            📸 다녀온 곳
                         </button>
-                        <button class="btn btn-outline" style="padding:0.2rem 0.45rem; font-size:0.7rem;" onclick="copyNaverMapUrl('${encodedData}')">
-                            URL 복사 📋
+                        <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl('${encodedData}')">
+                            📋 URL 복사
                         </button>
                     </div>
                 </div>
@@ -2610,6 +2608,13 @@ async function loadFromCloud() {
                     }
                 });
 
+                // Safe Cloud Sync Guard: Prevent wiping local DB if cloud returns empty places while local DB has data
+                if (placesToApply.length === 0 && localPlaces.some(p => !p.isDeleted)) {
+                    console.warn("[Sync Engine] Cloud returned empty places, but local DB has active data. Pushing local places to cloud instead of clearing local DB.");
+                    await saveToCloud();
+                    return;
+                }
+
                 const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
                 const fetchedCompareStr = JSON.stringify(placesToApply);
 
@@ -2748,7 +2753,44 @@ async function handleChatSubmit(e) {
         }
     } catch(err) {
         removeChatBubble(thinkingId);
-        appendChatMessage("AI 코스 실시간 추천에 문제가 생겼어요: " + err.message, "bot");
+        const errLower = (err.message || "").toLowerCase();
+        if (errLower.includes("quota") || errLower.includes("exceeded") || errLower.includes("429") || errLower.includes("resource_exhausted")) {
+            showToast("Gemini API 무료 사용량 한도가 초과되었습니다. [에이전트 설정] 탭에서 유효한 키를 확인하시거나 잠시 후 다시 시도해 주세요! 🔑", "warning");
+            
+            const fallbackCourse = {
+                itinerary_title: "🌸 AURA 러블리 시그니처 데이트 코스",
+                description: "(Gemini API 일일 사용량 한도 초과로 AURA 시그니처 추천 코스를 안심 제공해 드립니다!) 연남동 경의선 숲길을 손잡고 걷는 낭만적인 데이트 코스입니다.",
+                places: [
+                    {
+                        name: "연남동 경의선 숲길 공원",
+                        category: "Park",
+                        lat: 37.5612,
+                        lng: 126.9248,
+                        notes: "손잡고 조용히 대화하며 산책하기 좋은 오솔길 🌿",
+                        estimatedCost: 0
+                    },
+                    {
+                        name: "연남동 테일러커피",
+                        category: "Cafe",
+                        lat: 37.5618,
+                        lng: 126.9255,
+                        notes: "달콤한 아인슈페너 커피와 시그니처 디저트가 일품인 카페 ☕",
+                        estimatedCost: 18000
+                    },
+                    {
+                        name: "연남동 카쿠시타",
+                        category: "Restaurant",
+                        lat: 37.5624,
+                        lng: 126.9262,
+                        notes: "분위기 좋은 일식 명란 크림 파스타 & 와인 다이닝 🍝🍷",
+                        estimatedCost: 45000
+                    }
+                ]
+            };
+            renderAICourseCard(fallbackCourse);
+        } else {
+            appendChatMessage("AI 코스 실시간 추천에 문제가 생겼어요: " + err.message, "bot");
+        }
     }
 }
 
