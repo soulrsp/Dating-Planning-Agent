@@ -362,6 +362,8 @@ function switchTab(tabId) {
         "dashboard": "러블리 대시보드 Overview",
         "wishlist": "데이트 위시리스트 🌸",
         "visited": "함께 다녀온 곳 💖",
+        "calendar": "우리의 데이트 달력 🗓️",
+        "gallery": "우리의 데이트 추억 갤러리 📸",
         "ai-planner": "AURA 러블리 AI 플래너",
         "settings": "AURA 환경 설정"
     };
@@ -376,6 +378,10 @@ function switchTab(tabId) {
                 map.invalidateSize();
             }
         }, 120);
+    } else if (tabId === "calendar") {
+        renderCalendar();
+    } else if (tabId === "gallery") {
+        renderGallery();
     }
 }
 
@@ -2240,6 +2246,14 @@ async function renderPlacesList() {
     }
     
     lucide.createIcons();
+
+    // Auto-update active tab if calendar or gallery
+    if (document.getElementById("tab-calendar") && document.getElementById("tab-calendar").classList.contains("active")) {
+        await renderCalendar();
+    }
+    if (document.getElementById("tab-gallery") && document.getElementById("tab-gallery").classList.contains("active")) {
+        await renderGallery();
+    }
 }
 
 async function deletePlace(id, name) {
@@ -3278,3 +3292,260 @@ async function restoreSeedPlaces(showToastMsg = true) {
     }
 }
 window.restoreSeedPlaces = restoreSeedPlaces;
+
+// ==========================================
+// 13. Date Calendar & Memory Gallery Engines
+// ==========================================
+let currentCalendarYear = new Date().getFullYear();
+let currentCalendarMonth = new Date().getMonth();
+let selectedCalendarDateStr = new Date().toISOString().split("T")[0];
+
+window.changeCalendarMonth = function(delta) {
+    currentCalendarMonth += delta;
+    if (currentCalendarMonth > 11) {
+        currentCalendarMonth = 0;
+        currentCalendarYear++;
+    } else if (currentCalendarMonth < 0) {
+        currentCalendarMonth = 11;
+        currentCalendarYear--;
+    }
+    renderCalendar();
+};
+
+window.goTodayCalendar = function() {
+    const today = new Date();
+    currentCalendarYear = today.getFullYear();
+    currentCalendarMonth = today.getMonth();
+    selectedCalendarDateStr = today.toISOString().split("T")[0];
+    renderCalendar();
+};
+
+async function renderCalendar() {
+    const monthTitle = document.getElementById("calendar-month-title");
+    if (monthTitle) {
+        monthTitle.textContent = `${currentCalendarYear}년 ${currentCalendarMonth + 1}월`;
+    }
+
+    const gridContainer = document.getElementById("calendar-days-grid");
+    if (!gridContainer) return;
+    gridContainer.innerHTML = "";
+
+    const places = await db.places.toArray();
+
+    const firstDay = new Date(currentCalendarYear, currentCalendarMonth, 1).getDay();
+    const daysInMonth = new Date(currentCalendarYear, currentCalendarMonth + 1, 0).getDate();
+    const prevMonthDays = new Date(currentCalendarYear, currentCalendarMonth, 0).getDate();
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // 1. Fill previous month tail days
+    for (let i = firstDay - 1; i >= 0; i--) {
+        const dayNum = prevMonthDays - i;
+        const cell = document.createElement("div");
+        cell.className = "calendar-day-cell other-month";
+        cell.innerHTML = `<div class="day-number-row"><span class="day-number">${dayNum}</span></div>`;
+        gridContainer.appendChild(cell);
+    }
+
+    // 2. Fill current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+        const monthStr = String(currentCalendarMonth + 1).padStart(2, '0');
+        const dayStr = String(d).padStart(2, '0');
+        const fullDateStr = `${currentCalendarYear}-${monthStr}-${dayStr}`;
+
+        const cell = document.createElement("div");
+        cell.className = "calendar-day-cell";
+        if (fullDateStr === todayStr) cell.classList.add("today");
+        if (fullDateStr === selectedCalendarDateStr) cell.classList.add("selected");
+
+        cell.addEventListener("click", () => {
+            document.querySelectorAll(".calendar-day-cell").forEach(c => c.classList.remove("selected"));
+            cell.classList.add("selected");
+            selectedCalendarDateStr = fullDateStr;
+            renderSelectedDateDetails(fullDateStr, places);
+        });
+
+        // Match places with date
+        const datePlaces = places.filter(p => {
+            const pDate = p.createdAt || p.date;
+            const ms = parseAnyDate(pDate);
+            if (ms <= 0) return false;
+            const iso = new Date(ms).toISOString().split("T")[0];
+            return iso === fullDateStr;
+        });
+
+        let badgesHtml = "";
+        if (datePlaces.length > 0) {
+            badgesHtml += `<div class="calendar-badges-list">`;
+            datePlaces.slice(0, 3).forEach(dp => {
+                const isVis = dp.isVisited === 1;
+                const icon = isVis ? "🌸" : "💌";
+                const badgeClass = isVis ? "visited" : "wishlist";
+                badgesHtml += `
+                    <div class="cal-badge ${badgeClass}" onclick="event.stopPropagation(); openEditPlaceModal(${dp.id})" title="${escapeHtml(dp.name)}">
+                        <span>${icon} ${escapeHtml(dp.name)}</span>
+                    </div>
+                `;
+            });
+            if (datePlaces.length > 3) {
+                badgesHtml += `<div style="font-size:0.65rem; color:var(--color-primary); font-weight:700;">+${datePlaces.length - 3}개 더보기</div>`;
+            }
+            badgesHtml += `</div>`;
+        }
+
+        cell.innerHTML = `
+            <div class="day-number-row">
+                <span class="day-number">${d}</span>
+                ${datePlaces.length > 0 ? `<span style="font-size:0.65rem; color:var(--color-primary); font-weight:700;">♥ ${datePlaces.length}</span>` : ''}
+            </div>
+            ${badgesHtml}
+        `;
+
+        gridContainer.appendChild(cell);
+    }
+
+    // 3. Fill next month head days
+    const totalCells = gridContainer.children.length;
+    const remainingCells = (totalCells <= 35 ? 35 : 42) - totalCells;
+    for (let i = 1; i <= remainingCells; i++) {
+        const cell = document.createElement("div");
+        cell.className = "calendar-day-cell other-month";
+        cell.innerHTML = `<div class="day-number-row"><span class="day-number">${i}</span></div>`;
+        gridContainer.appendChild(cell);
+    }
+
+    renderSelectedDateDetails(selectedCalendarDateStr, places);
+}
+
+function renderSelectedDateDetails(dateStr, places) {
+    const titleEl = document.getElementById("selected-date-title");
+    const itemsEl = document.getElementById("selected-date-items");
+    if (!titleEl || !itemsEl) return;
+
+    const dateObj = new Date(dateStr);
+    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록` : `${dateStr} 데이트 기록`;
+    titleEl.textContent = formattedTitle;
+
+    const datePlaces = places.filter(p => {
+        const pDate = p.createdAt || p.date;
+        const ms = parseAnyDate(pDate);
+        if (ms <= 0) return false;
+        const iso = new Date(ms).toISOString().split("T")[0];
+        return iso === dateStr;
+    });
+
+    if (datePlaces.length === 0) {
+        itemsEl.innerHTML = `
+            <div style="text-align:center; padding:1.2rem; color:var(--color-text-med); font-size:0.85rem;">
+                이 날짜에는 아직 등록된 데이트 일정이나 다녀온 기록이 없습니다. 🌸
+            </div>
+        `;
+        return;
+    }
+
+    itemsEl.innerHTML = "";
+    datePlaces.forEach(p => {
+        const isVis = p.isVisited === 1;
+        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">🌸 다녀온 곳</span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(162,155,254,0.15); color:#6C5CE7; font-weight:700;">💌 위시리스트</span>`;
+
+        const div = document.createElement("div");
+        div.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.65rem 0.85rem;
+            background: rgba(255, 101, 132, 0.04);
+            border: 1px solid rgba(255, 101, 132, 0.12);
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+            gap: 8px;
+        `;
+        div.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${statusBadge}
+                <strong style="font-size:0.92rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
+                <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${p.commentA || p.commentB ? `<span style="font-size:0.75rem; color:var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</span>` : ''}
+                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
+            </div>
+        `;
+        itemsEl.appendChild(div);
+    });
+}
+
+async function renderGallery() {
+    const container = document.getElementById("gallery-photos-grid");
+    const countEl = document.getElementById("gallery-photo-count");
+    if (!container) return;
+
+    container.innerHTML = "";
+    const places = await db.places.where("isVisited").equals(1).toArray();
+
+    const allPhotoItems = [];
+    places.forEach(p => {
+        const photos = p.photos || (p.photo ? [p.photo] : []);
+        photos.forEach(imgSrc => {
+            allPhotoItems.push({
+                imgSrc: imgSrc,
+                placeId: p.id,
+                placeName: p.name,
+                createdAt: p.createdAt,
+                rating: p.rating || 5,
+                commentA: p.commentA,
+                commentB: p.commentB,
+                category: p.category
+            });
+        });
+    });
+
+    if (countEl) {
+        countEl.textContent = `함께 다녀온 곳에 기록된 총 ${allPhotoItems.length}장의 소중한 커플 추억 사진들 💖`;
+    }
+
+    if (allPhotoItems.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:var(--color-text-med);">
+                <i data-lucide="camera" style="width:48px; height:48px; opacity:0.3; margin-bottom:0.8rem;"></i>
+                <p style="font-size:0.95rem;">아직 등록된 추억 사진이 없습니다.<br>'함께 다녀온 곳'의 장소 기록에 예쁜 추억 사진을 업로드해 보세요! 🌸</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    allPhotoItems.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "gallery-card";
+
+        const dateObj = new Date(item.createdAt);
+        const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+
+        card.innerHTML = `
+            <div class="gallery-img-wrapper" onclick="openLightbox('${item.imgSrc}')">
+                <img src="${item.imgSrc}" alt="${escapeHtml(item.placeName)}">
+                <div class="gallery-img-overlay">
+                    <span>🔍 크게 보기</span>
+                </div>
+            </div>
+            <div class="gallery-card-body">
+                <h5 class="gallery-place-title">${escapeHtml(item.placeName)}</h5>
+                <div class="gallery-place-meta">
+                    <span>${dateStr}</span>
+                    <span style="color:var(--color-primary); font-weight:700;">${item.rating}점 ★</span>
+                </div>
+                ${item.commentA || item.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(item.commentA || item.commentB)}"</div>` : ''}
+                <div class="gallery-action-bar">
+                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${item.placeId})">
+                        ✏️ 사진 수정 / 추가
+                    </button>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    lucide.createIcons();
+}
