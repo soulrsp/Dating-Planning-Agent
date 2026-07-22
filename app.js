@@ -382,15 +382,43 @@ function switchTab(tabId) {
         renderCalendar();
     } else if (tabId === "gallery") {
         renderGallery();
+    } else if (tabId === "settings") {
+        const gemKeyEl = document.getElementById("settings-gemini-key");
+        if (gemKeyEl) gemKeyEl.value = geminiApiKey;
+        const navIdEl = document.getElementById("settings-naver-client-id");
+        if (navIdEl) navIdEl.value = naverClientId;
+        const pAEl = document.getElementById("settings-partner-a-name");
+        if (pAEl) pAEl.value = partnerAName;
+        const pBEl = document.getElementById("settings-partner-b-name");
+        if (pBEl) pBEl.value = partnerBName;
+        const roomEl = document.getElementById("settings-sync-room-id");
+        if (roomEl) roomEl.value = syncRoomId;
+        const fbUrlEl = document.getElementById("settings-firebase-url");
+        if (fbUrlEl) fbUrlEl.value = customFirebaseUrl;
     }
 }
 
 function updatePartnerNamesUI() {
-    document.getElementById("opt-partner-a").textContent = `${partnerAName}(A)`;
-    document.getElementById("opt-partner-b").textContent = `${partnerBName}(B)`;
-    document.getElementById("opt-partner-a").value = "A";
-    document.getElementById("opt-partner-b").value = "B";
+    const optA = document.getElementById("opt-partner-a");
+    const optB = document.getElementById("opt-partner-b");
+    if (optA) { optA.textContent = `${partnerAName}(A)`; optA.value = "A"; }
+    if (optB) { optB.textContent = `${partnerBName}(B)`; optB.value = "B"; }
     
+    const editOptA = document.getElementById("edit-opt-partner-a");
+    const editOptB = document.getElementById("edit-opt-partner-b");
+    if (editOptA) { editOptA.textContent = partnerAName; }
+    if (editOptB) { editOptB.textContent = partnerBName; }
+
+    const lblA = document.getElementById("visit-lbl-comment-a");
+    const lblB = document.getElementById("visit-lbl-comment-b");
+    if (lblA) lblA.textContent = partnerAName;
+    if (lblB) lblB.textContent = partnerBName;
+
+    const editLblA = document.getElementById("edit-lbl-comment-a");
+    const editLblB = document.getElementById("edit-lbl-comment-b");
+    if (editLblA) editLblA.textContent = partnerAName;
+    if (editLblB) editLblB.textContent = partnerBName;
+
     const nameAEl = document.getElementById("profile-name-a");
     const nameBEl = document.getElementById("profile-name-b");
     if (nameAEl) nameAEl.textContent = partnerAName;
@@ -2861,7 +2889,7 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
-        switchTab("places");
+        switchTab("wishlist");
     } catch(err) {
         showToast("코스 저장 실패: " + err.message, "danger");
     }
