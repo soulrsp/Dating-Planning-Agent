@@ -142,8 +142,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     const previewBox = document.getElementById("visit-photo-preview");
     if (previewBox) {
         previewBox.addEventListener("click", () => {
-            document.getElementById("visit-photo").click();
+            const fileInput = document.getElementById("visit-photo");
+            if (fileInput) fileInput.click();
         });
+    }
+
+    const editPreviewBox = document.getElementById("edit-place-photo-preview");
+    if (editPreviewBox) {
+        editPreviewBox.addEventListener("click", () => {
+            const editFileInput = document.getElementById("edit-place-photo");
+            if (editFileInput) editFileInput.click();
+        });
+    }
+
+    const editPhotoInput = document.getElementById("edit-place-photo");
+    if (editPhotoInput) {
+        editPhotoInput.addEventListener("change", handleEditPhotoUploadPreview);
     }
 
     // Sync Banner Click Listener (Join sync room / Copy sharing URL)
@@ -1506,7 +1520,9 @@ function closeAddPlaceModal() {
 async function handleAddPlaceSubmit(e) {
     e.preventDefault();
     const name = document.getElementById("add-place-name").value.trim();
-    const category = document.getElementById("add-place-category").value;
+    const catSelect = document.getElementById("add-place-category").value;
+    const catCustom = document.getElementById("add-place-custom-category").value.trim();
+    const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
     const url = document.getElementById("add-place-url").value.trim();
     let lat = parseFloat(document.getElementById("add-place-lat").value);
     let lng = parseFloat(document.getElementById("add-place-lng").value);
@@ -1548,13 +1564,23 @@ async function handleAddPlaceSubmit(e) {
     }
 }
 
-function openVisitModal(placeId, placeName) {
+async function openVisitModal(placeId, placeName) {
+    const place = await db.places.get(placeId);
     document.getElementById("visit-place-id").value = placeId;
     document.getElementById("visit-place-name").textContent = placeName;
     
-    // Customize select option names based on settings
+    // Customize select option & label names based on settings
     document.getElementById("opt-partner-a").textContent = partnerAName;
     document.getElementById("opt-partner-b").textContent = partnerBName;
+    const lblA = document.getElementById("visit-lbl-comment-a");
+    if (lblA) lblA.textContent = partnerAName;
+    const lblB = document.getElementById("visit-lbl-comment-b");
+    if (lblB) lblB.textContent = partnerBName;
+
+    const commA = document.getElementById("visit-comment-a");
+    if (commA) commA.value = place ? (place.commentA || "") : "";
+    const commB = document.getElementById("visit-comment-b");
+    if (commB) commB.value = place ? (place.commentB || "") : "";
     
     document.getElementById("modal-visit-log").classList.add("active");
 }
@@ -1572,6 +1598,25 @@ function handlePhotoUploadPreview(e) {
         previewContainer.innerHTML = `<span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>`;
         return;
     }
+    
+    previewContainer.innerHTML = "";
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = document.createElement("img");
+            img.src = event.target.result;
+            img.alt = "Preview";
+            previewContainer.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function handleEditPhotoUploadPreview(e) {
+    const files = e.target.files;
+    const previewContainer = document.getElementById("edit-place-photo-preview");
+    if (!previewContainer) return;
+    if (!files || files.length === 0) return;
     
     previewContainer.innerHTML = "";
     Array.from(files).forEach(file => {
@@ -1617,9 +1662,13 @@ async function handleVisitLogSubmit(e) {
     const id = parseInt(document.getElementById("visit-place-id").value);
     const ratingEl = document.querySelector('input[name="rating"]:checked');
     const rating = ratingEl ? parseInt(ratingEl.value) : 5;
-    const review = document.getElementById("visit-review").value.trim();
     const expense = parseInt(document.getElementById("visit-expense").value) || 0;
     const payer = document.getElementById("visit-payer").value;
+
+    const commAEl = document.getElementById("visit-comment-a");
+    const commBEl = document.getElementById("visit-comment-b");
+    const commentA = commAEl ? commAEl.value.trim() : "";
+    const commentB = commBEl ? commBEl.value.trim() : "";
 
     const photoImgs = document.querySelectorAll("#visit-photo-preview img");
     const photosBase64 = [];
@@ -1632,18 +1681,24 @@ async function handleVisitLogSubmit(e) {
             }
         }
 
-        await db.places.update(id, {
+        const updateObj = {
             isVisited: 1,
             rating: rating,
-            review: review,
             expense: expense,
             payer: payer,
             peopleCount: 2,
-            photo: photosBase64[0] || "",
-            photos: photosBase64
-        });
+            commentA: commentA,
+            commentB: commentB
+        };
+
+        if (photosBase64.length > 0) {
+            updateObj.photo = photosBase64[0];
+            updateObj.photos = photosBase64;
+        }
+
+        await db.places.update(id, updateObj);
         
-        showToast("데이트 방문 후기가 안전하게 저장되었습니다 💖", "success");
+        showToast("방문 기록 및 파트너 코멘트가 저장되었습니다 💖", "success");
         closeVisitModal();
         
         // Proactively upload photos to standalone Firebase DB path if sync active
@@ -1667,7 +1722,24 @@ async function openEditPlaceModal(id) {
 
     document.getElementById("edit-place-id").value = place.id;
     document.getElementById("edit-place-name").value = place.name;
-    document.getElementById("edit-place-category").value = place.category || "Restaurant";
+    
+    const categorySelect = document.getElementById("edit-place-category");
+    const customInput = document.getElementById("edit-place-custom-category");
+    const standardCategories = ["Restaurant", "Cafe", "Bar", "Park", "Museum", "Other"];
+    
+    if (standardCategories.includes(place.category)) {
+        if (categorySelect) categorySelect.value = place.category;
+        if (customInput) {
+            customInput.style.display = "none";
+            customInput.value = "";
+        }
+    } else {
+        if (categorySelect) categorySelect.value = "custom";
+        if (customInput) {
+            customInput.style.display = "block";
+            customInput.value = place.category || "";
+        }
+    }
     
     // Format date for <input type="date"> (YYYY-MM-DD)
     const dateObj = new Date(place.createdAt);
@@ -1698,10 +1770,25 @@ async function openEditPlaceModal(id) {
         const ratingVal = place.rating || 5;
         const ratingRadio = document.querySelector(`input[name="edit-rating"][value="${ratingVal}"]`);
         if (ratingRadio) ratingRadio.checked = true;
-        const reviewEl = document.getElementById("edit-place-review");
-        if (reviewEl) reviewEl.value = place.review || "";
         document.getElementById("edit-place-expense").value = place.expense || 0;
         document.getElementById("edit-place-payer").value = place.payer || "A";
+
+        // Display existing photos for editing
+        const photoPreview = document.getElementById("edit-place-photo-preview");
+        if (photoPreview) {
+            const existingPhotos = place.photos || (place.photo ? [place.photo] : []);
+            if (existingPhotos.length > 0) {
+                photoPreview.innerHTML = "";
+                existingPhotos.forEach(pSrc => {
+                    const img = document.createElement("img");
+                    img.src = pSrc;
+                    img.alt = "Memory";
+                    photoPreview.appendChild(img);
+                });
+            } else {
+                photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
+            }
+        }
     } else {
         if (visitedFields) visitedFields.style.display = "none";
     }
@@ -1715,6 +1802,10 @@ function closeEditPlaceModal() {
     if (modal) modal.classList.remove("active");
     const form = document.getElementById("form-edit-place");
     if (form) form.reset();
+    const photoPreview = document.getElementById("edit-place-photo-preview");
+    if (photoPreview) {
+        photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
+    }
 }
 window.closeEditPlaceModal = closeEditPlaceModal;
 
@@ -1773,7 +1864,11 @@ async function handleEditPlaceSubmit(e) {
     e.preventDefault();
     const id = parseInt(document.getElementById("edit-place-id").value);
     const name = document.getElementById("edit-place-name").value.trim();
-    const category = document.getElementById("edit-place-category").value;
+    
+    const catSelect = document.getElementById("edit-place-category").value;
+    const catCustom = document.getElementById("edit-place-custom-category").value.trim();
+    const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
+
     const dateVal = document.getElementById("edit-place-date").value;
     const addressVal = document.getElementById("edit-place-address").value.trim();
     
@@ -1811,15 +1906,28 @@ async function handleEditPlaceSubmit(e) {
     if (place.isVisited === 1) {
         const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
         const rating = ratingEl ? parseInt(ratingEl.value) : 5;
-        const reviewEl = document.getElementById("edit-place-review");
-        const review = reviewEl ? reviewEl.value.trim() : (place.review || "");
         const expense = parseInt(document.getElementById("edit-place-expense").value) || 0;
         const payer = document.getElementById("edit-place-payer").value;
 
         updatePayload.rating = rating;
-        updatePayload.review = review;
         updatePayload.expense = expense;
         updatePayload.payer = payer;
+
+        const editPhotoImgs = document.querySelectorAll("#edit-place-photo-preview img");
+        if (editPhotoImgs.length > 0) {
+            const photosBase64 = [];
+            for (let i = 0; i < editPhotoImgs.length; i++) {
+                const compressed = await compressBase64Image(editPhotoImgs[i].src);
+                if (compressed) photosBase64.push(compressed);
+            }
+            if (photosBase64.length > 0) {
+                updatePayload.photo = photosBase64[0];
+                updatePayload.photos = photosBase64;
+                if (syncRoomId) {
+                    await uploadPhotoToCloud(id, photosBase64);
+                }
+            }
+        }
     }
 
     try {
@@ -2063,7 +2171,7 @@ async function renderPlacesList() {
                         <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
+                        <span class="place-category-badge badge-${(place.category || 'other').toLowerCase()}">${place.category}</span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
@@ -2077,17 +2185,6 @@ async function renderPlacesList() {
                         </div>
                     </div>
                 `;
-                
-                // Render photos grid
-                if (place.photos && place.photos.length > 0) {
-                    cardContent += `<div class="place-card-photos-grid">`;
-                    place.photos.forEach(photo => {
-                        cardContent += `<img class="place-card-photo" src="${photo}" onclick="openLightbox(this.src)" alt="${place.name}">`;
-                    });
-                    cardContent += `</div>`;
-                } else if (place.photo) {
-                    cardContent += `<img class="place-card-photo" src="${place.photo}" onclick="openLightbox(this.src)" alt="${place.name}">`;
-                }
 
                 let stars = '';
                 for(let i=1; i<=5; i++) {
@@ -2110,6 +2207,25 @@ async function renderPlacesList() {
                         <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
                     </div>
                 `;
+
+                const photoList = place.photos || (place.photo ? [place.photo] : []);
+                if (photoList.length > 0) {
+                    cardContent += `
+                        <div class="card-photos-section" style="margin-top:0.5rem; padding-top:0.4rem; border-top:1px dashed rgba(255,112,150,0.15);">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <button type="button" class="btn-toggle-card-photos" onclick="toggleCardPhotos(${place.id})" style="font-size:0.72rem; padding:0.2rem 0.55rem; border-radius:10px; background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--color-primary); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                                    <i data-lucide="image" style="width:13px; height:13px;"></i>
+                                    <span id="toggle-photo-text-${place.id}">추억 사진 (${photoList.length}장) 숨기기 🔽</span>
+                                </button>
+                            </div>
+                            <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
+                                ${photoList.map(pSrc => `
+                                    <img src="${pSrc}" alt="추억 사진" onclick="openLightbox('${pSrc}')" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
                 
                 card.innerHTML = cardContent;
                 visitedContainer.appendChild(card);
@@ -3030,3 +3146,30 @@ async function cleanupLegacyComments() {
         console.error("Cleanup legacy comments error:", e);
     }
 }
+
+window.toggleCustomCategoryInput = function(type) {
+    const selectEl = document.getElementById(`${type}-place-category`);
+    const customInput = document.getElementById(`${type}-place-custom-category`);
+    if (selectEl && customInput) {
+        if (selectEl.value === "custom") {
+            customInput.style.display = "block";
+            customInput.focus();
+        } else {
+            customInput.style.display = "none";
+        }
+    }
+};
+
+window.toggleCardPhotos = function(placeId) {
+    const container = document.getElementById(`card-photos-container-${placeId}`);
+    const textEl = document.getElementById(`toggle-photo-text-${placeId}`);
+    if (!container) return;
+    
+    if (container.style.display === "none") {
+        container.style.display = "flex";
+        if (textEl) textEl.textContent = textEl.textContent.replace("보기 🔼", "숨기기 🔽");
+    } else {
+        container.style.display = "none";
+        if (textEl) textEl.textContent = textEl.textContent.replace("숨기기 🔽", "보기 🔼");
+    }
+};
