@@ -1988,16 +1988,25 @@ body {
     }
 
     /* Mobile Calendar Responsive Adjustments */
+    .calendar-card {
+        padding: 0.75rem !important;
+        overflow: visible !important;
+    }
+
     .calendar-days-grid {
         grid-template-columns: repeat(7, 1fr) !important;
         gap: 3px !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
 
     .calendar-day-cell {
-        min-height: 58px !important;
-        padding: 0.2rem 0.15rem !important;
+        min-height: 48px !important;
+        height: auto !important;
+        padding: 0.18rem 0.1rem !important;
         border-radius: 8px !important;
         width: 100% !important;
         box-sizing: border-box !important;
