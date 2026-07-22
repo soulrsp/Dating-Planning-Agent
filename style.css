@@ -2368,12 +2368,15 @@ body {
     padding: 6px;
 }
 
-#gallery-slider-main-img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    border-radius: 8px;
-    transition: transform 0.25s ease;
+#gallery-slider-main-img,
+#memory-lightbox-main-img,
+#lightbox-img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    border-radius: 8px !important;
+    transition: transform 0.25s ease !important;
+    margin: 0 auto !important;
 }
 
 .slider-arrow-btn {
