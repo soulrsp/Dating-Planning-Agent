@@ -1988,13 +1988,17 @@ body {
     }
 
     /* Mobile Calendar Responsive Adjustments */
+    #tab-calendar,
     .calendar-card {
         padding: 0.75rem !important;
+        height: auto !important;
+        max-height: none !important;
         overflow: visible !important;
     }
 
     .calendar-days-grid {
         grid-template-columns: repeat(7, 1fr) !important;
+        grid-auto-rows: minmax(46px, auto) !important;
         gap: 3px !important;
         width: 100% !important;
         box-sizing: border-box !important;
@@ -2097,8 +2101,14 @@ body {
 }
 
 .calendar-day-cell.other-month {
-    opacity: 0.35;
-    background: rgba(240, 240, 240, 0.4);
+    opacity: 0.55;
+    background: rgba(248, 249, 250, 0.5) !important;
+    border: 1px dashed rgba(200, 200, 200, 0.3) !important;
+}
+
+.calendar-day-cell.other-month .day-number {
+    color: #A0A5B5 !important;
+    font-weight: 500 !important;
 }
 
 .calendar-day-cell.today {
