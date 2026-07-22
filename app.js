@@ -3561,12 +3561,12 @@ async function renderGallery() {
                     <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar" style="display:flex; gap:6px; margin-top:4px;">
-                    <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
+                <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
                         ✏️ 사진 수정 / 추가
                     </button>
-                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.5rem; height:28px; border-color:var(--color-secondary); color:var(--color-secondary);" onclick="downloadPlacePhotosZip(${p.id})">
-                        📥 다운로드 (${photoCount}장)
+                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06); justify-content:center;" onclick="downloadPlacePhotosZip(${p.id})">
+                        📥 전체 사진 다운로드 (${photoCount}장)
                     </button>
                 </div>
             </div>
@@ -3846,6 +3846,14 @@ window.saveMemoryGalleryPhotos = async function() {
     const fileInput = document.getElementById("memory-gallery-files");
     const files = fileInput ? fileInput.files : null;
     
+    const defaultImages = [
+        "images/couple1.jpg",
+        "images/couple2.jpg",
+        "images/couple3.jpg",
+        "images/couple4.jpg",
+        "images/couple5.jpg"
+    ];
+    
     if (files && files.length > 0) {
         const newPhotos = [];
         for (let i = 0; i < files.length; i++) {
@@ -3858,10 +3866,11 @@ window.saveMemoryGalleryPhotos = async function() {
             if (compressed) newPhotos.push(compressed);
         }
         if (newPhotos.length > 0) {
-            customMemoryPhotos = newPhotos;
+            const baseList = (customMemoryPhotos && customMemoryPhotos.length > 0) ? customMemoryPhotos : defaultImages;
+            customMemoryPhotos = [...baseList, ...newPhotos];
             localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
             renderLovelyMemoryGallery();
-            showToast(`우리의 러블리 메모리 사진 ${newPhotos.length}장이 메인 화면에 저장되었습니다! 💖`, "success");
+            showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
             closeEditMemoryGalleryModal();
             return;
         }
@@ -3869,6 +3878,47 @@ window.saveMemoryGalleryPhotos = async function() {
     
     showToast("새로 선택된 사진이 없습니다.", "info");
     closeEditMemoryGalleryModal();
+};
+
+window.downloadAllMemoryGalleryPhotos = async function() {
+    const defaultImages = [
+        "images/couple1.jpg",
+        "images/couple2.jpg",
+        "images/couple3.jpg",
+        "images/couple4.jpg",
+        "images/couple5.jpg"
+    ];
+    const photosToDownload = (customMemoryPhotos && customMemoryPhotos.length > 0) ? customMemoryPhotos : defaultImages;
+    if (photosToDownload.length === 0) {
+        showToast("다운로드할 메모리 사진이 없습니다.", "warning");
+        return;
+    }
+
+    try {
+        showToast(`러블리 메모리 대표 사진 ${photosToDownload.length}장을 압축 다운로드합니다... 📦`, "info");
+        const zip = new JSZip();
+        for (let i = 0; i < photosToDownload.length; i++) {
+            const pSrc = photosToDownload[i];
+            if (pSrc.startsWith("data:")) {
+                const base64Data = pSrc.split(',')[1];
+                zip.file(`러블리_메모리_${i + 1}.jpg`, base64Data, { base64: true });
+            } else {
+                const blob = await fetch(pSrc).then(r => r.blob());
+                zip.file(`러블리_메모리_${i + 1}.jpg`, blob);
+            }
+        }
+        const content = await zip.generateAsync({ type: "blob" });
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.href = URL.createObjectURL(content);
+        downloadAnchor.download = `AURA_러블리_메모리_${photosToDownload.length}장.zip`;
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        document.body.removeChild(downloadAnchor);
+        showToast("러블리 메모리 전체 사진 다운로드 완료! 💖", "success");
+    } catch(e) {
+        photosToDownload.forEach((pSrc, idx) => downloadBase64Image(pSrc, `러블리_메모리_${idx+1}.jpg`));
+        showToast("다운로드가 시작되었습니다! 📥", "success");
+    }
 };
 
 // ==========================================
