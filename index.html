@@ -241,8 +241,13 @@
 
                             <!-- Couple Memory Gallery Widget -->
                             <div class="memory-gallery-widget">
-                                <h4 class="sub-heading"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
-                                <div class="memory-grid">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                                    <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
+                                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.6rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openEditMemoryGalleryModal()">
+                                        ✏️ 메모리 수정/추가
+                                    </button>
+                                </div>
+                                <div class="memory-grid" id="dashboard-memory-grid">
                                     <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
                                     <div class="memory-item"><img src="images/couple2.jpg" alt="Sunny Day" class="gallery-img"></div>
                                     <div class="memory-item"><img src="images/couple3.jpg" alt="Night Street" class="gallery-img"></div>
@@ -735,9 +740,14 @@
     <!-- Modal: Gallery Multi-Photo Lightbox Slider -->
     <div class="modal-overlay" id="modal-gallery-slider">
         <div class="gallery-slider-card">
-            <button class="modal-close" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
+                <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
+                    <i data-lucide="download" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 현재 사진 다운로드 📥
+                </button>
+                <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
+            </div>
 
-            <div class="gallery-slider-main">
+            <div class="gallery-slider-main" style="margin-top:20px;">
                 <button class="slider-arrow-btn prev" onclick="navigateGallerySlider(-1)"><i data-lucide="chevron-left"></i></button>
                 <div class="slider-img-container">
                     <img id="gallery-slider-main-img" src="" alt="Main Memory Photo">
@@ -753,6 +763,48 @@
 
             <div class="gallery-slider-thumbs" id="gallery-slider-thumbs">
                 <!-- Thumbnails inserted dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Calendar Date Details Popup -->
+    <div class="modal-overlay" id="modal-date-details">
+        <div class="modal-card" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 id="modal-date-details-title">🗓️ 선택한 날짜 기록</h3>
+                <button class="modal-close" onclick="closeDateDetailsModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body" id="modal-date-details-body" style="max-height: 60vh; overflow-y: auto;">
+                <!-- Dynamically populated list of places for selected date -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" style="width:100%; justify-content:center;" onclick="closeDateDetailsModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Lovely Memory Gallery -->
+    <div class="modal-overlay" id="modal-edit-memory-gallery">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3>📸 우리의 러블리 메모리 사진 변경/추가</h3>
+                <button class="modal-close" onclick="closeEditMemoryGalleryModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size:0.8rem; color:var(--color-text-med); margin-bottom:0.8rem; line-height:1.4;">
+                    메인 대시보드에 표시할 <strong>커플 대표 추억 사진 (4~6장)</strong>을 자유롭게 업로드하세요 💖
+                </div>
+                <div class="form-group">
+                    <label>새 추억 사진 선택 (여러 장 동시 선택 가능)</label>
+                    <input type="file" id="memory-gallery-files" accept="image/*" multiple style="display:none;">
+                    <div class="photo-preview-box" id="memory-gallery-preview-box" onclick="document.getElementById('memory-gallery-files').click()" style="min-height:70px; cursor:pointer;">
+                        <span>여기를 클릭해 대시보드 메인 사진을 추가/수정하세요 📸</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeEditMemoryGalleryModal()">취소</button>
+                <button class="btn btn-primary" onclick="saveMemoryGalleryPhotos()">저장하기 💖</button>
             </div>
         </div>
     </div>
