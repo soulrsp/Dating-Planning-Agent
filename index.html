@@ -503,7 +503,7 @@
         <div class="modal-card">
             <div class="modal-header">
                 <h3>✏️ 장소 및 데이트 기록 수정</h3>
-                <button class="modal-close" id="btn-close-edit-modal"><i data-lucide="x"></i></button>
+                <button class="modal-close" id="btn-close-edit-modal" onclick="closeEditPlaceModal()"><i data-lucide="x"></i></button>
             </div>
             <form class="modal-body" id="form-edit-place">
                 <input type="hidden" id="edit-place-id">
@@ -541,6 +541,18 @@
                     <input type="text" id="edit-place-address" placeholder="주소를 입력하세요 (예: 대전 유성구 봉산로36번길 34)">
                 </div>
 
+                <!-- Partner Comments (Wishlist & Visited) -->
+                <div class="form-group-row" style="margin-top:0.4rem;">
+                    <div class="form-group">
+                        <label for="edit-place-comment-a">💬 <span id="edit-lbl-comment-a">초코</span>의 한줄 코멘트</label>
+                        <input type="text" id="edit-place-comment-a" placeholder="예: 꼭 같이 가보고 싶은 핫플! 💕">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-place-comment-b">💬 <span id="edit-lbl-comment-b">딸기</span>의 한줄 코멘트</label>
+                        <input type="text" id="edit-place-comment-b" placeholder="예: 기대되는 데이트 코스! ✨">
+                    </div>
+                </div>
+
                 <div id="edit-visited-fields">
                     <div class="form-group">
                         <label>평점 *</label>
@@ -574,7 +586,7 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal">취소</button>
+                    <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()">취소</button>
                     <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
                 </div>
             </form>
