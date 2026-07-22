@@ -2450,11 +2450,21 @@ async function saveToCloud() {
     
     try {
         const places = await db.places.toArray();
-        const cleanPlaces = places.map(p => {
+        const seenNames = new Set();
+        const cleanPlaces = [];
+        places.forEach(p => {
             const copy = { ...p };
             delete copy.photo;
             delete copy.photos;
-            return copy;
+            sanitizePlaceObject(copy);
+            const cleanName = (copy.name || "").trim();
+            if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
+                const nameKey = cleanName.toLowerCase();
+                if (!seenNames.has(nameKey)) {
+                    seenNames.add(nameKey);
+                    cleanPlaces.push(copy);
+                }
+            }
         });
 
         // Save local DB to cloud room (including empty list when user clears/deletes places)
@@ -2551,6 +2561,8 @@ async function loadFromCloud() {
         }
 
         if (resData.timestamp && resData.timestamp > lastSyncedTimestamp) {
+            lastSyncedTimestamp = resData.timestamp;
+
             let fetchedPlaces = [];
             try {
                 fetchedPlaces = JSON.parse(resData.placesData);
@@ -2559,9 +2571,9 @@ async function loadFromCloud() {
             }
 
             if (Array.isArray(fetchedPlaces)) {
-                // Deep filter out any junk/duplicate places directly from fetched cloud data
+                // Filter out any junk/duplicate places directly from fetched cloud data
                 const seenCloudNames = new Set();
-                const cleanedFetchedPlaces = [];
+                const placesToApply = [];
 
                 fetchedPlaces.forEach(fp => {
                     sanitizePlaceObject(fp);
@@ -2570,16 +2582,10 @@ async function loadFromCloud() {
                         const nameKey = cleanName.toLowerCase();
                         if (!seenCloudNames.has(nameKey)) {
                             seenCloudNames.add(nameKey);
-                            cleanedFetchedPlaces.push(fp);
+                            placesToApply.push(fp);
                         }
                     }
                 });
-
-                let placesToApply = cleanedFetchedPlaces;
-                if (cleanedFetchedPlaces.length !== fetchedPlaces.length) {
-                    console.log("[Sync Engine] Purged junk/duplicate items from cloud data! Updating cloud...");
-                    setTimeout(() => triggerSyncUpload(), 100);
-                }
 
                 const localPlaces = await db.places.toArray();
 
@@ -2596,7 +2602,7 @@ async function loadFromCloud() {
                 const fetchedCompareStr = JSON.stringify(placesToApply);
 
                 if (localCompareStr !== fetchedCompareStr) {
-                    console.log("[Sync Engine] Updating local DB to match synced cloud state...");
+                    console.log("[Sync Engine] Local DB updated from cloud.");
                     await db.places.clear();
                     if (placesToApply.length > 0) {
                         await db.places.bulkAdd(placesToApply);
@@ -2607,7 +2613,6 @@ async function loadFromCloud() {
                     updateMapMarkers();
                 }
             }
-            lastSyncedTimestamp = resData.timestamp;
         }
     } catch (e) {
         console.error('Firebase load error:', e);
