@@ -1680,7 +1680,8 @@ async function openEditPlaceModal(id) {
         const ratingVal = place.rating || 5;
         const ratingRadio = document.querySelector(`input[name="edit-rating"][value="${ratingVal}"]`);
         if (ratingRadio) ratingRadio.checked = true;
-        document.getElementById("edit-place-review").value = place.review || "";
+        const reviewEl = document.getElementById("edit-place-review");
+        if (reviewEl) reviewEl.value = place.review || "";
         document.getElementById("edit-place-expense").value = place.expense || 0;
         document.getElementById("edit-place-payer").value = place.payer || "A";
     } else {
@@ -1792,7 +1793,8 @@ async function handleEditPlaceSubmit(e) {
     if (place.isVisited === 1) {
         const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
         const rating = ratingEl ? parseInt(ratingEl.value) : 5;
-        const review = document.getElementById("edit-place-review").value.trim();
+        const reviewEl = document.getElementById("edit-place-review");
+        const review = reviewEl ? reviewEl.value.trim() : (place.review || "");
         const expense = parseInt(document.getElementById("edit-place-expense").value) || 0;
         const payer = document.getElementById("edit-place-payer").value;
 
@@ -2074,7 +2076,9 @@ async function renderPlacesList() {
                     stars += `<i data-lucide="star" style="${i <= (place.rating || 5) ? '' : 'fill:none; color:var(--color-text-low);'}"></i>`;
                 }
                 
-                const payerName = place.payer === "B" ? partnerBName : partnerAName;
+                let payerName = partnerAName;
+                if (place.payer === "B") payerName = partnerBName;
+                else if (place.payer === "DUTCH") payerName = "반반 더치페이 🤝";
                 
                 cardContent += renderCommentsBlock(place);
 
@@ -2082,7 +2086,7 @@ async function renderPlacesList() {
                     <div class="place-card-stars" style="margin-top:0.4rem;">
                         ${stars}
                     </div>
-                    <p class="visited-review-snippet" style="margin-top:0.3rem; margin-bottom:0.5rem;">"${place.review || '즐거운 데이트 추억! 💖'}"</p>
+                    ${place.review ? `<p class="visited-review-snippet" style="margin-top:0.3rem; margin-bottom:0.5rem;">"${escapeHtml(place.review)}"</p>` : ''}
                     <div class="place-meta-item" style="font-size:0.78rem;">
                         <i data-lucide="coins"></i>
                         <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
@@ -2166,8 +2170,19 @@ async function updateDashboardStats() {
     
     // Dutch-Pay Settlement calculation
     const visitedPlaces = places.filter(p => p.isVisited === 1);
-    const paidByA = visitedPlaces.filter(p => p.payer === "A").reduce((acc, curr) => acc + (curr.expense || 0), 0);
-    const paidByB = visitedPlaces.filter(p => p.payer === "B").reduce((acc, curr) => acc + (curr.expense || 0), 0);
+    let paidByA = 0;
+    let paidByB = 0;
+    visitedPlaces.forEach(p => {
+        const exp = p.expense || 0;
+        if (p.payer === "B") {
+            paidByB += exp;
+        } else if (p.payer === "DUTCH") {
+            paidByA += exp / 2;
+            paidByB += exp / 2;
+        } else {
+            paidByA += exp;
+        }
+    });
     
     document.getElementById("dutchpay-paid-a").textContent = formatCurrency(paidByA);
     document.getElementById("dutchpay-paid-b").textContent = formatCurrency(paidByB);
