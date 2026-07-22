@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - 러블리 AI 데이트 플래너</title>
     
+    <!-- PWA & Mobile Web Meta Tags -->
+    <meta name="theme-color" content="#FF6584">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/couple3.jpg">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +42,21 @@
     <div class="bg-glow bg-glow-3"></div>
 
     <div class="app-container">
+        <!-- Mobile Top Header Bar (Visible on smartphone screens) -->
+        <div class="mobile-top-bar">
+            <div class="mobile-brand">
+                <i data-lucide="heart" class="brand-logo text-primary"></i>
+                <span class="brand-name">AURA</span>
+            </div>
+            <div class="mobile-couple-names" id="mobile-couple-names" title="클릭하여 이름 수정 ✏️">
+                <span id="mobile-name-a">초코</span> 💕 <span id="mobile-name-b">딸기</span>
+            </div>
+            <div class="mobile-sync-badge" onclick="document.getElementById('sync-status-banner').click()" title="실시간 동기화 상태">
+                <span class="sync-pulse" id="mobile-sync-pulse"></span>
+                <span id="mobile-sync-text">동기화 🔗</span>
+            </div>
+        </div>
+
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="brand">
@@ -230,7 +252,6 @@
             <section id="tab-wishlist" class="tab-pane">
                 <div class="places-container">
                     <div class="filter-bar">
-                        <h2 class="section-title">데이트 위시리스트 🌸</h2>
                         <div class="search-box">
                             <i data-lucide="search"></i>
                             <input type="text" placeholder="장소명 또는 메모 검색..." id="wishlist-search-input">
@@ -246,7 +267,6 @@
             <section id="tab-visited" class="tab-pane">
                 <div class="places-container">
                     <div class="filter-bar">
-                        <h2 class="section-title">함께 다녀온 곳 💖</h2>
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                             <div class="search-box">
                                 <i data-lucide="search"></i>
@@ -598,7 +618,40 @@
         </div>
     </div>
 
+    <!-- Mobile Bottom Navigation Bar (Visible on smartphone screens <= 768px) -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item active" data-tab="dashboard">
+            <i data-lucide="layout-dashboard"></i>
+            <span>러브맵</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="wishlist">
+            <i data-lucide="heart-handshake"></i>
+            <span>위시리스트</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="visited">
+            <i data-lucide="smile"></i>
+            <span>다녀온곳</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="ai-planner">
+            <i data-lucide="sparkles"></i>
+            <span>AI플래너</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="settings">
+            <i data-lucide="settings"></i>
+            <span>설정</span>
+        </button>
+    </nav>
+
     <!-- App Logic Script -->
     <script src="app.js"></script>
+
+    <!-- Service Worker Registration for PWA Mobile App Support -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>
