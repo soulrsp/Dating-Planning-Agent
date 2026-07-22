@@ -24,8 +24,8 @@ let currentPlacesFilter = "wishlist";
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
-let partnerAName = localStorage.getItem("aura_partner_a_name") || "초코";
-let partnerBName = localStorage.getItem("aura_partner_b_name") || "딸기";
+let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
+let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
 let syncRoomId = localStorage.getItem("aura_sync_room_id") || "";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
@@ -423,6 +423,14 @@ function updatePartnerNamesUI() {
     const mobileB = document.getElementById("mobile-name-b");
     if (mobileA) mobileA.textContent = partnerAName;
     if (mobileB) mobileB.textContent = partnerBName;
+
+    const mobileCouple = document.getElementById("mobile-couple-names");
+    if (mobileCouple) mobileCouple.textContent = `${partnerAName} ♥ ${partnerBName}`;
+
+    const setLblA = document.getElementById("settle-label-a");
+    const setLblB = document.getElementById("settle-label-b");
+    if (setLblA) setLblA.textContent = partnerAName;
+    if (setLblB) setLblB.textContent = partnerBName;
 }
 
 // 5. Dynamic Map Loader Engine
@@ -2955,8 +2963,8 @@ async function saveSettings() {
     const apiKeyVal = document.getElementById("settings-gemini-key").value.trim();
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
     const limitVal = parseInt(document.getElementById("settings-budget-limit").value) || 500000;
-    const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "초코";
-    const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "딸기";
+    const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
+    const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
     const syncRoomVal = document.getElementById("settings-sync-room-id").value.trim();
     const firebaseUrVal = document.getElementById("settings-firebase-url").value.trim();
     
