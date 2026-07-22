@@ -83,6 +83,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         initLeafletMap();
     }
 
+    // Cleanup legacy test comments if present
+    await cleanupLegacyComments();
+
     // Refresh UI Data
     await updateDashboardStats();
     await renderPlacesList();
@@ -92,8 +95,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Lucide Icons Initialization
     lucide.createIcons();
 
-    // Tab Navigation
-    document.querySelectorAll(".nav-menu .nav-item").forEach(button => {
+    // Tab Navigation (Desktop & Mobile Bottom Nav)
+    document.querySelectorAll(".nav-menu .nav-item, .mobile-bottom-nav .mobile-nav-item").forEach(button => {
         button.addEventListener("click", () => {
             const targetTab = button.getAttribute("data-tab");
             switchTab(targetTab);
@@ -319,11 +322,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // 4. Tab Navigation Logic
 function switchTab(tabId) {
-    document.querySelectorAll(".nav-menu .nav-item").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".nav-menu .nav-item, .mobile-bottom-nav .mobile-nav-item").forEach(el => el.classList.remove("active"));
     document.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active"));
     
-    const navBtn = document.querySelector(`.nav-menu .nav-item[data-tab="${tabId}"]`);
-    if (navBtn) navBtn.classList.add("active");
+    document.querySelectorAll(`.nav-menu .nav-item[data-tab="${tabId}"], .mobile-bottom-nav .mobile-nav-item[data-tab="${tabId}"]`).forEach(el => el.classList.add("active"));
     
     const tabPane = document.getElementById(`tab-${tabId}`);
     if (tabPane) tabPane.classList.add("active");
@@ -362,6 +364,11 @@ function updatePartnerNamesUI() {
     const nameBEl = document.getElementById("profile-name-b");
     if (nameAEl) nameAEl.textContent = partnerAName;
     if (nameBEl) nameBEl.textContent = partnerBName;
+
+    const mobileA = document.getElementById("mobile-name-a");
+    const mobileB = document.getElementById("mobile-name-b");
+    if (mobileA) mobileA.textContent = partnerAName;
+    if (mobileB) mobileB.textContent = partnerBName;
 }
 
 // 5. Dynamic Map Loader Engine
@@ -371,10 +378,16 @@ function loadNaverMapScript(clientId) {
         initLeafletMap();
         return;
     }
-    if (document.getElementById("naver-map-sdk-script")) return;
+
+    const existingScript = document.getElementById("naver-map-sdk-script");
+    if (existingScript) {
+        if (existingScript.getAttribute("data-client-id") === cleanId) return;
+        existingScript.remove();
+    }
     
     const script = document.createElement("script");
     script.id = "naver-map-sdk-script";
+    script.setAttribute("data-client-id", cleanId);
     script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(cleanId)}&ncpClientId=${encodeURIComponent(cleanId)}&submodules=geocoder`;
     script.onload = () => {
         console.log("[Map System] Naver Map SDK successfully injected.");
@@ -2228,10 +2241,14 @@ function startCloudSyncLoop() {
     const banner = document.getElementById("sync-status-banner");
     const statusText = document.getElementById("sync-status-text");
     const pulse = document.getElementById("sync-status-pulse");
+    const mobileStatusText = document.getElementById("mobile-sync-text");
+    const mobilePulse = document.getElementById("mobile-sync-pulse");
 
     if (!syncRoomId) {
         if (pulse) pulse.style.display = "none";
+        if (mobilePulse) mobilePulse.style.display = "none";
         if (statusText) statusText.innerHTML = `실시간 동기화 연결하기 🔗`;
+        if (mobileStatusText) mobileStatusText.textContent = "동기화 🔗";
         if (banner) {
             banner.style.background = "rgba(124, 92, 104, 0.1)";
             banner.style.color = "var(--color-text-med)";
@@ -2241,7 +2258,9 @@ function startCloudSyncLoop() {
     }
 
     if (pulse) pulse.style.display = "inline-block";
+    if (mobilePulse) mobilePulse.style.display = "inline-block";
     if (statusText) statusText.innerHTML = `연결 룸: <strong>${syncRoomId}</strong> 🔗`;
+    if (mobileStatusText) mobileStatusText.innerHTML = `룸:${syncRoomId} 🔗`;
     if (banner) {
         banner.style.background = "rgba(255, 101, 132, 0.1)";
         banner.style.color = "var(--color-primary)";
@@ -2278,6 +2297,10 @@ async function saveToCloud() {
         const now = Date.now();
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
+            partnerAName: partnerAName,
+            partnerBName: partnerBName,
+            naverClientId: naverClientId,
+            geminiApiKey: geminiApiKey,
             timestamp: now
         };
         
@@ -2325,6 +2348,42 @@ async function loadFromCloud() {
         }
 
         if (resData.timestamp && resData.timestamp > lastSyncedTimestamp) {
+            let namesChanged = false;
+            if (resData.partnerAName && resData.partnerAName !== partnerAName) {
+                partnerAName = resData.partnerAName;
+                localStorage.setItem("aura_partner_a_name", partnerAName);
+                const el = document.getElementById("settings-partner-a-name");
+                if (el) el.value = partnerAName;
+                namesChanged = true;
+            }
+            if (resData.partnerBName && resData.partnerBName !== partnerBName) {
+                partnerBName = resData.partnerBName;
+                localStorage.setItem("aura_partner_b_name", partnerBName);
+                const el = document.getElementById("settings-partner-b-name");
+                if (el) el.value = partnerBName;
+                namesChanged = true;
+            }
+            if (namesChanged) {
+                updatePartnerNamesUI();
+            }
+
+            if (resData.naverClientId && resData.naverClientId !== naverClientId) {
+                naverClientId = resData.naverClientId;
+                localStorage.setItem("aura_naver_client_id", naverClientId);
+                const el = document.getElementById("settings-naver-client-id");
+                if (el) el.value = naverClientId;
+                if (naverClientId && (!window.naver || !window.naver.maps)) {
+                    loadNaverMapScript(naverClientId);
+                }
+            }
+
+            if (resData.geminiApiKey && resData.geminiApiKey !== geminiApiKey) {
+                geminiApiKey = resData.geminiApiKey;
+                localStorage.setItem("aura_gemini_key", geminiApiKey);
+                const el = document.getElementById("settings-gemini-key");
+                if (el) el.value = geminiApiKey;
+            }
+
             let fetchedPlaces = [];
             try {
                 fetchedPlaces = JSON.parse(resData.placesData);
@@ -2668,8 +2727,9 @@ async function saveSettings() {
         initLeafletMap();
     }
     
-    // Restart Cloud Sync interval with new room configuration
+    // Restart Cloud Sync interval with new room configuration and push to cloud
     startCloudSyncLoop();
+    triggerSyncUpload();
 }
 
 async function exportData() {
@@ -2912,5 +2972,30 @@ async function copyShareLinkToClipboard(text) {
             console.error("Fallback copy failed", e);
         }
         document.body.removeChild(textarea);
+    }
+}
+
+async function cleanupLegacyComments() {
+    try {
+        const places = await db.places.toArray();
+        for (const p of places) {
+            let modified = false;
+            const filterText = (str) => {
+                if (!str) return str;
+                if (str.includes("위시리스트 충족") || str.includes("선아") || str.includes("바보")) {
+                    modified = true;
+                    return "";
+                }
+                return str;
+            };
+            const cleanReview = filterText(p.review);
+            const cleanA = filterText(p.commentA);
+            const cleanB = filterText(p.commentB);
+            if (modified) {
+                await db.places.update(p.id, { review: cleanReview, commentA: cleanA, commentB: cleanB });
+            }
+        }
+    } catch(e) {
+        console.error("Cleanup legacy comments error:", e);
     }
 }
