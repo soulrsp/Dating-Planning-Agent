@@ -47,7 +47,7 @@
             <div class="mobile-brand">
                 <i data-lucide="heart" class="brand-logo text-primary"></i>
                 <span class="brand-name">AURA</span>
-                <span class="mobile-couple-names" id="mobile-couple-names" style="font-size:0.75rem; font-weight:700; color:var(--color-primary); margin-left:6px; background:rgba(255,101,132,0.12); padding:2px 8px; border-radius:12px; border:1px solid rgba(255,101,132,0.25);">초코 ♥ 딸기</span>
+                <span class="mobile-couple-names" id="mobile-couple-names" style="font-size:0.75rem; font-weight:700; color:var(--color-primary); margin-left:6px; background:rgba(255,101,132,0.12); padding:2px 8px; border-radius:12px; border:1px solid rgba(255,101,132,0.25);">SH ♥ SA</span>
             </div>
             <div class="mobile-sync-badge" onclick="document.getElementById('sync-status-banner').click()" title="실시간 동기화 상태">
                 <span class="sync-pulse" id="mobile-sync-pulse"></span>
@@ -62,9 +62,9 @@
                     <img src="images/couple3.jpg" alt="Couple" class="profile-avatar" id="sidebar-profile-img">
                 </div>
                 <div class="profile-names" id="couple-names-editable" title="클릭하여 이름 수정 ✏️">
-                    <span class="partner-name-a" id="profile-name-a">초코</span>
+                    <span class="partner-name-a" id="profile-name-a">SH</span>
                     <i data-lucide="heart" class="heart-split"></i>
-                    <span class="partner-name-b" id="profile-name-b">딸기</span>
+                    <span class="partner-name-b" id="profile-name-b">SA</span>
                 </div>
                 <div class="love-days-count" id="love-days-text">행복한 연애 중 💕</div>
             </div>
@@ -215,11 +215,11 @@
                                 <h4 class="sub-heading"><i data-lucide="calculator" class="margin-right-sm"></i>커플 정산 결과</h4>
                                 <div class="settlement-detail-card" id="dutchpay-settlement-card">
                                     <div class="settlement-row">
-                                        <span>초코(A)가 결제한 총액:</span>
+                                        <span><span id="settle-label-a">SH</span>(A)가 결제한 총액:</span>
                                         <span id="dutchpay-paid-a">0원</span>
                                     </div>
                                     <div class="settlement-row">
-                                        <span>딸기(B)가 결제한 총액:</span>
+                                        <span><span id="settle-label-b">SA</span>(B)가 결제한 총액:</span>
                                         <span id="dutchpay-paid-b">0원</span>
                                     </div>
                                     <div class="settlement-result" id="dutchpay-result-text">
@@ -431,12 +431,12 @@
 
                         <div class="form-group-row">
                             <div class="form-group">
-                                <label for="settings-partner-a-name">파트너 A 이름 (초코)</label>
-                                <input type="text" id="settings-partner-a-name" placeholder="기본값: 초코" value="초코">
+                                <label for="settings-partner-a-name">파트너 A 이름 (SH)</label>
+                                <input type="text" id="settings-partner-a-name" placeholder="기본값: SH" value="SH">
                             </div>
                             <div class="form-group">
-                                <label for="settings-partner-b-name">파트너 B 이름 (딸기)</label>
-                                <input type="text" id="settings-partner-b-name" placeholder="기본값: 딸기" value="딸기">
+                                <label for="settings-partner-b-name">파트너 B 이름 (SA)</label>
+                                <input type="text" id="settings-partner-b-name" placeholder="기본값: SA" value="SA">
                             </div>
                         </div>
 
@@ -581,8 +581,8 @@
                     <div class="form-group">
                         <label for="visit-payer">누가 결제했나요? *</label>
                         <select id="visit-payer">
-                            <option value="A" id="opt-partner-a">초코(A)</option>
-                            <option value="B" id="opt-partner-b">딸기(B)</option>
+                            <option value="A" id="opt-partner-a">SH(A)</option>
+                            <option value="B" id="opt-partner-b">SA(B)</option>
                             <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
                         </select>
                     </div>
@@ -681,8 +681,8 @@
                         <div class="form-group">
                             <label for="edit-place-payer">누가 결제했나요?</label>
                             <select id="edit-place-payer">
-                                <option value="A" id="edit-opt-partner-a">초코(A)</option>
-                                <option value="B" id="edit-opt-partner-b">딸기(B)</option>
+                                <option value="A" id="edit-opt-partner-a">SH(A)</option>
+                                <option value="B" id="edit-opt-partner-b">SA(B)</option>
                                 <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
                             </select>
                         </div>
