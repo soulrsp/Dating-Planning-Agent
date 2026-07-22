@@ -2457,21 +2457,7 @@ async function saveToCloud() {
             return copy;
         });
 
-        // Protection: Prevent empty local DB from overwriting populated cloud room
-        if (cleanPlaces.length === 0) {
-            try {
-                const checkUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
-                const checkRes = await fetch(checkUrl);
-                if (checkRes.ok) {
-                    const checkData = await checkRes.json();
-                    if (checkData && checkData.placesData && checkData.placesData !== "[]") {
-                        console.log("[Sync Guard] Prevented empty local DB from overwriting populated cloud room!");
-                        return;
-                    }
-                }
-            } catch(e){}
-        }
-
+        // Save local DB to cloud room (including empty list when user clears/deletes places)
         const now = Date.now();
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
@@ -2573,14 +2559,33 @@ async function loadFromCloud() {
             }
 
             if (Array.isArray(fetchedPlaces)) {
-                // Sanitize all fetched places to strip any legacy test strings
-                fetchedPlaces.forEach(fp => sanitizePlaceObject(fp));
+                // Deep filter out any junk/duplicate places directly from fetched cloud data
+                const seenCloudNames = new Set();
+                const cleanedFetchedPlaces = [];
+
+                fetchedPlaces.forEach(fp => {
+                    sanitizePlaceObject(fp);
+                    const cleanName = (fp.name || "").trim();
+                    if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
+                        const nameKey = cleanName.toLowerCase();
+                        if (!seenCloudNames.has(nameKey)) {
+                            seenCloudNames.add(nameKey);
+                            cleanedFetchedPlaces.push(fp);
+                        }
+                    }
+                });
+
+                let placesToApply = cleanedFetchedPlaces;
+                if (cleanedFetchedPlaces.length !== fetchedPlaces.length) {
+                    console.log("[Sync Engine] Purged junk/duplicate items from cloud data! Updating cloud...");
+                    setTimeout(() => triggerSyncUpload(), 100);
+                }
 
                 const localPlaces = await db.places.toArray();
 
                 // Preserve local photo attachments for matching places
-                fetchedPlaces.forEach(fp => {
-                    const localMatch = localPlaces.find(lp => lp.name === fp.name);
+                placesToApply.forEach(fp => {
+                    const localMatch = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === (fp.name || "").trim().toLowerCase());
                     if (localMatch) {
                         if (localMatch.photo && !fp.photo) fp.photo = localMatch.photo;
                         if (localMatch.photos && (!fp.photos || fp.photos.length === 0)) fp.photos = localMatch.photos;
@@ -2588,13 +2593,13 @@ async function loadFromCloud() {
                 });
 
                 const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
-                const fetchedCompareStr = JSON.stringify(fetchedPlaces);
+                const fetchedCompareStr = JSON.stringify(placesToApply);
 
                 if (localCompareStr !== fetchedCompareStr) {
                     console.log("[Sync Engine] Updating local DB to match synced cloud state...");
                     await db.places.clear();
-                    if (fetchedPlaces.length > 0) {
-                        await db.places.bulkAdd(fetchedPlaces);
+                    if (placesToApply.length > 0) {
+                        await db.places.bulkAdd(placesToApply);
                     }
 
                     await updateDashboardStats();
