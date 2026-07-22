@@ -3577,3 +3577,46 @@ async function renderGallery() {
 
     lucide.createIcons();
 }
+
+// ==========================================
+// 14. Smartphone Mobile Pair & QR Modal Engine
+// ==========================================
+window.openShareRoomModal = function() {
+    const roomId = syncRoomId || "77";
+    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(roomId)}`;
+    
+    const inputEl = document.getElementById("share-room-url");
+    if (inputEl) inputEl.value = shareUrl;
+
+    const qrImg = document.getElementById("qr-code-img");
+    if (qrImg) {
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(shareUrl)}`;
+    }
+
+    const modal = document.getElementById("modal-share-room");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+window.closeShareRoomModal = function() {
+    const modal = document.getElementById("modal-share-room");
+    if (modal) modal.classList.remove("active");
+};
+
+window.copyShareRoomUrl = async function() {
+    const inputEl = document.getElementById("share-room-url");
+    if (!inputEl || !inputEl.value) return;
+
+    await copyShareLinkToClipboard(inputEl.value);
+    showToast("스마트폰 연동 링크가 클립보드에 복사되었습니다! 💌", "success");
+};
+
+// PWA Install Prompt Listener
+let deferredPwaPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPwaPrompt = e;
+    console.log('[PWA] beforeinstallprompt event captured');
+});
