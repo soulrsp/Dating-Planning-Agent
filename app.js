@@ -65,6 +65,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         localStorage.setItem("aura_sync_room_id", queryRoom);
     }
 
+    if ((queryRoom === "77" || syncRoomId === "77") && (partnerAName === "초코" || partnerAName === "A")) {
+        partnerAName = "SH";
+        partnerBName = "SN";
+        localStorage.setItem("aura_partner_a_name", "SH");
+        localStorage.setItem("aura_partner_b_name", "SN");
+        document.getElementById("settings-partner-a-name").value = "SH";
+        document.getElementById("settings-partner-b-name").value = "SN";
+    }
+
     updatePartnerNamesUI();
 
     // Map script selection & dynamic load
@@ -91,12 +100,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     });
 
-    // Quick Add Modal Trigger
-    document.getElementById("btn-quick-add").addEventListener("click", openAddPlaceModal);
-    document.getElementById("btn-close-modal").addEventListener("click", closeAddPlaceModal);
-    document.getElementById("btn-cancel-modal").addEventListener("click", closeAddPlaceModal);
-    document.getElementById("form-place-add").addEventListener("submit", handleAddPlaceSubmit);
-    document.getElementById("add-place-url").addEventListener("input", handleMapUrlInput);
+    // Quick Add Modal Trigger (guarded with null checks)
+    const btnQuickAdd = document.getElementById("btn-quick-add");
+    if (btnQuickAdd) btnQuickAdd.addEventListener("click", openAddPlaceModal);
+    const btnCloseModal = document.getElementById("btn-close-modal");
+    if (btnCloseModal) btnCloseModal.addEventListener("click", closeAddPlaceModal);
+    const btnCancelModal = document.getElementById("btn-cancel-modal");
+    if (btnCancelModal) btnCancelModal.addEventListener("click", closeAddPlaceModal);
+    const formPlaceAdd = document.getElementById("form-place-add");
+    if (formPlaceAdd) formPlaceAdd.addEventListener("submit", handleAddPlaceSubmit);
+    const addPlaceUrl = document.getElementById("add-place-url");
+    if (addPlaceUrl) addPlaceUrl.addEventListener("input", handleMapUrlInput);
 
     // Edit Place Modal Listeners
     const closeEditBtn = document.getElementById("btn-close-edit-modal");
@@ -1646,6 +1660,17 @@ async function openEditPlaceModal(id) {
     const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
     document.getElementById("edit-place-address").value = cleanAddress;
 
+    // Partner comment labels & values
+    const lblA = document.getElementById("edit-lbl-comment-a");
+    if (lblA) lblA.textContent = partnerAName;
+    const lblB = document.getElementById("edit-lbl-comment-b");
+    if (lblB) lblB.textContent = partnerBName;
+
+    const commentAEl = document.getElementById("edit-place-comment-a");
+    if (commentAEl) commentAEl.value = place.commentA || "";
+    const commentBEl = document.getElementById("edit-place-comment-b");
+    if (commentBEl) commentBEl.value = place.commentB || "";
+
     document.getElementById("edit-opt-partner-a").textContent = partnerAName;
     document.getElementById("edit-opt-partner-b").textContent = partnerBName;
 
@@ -1667,9 +1692,31 @@ async function openEditPlaceModal(id) {
 }
 
 function closeEditPlaceModal() {
-    document.getElementById("modal-edit-place").classList.remove("active");
-    document.getElementById("form-edit-place").reset();
+    const modal = document.getElementById("modal-edit-place");
+    if (modal) modal.classList.remove("active");
+    const form = document.getElementById("form-edit-place");
+    if (form) form.reset();
 }
+window.closeEditPlaceModal = closeEditPlaceModal;
+
+window.quickEditComment = async function(id, partnerKey) {
+    const place = await db.places.get(id);
+    if (!place) return;
+
+    const partnerName = partnerKey === "A" ? partnerAName : partnerBName;
+    const fieldKey = partnerKey === "A" ? "commentA" : "commentB";
+    const currentVal = place[fieldKey] || "";
+
+    const inputVal = prompt(`💬 [${partnerName}] 한줄 코멘트를 입력/수정해 주세요:`, currentVal);
+    if (inputVal !== null) {
+        const updateObj = {};
+        updateObj[fieldKey] = inputVal.trim();
+        await db.places.update(id, updateObj);
+        showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
+        await renderPlacesList();
+        triggerSyncUpload();
+    }
+};
 
 window.fixEditModalCoordinates = async function() {
     const address = document.getElementById("edit-place-address").value.trim();
@@ -1711,6 +1758,9 @@ async function handleEditPlaceSubmit(e) {
     const dateVal = document.getElementById("edit-place-date").value;
     const addressVal = document.getElementById("edit-place-address").value.trim();
     
+    const commentAEl = document.getElementById("edit-place-comment-a");
+    const commentBEl = document.getElementById("edit-place-comment-b");
+
     const place = await db.places.get(id);
     if (!place) return;
 
@@ -1720,7 +1770,9 @@ async function handleEditPlaceSubmit(e) {
         name: name,
         category: category,
         notes: addressVal,
-        createdAt: updatedDate
+        createdAt: updatedDate,
+        commentA: commentAEl ? commentAEl.value.trim() : (place.commentA || ""),
+        commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
     };
 
     // Auto-resolve coordinates from address via Naver official Geocoder
@@ -1826,6 +1878,36 @@ window.viewPlaceOnLoveMap = function(lat, lng, encodedName) {
     }, 300);
 };
 
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function renderCommentsBlock(place) {
+    const textA = place.commentA ? escapeHtml(place.commentA) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
+    const textB = place.commentB ? escapeHtml(place.commentB) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
+
+    return `
+        <div class="place-comments-box" style="font-size:0.78rem; margin-top:0.4rem; margin-bottom:0.6rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textA}</div>
+                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textB}</div>
+                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
+            </div>
+        </div>
+    `;
+}
+
 // 10. Places Render List
 async function renderPlacesList() {
     // 1. Render Wishlist Tab
@@ -1846,7 +1928,9 @@ async function renderPlacesList() {
 
         const filteredWishlist = wishlistPlaces.filter(place => {
             return place.name.toLowerCase().includes(searchVal) || 
-                   (place.notes && place.notes.toLowerCase().includes(searchVal));
+                   (place.notes && place.notes.toLowerCase().includes(searchVal)) ||
+                   (place.commentA && place.commentA.toLowerCase().includes(searchVal)) ||
+                   (place.commentB && place.commentB.toLowerCase().includes(searchVal));
         });
         
         if (filteredWishlist.length === 0) {
@@ -1890,7 +1974,11 @@ async function renderPlacesList() {
                             </button>
                         </div>
                     </div>
+                `;
+                
+                cardContent += renderCommentsBlock(place);
 
+                cardContent += `
                     <div class="place-actions">
                         ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
                         <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, '${place.name}')">
@@ -1923,7 +2011,9 @@ async function renderPlacesList() {
         const filteredVisited = visitedPlaces.filter(place => {
             return place.name.toLowerCase().includes(searchVal) || 
                    (place.notes && place.notes.toLowerCase().includes(searchVal)) ||
-                   (place.review && place.review.toLowerCase().includes(searchVal));
+                   (place.review && place.review.toLowerCase().includes(searchVal)) ||
+                   (place.commentA && place.commentA.toLowerCase().includes(searchVal)) ||
+                   (place.commentB && place.commentB.toLowerCase().includes(searchVal));
         });
         
         if (filteredVisited.length === 0) {
@@ -1986,6 +2076,8 @@ async function renderPlacesList() {
                 
                 const payerName = place.payer === "B" ? partnerBName : partnerAName;
                 
+                cardContent += renderCommentsBlock(place);
+
                 cardContent += `
                     <div class="place-card-stars" style="margin-top:0.4rem;">
                         ${stars}
