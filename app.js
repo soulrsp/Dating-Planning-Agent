@@ -1665,9 +1665,9 @@ function handleEditPhotoUploadPreview(e) {
     });
 }
 
-// 9. Photo Compressor Logic (JPEG, 150x150, 60% quality)
-function compressBase64Image(base64Str, maxWidth = 150, maxHeight = 150, quality = 0.6) {
-    return new Promise((resolve, reject) => {
+// 9. Photo Compressor Logic (High Quality Preserving Pipeline, max 2560px, 90% quality)
+function compressBase64Image(base64Str, maxWidth = 2560, maxHeight = 2560, quality = 0.90) {
+    return new Promise((resolve) => {
         if (!base64Str) return resolve("");
         if (!base64Str.startsWith("data:image")) return resolve(base64Str);
         
@@ -1683,10 +1683,12 @@ function compressBase64Image(base64Str, maxWidth = 150, maxHeight = 150, quality
             canvas.width = w;
             canvas.height = h;
             const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
-        img.onerror = reject;
+        img.onerror = () => resolve(base64Str);
         img.src = base64Str;
     });
 }
@@ -2282,19 +2284,25 @@ async function deletePlace(id, name) {
     if (!confirm(`'${name}' 장소를 영구히 삭제하시겠습니까?`)) return;
     
     try {
-        await db.places.delete(id);
+        // Tombstone update (Soft delete flag to guarantee multi-device sync deletion)
+        await db.places.update(id, {
+            isVisited: -1,
+            isDeleted: 1,
+            deletedAt: Date.now()
+        });
         
         // Clean up associated cloud photos from Firebase
         if (syncRoomId) {
             try {
-                const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${id}.json`;
+                const nameKey = (name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+                const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json`;
                 await fetch(url, { method: 'DELETE' });
             } catch(e) {
                 console.error("Cloud photo cleanup failed:", e);
             }
         }
 
-        showToast("장소가 정상 삭제되었습니다.", "success");
+        showToast("장소가 영구 삭제되었습니다.", "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
@@ -2589,10 +2597,14 @@ async function loadFromCloud() {
 
                 const localPlaces = await db.places.toArray();
 
-                // Preserve local photo attachments for matching places
+                // Preserve local photo attachments and tombstones
                 placesToApply.forEach(fp => {
                     const localMatch = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === (fp.name || "").trim().toLowerCase());
                     if (localMatch) {
+                        if (localMatch.isDeleted === 1 || localMatch.isVisited === -1) {
+                            fp.isDeleted = 1;
+                            fp.isVisited = -1;
+                        }
                         if (localMatch.photo && !fp.photo) fp.photo = localMatch.photo;
                         if (localMatch.photos && (!fp.photos || fp.photos.length === 0)) fp.photos = localMatch.photos;
                     }
@@ -2630,10 +2642,18 @@ function triggerSyncUpload() {
 }
 
 // ── Firebase Photos REST API sync ──
-async function uploadPhotoToCloud(placeId, base64ImagesArray) {
+async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
     if (!syncRoomId || !base64ImagesArray || base64ImagesArray.length === 0) return;
     try {
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${placeId}.json`;
+        let placeKey = placeIdOrName;
+        if (typeof placeIdOrName === 'number') {
+            const p = await db.places.get(placeIdOrName);
+            if (p && p.name) placeKey = p.name.trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+        } else if (typeof placeIdOrName === 'string') {
+            placeKey = placeIdOrName.trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+        }
+        
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json`;
         const body = JSON.stringify({
             img: base64ImagesArray[0] || "",
             imgList: base64ImagesArray,
@@ -2662,7 +2682,8 @@ async function loadPhotosFromCloud() {
         let changed = false;
 
         for (const place of places) {
-            const entry = photos[place.id];
+            const nameKey = (place.name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+            const entry = photos[nameKey] || photos[place.id];
             if (entry) {
                 const serverImgList = entry.imgList || (entry.img ? [entry.img] : []);
                 const localImgList = place.photos || (place.photo ? [place.photo] : []);
@@ -2678,8 +2699,11 @@ async function loadPhotosFromCloud() {
         }
         
         if (changed) {
-            console.log("[Photo Sync] Visited photos successfully synchronized.");
+            console.log("[Photo Sync] Photos successfully synchronized across devices.");
             await renderPlacesList();
+            if (currentActiveTab === "gallery") {
+                renderGallery();
+            }
         }
     } catch (e) {
         console.error('[Photo Sync] Load failed:', e);
@@ -2970,9 +2994,20 @@ function importData(e) {
 }
 
 async function clearAllData() {
-    if (!confirm("경고: 모든 커플 데이트 정보 및 환경 설정이 삭제됩니다. 초기화하시겠습니까?")) return;
+    if (!confirm("경고: 모든 커플 데이트 정보 및 클라우드 연동 정보가 완전 삭제됩니다. 초기화하시겠습니까?")) return;
     
     await db.places.clear();
+    
+    // Purge cloud room data on Firebase
+    if (syncRoomId) {
+        try {
+            const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
+            await fetch(url, { method: 'DELETE' });
+        } catch(e){
+            console.error("Cloud room purge error:", e);
+        }
+    }
+
     localStorage.removeItem("aura_gemini_key");
     localStorage.removeItem("aura_naver_client_id");
     localStorage.removeItem("aura_budget_limit");
@@ -3000,7 +3035,7 @@ async function clearAllData() {
     document.getElementById("budget-limit-text").textContent = formatCurrency(500000);
     updatePartnerNamesUI();
     
-    showToast("AURA의 모든 데이터가 소멸되었습니다.", "warning");
+    showToast("AURA의 모든 데이터 및 클라우드 동기화 룸이 소멸되었습니다.", "warning");
     checkApiKeyAlert();
     await updateDashboardStats();
     await renderPlacesList();
@@ -3208,17 +3243,23 @@ async function cleanJunkData(showToastMsg = false) {
         let removedCount = 0;
 
         for (const p of places) {
-            // 1. Strip legacy test strings
-            sanitizePlaceObject(p);
-
-            // 2. Filter out invalid/junk places
-            const cleanName = (p.name || "").trim();
-            if (!cleanName || cleanName.length < 2) {
+            // 1. Purge tombstones (deleted items)
+            if (p.isDeleted === 1 || p.isVisited === -1) {
                 removedCount++;
                 continue;
             }
 
-            // 3. Deduplicate by lowercased place name
+            // 2. Strip legacy test strings
+            sanitizePlaceObject(p);
+
+            // 3. Filter out invalid/junk places
+            const cleanName = (p.name || "").trim();
+            if (!cleanName || cleanName.length < 2 || cleanName.toLowerCase() === "undefined" || cleanName.toLowerCase() === "null") {
+                removedCount++;
+                continue;
+            }
+
+            // 4. Deduplicate by lowercased place name
             const nameKey = cleanName.toLowerCase();
             if (seenNames.has(nameKey)) {
                 removedCount++;
@@ -3240,7 +3281,7 @@ async function cleanJunkData(showToastMsg = false) {
             triggerSyncUpload();
 
             if (showToastMsg) {
-                showToast(`${removedCount}개의 중복 및 이상 장소 데이터가 정갈하게 정화되었습니다! 🧹`, "success");
+                showToast(`${removedCount}개의 유령/삭제/중복 데이터가 완벽하게 정제 및 클라우드 소멸되었습니다! 🧹`, "success");
             }
         } else if (showToastMsg) {
             showToast("이상 데이터가 없으며 목록이 매우 깨끗합니다! 💖", "info");
@@ -3463,6 +3504,12 @@ function renderSelectedDateDetails(dateStr, places) {
     });
 }
 
+let currentGallerySliderData = {
+    places: [],
+    placeIndex: 0,
+    photoIndex: 0
+};
+
 async function renderGallery() {
     const container = document.getElementById("gallery-photos-grid");
     const countEl = document.getElementById("gallery-photo-count");
@@ -3470,29 +3517,24 @@ async function renderGallery() {
 
     container.innerHTML = "";
     const places = await db.places.where("isVisited").equals(1).toArray();
-
-    const allPhotoItems = [];
-    places.forEach(p => {
+    
+    // Filter places with photos
+    const galleryPlaces = places.filter(p => {
         const photos = p.photos || (p.photo ? [p.photo] : []);
-        photos.forEach(imgSrc => {
-            allPhotoItems.push({
-                imgSrc: imgSrc,
-                placeId: p.id,
-                placeName: p.name,
-                createdAt: p.createdAt,
-                rating: p.rating || 5,
-                commentA: p.commentA,
-                commentB: p.commentB,
-                category: p.category
-            });
-        });
+        return photos.length > 0;
+    });
+
+    let totalPhotoCount = 0;
+    galleryPlaces.forEach(p => {
+        const photos = p.photos || (p.photo ? [p.photo] : []);
+        totalPhotoCount += photos.length;
     });
 
     if (countEl) {
-        countEl.textContent = `함께 다녀온 곳에 기록된 총 ${allPhotoItems.length}장의 소중한 커플 추억 사진들 💖`;
+        countEl.textContent = `함께 다녀온 ${galleryPlaces.length}곳의 장소에서 기록된 총 ${totalPhotoCount}장의 소중한 커플 추억 💖`;
     }
 
-    if (allPhotoItems.length === 0) {
+    if (galleryPlaces.length === 0) {
         container.innerHTML = `
             <div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:var(--color-text-med);">
                 <i data-lucide="camera" style="width:48px; height:48px; opacity:0.3; margin-bottom:0.8rem;"></i>
@@ -3503,30 +3545,38 @@ async function renderGallery() {
         return;
     }
 
-    allPhotoItems.forEach(item => {
+    galleryPlaces.forEach(p => {
+        const photos = p.photos || (p.photo ? [p.photo] : []);
+        const coverPhoto = photos[0];
+        const photoCount = photos.length;
+
         const card = document.createElement("div");
         card.className = "gallery-card";
 
-        const dateObj = new Date(item.createdAt);
+        const dateObj = new Date(p.createdAt);
         const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
 
         card.innerHTML = `
-            <div class="gallery-img-wrapper" onclick="openLightbox('${item.imgSrc}')">
-                <img src="${item.imgSrc}" alt="${escapeHtml(item.placeName)}">
+            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)">
+                <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
                 <div class="gallery-img-overlay">
-                    <span>🔍 크게 보기</span>
+                    <span>🔍 추억 갤러리 감상하기</span>
                 </div>
+                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3);">🖼️ ${photoCount}장</span>` : ''}
             </div>
             <div class="gallery-card-body">
-                <h5 class="gallery-place-title">${escapeHtml(item.placeName)}</h5>
+                <h5 class="gallery-place-title">${escapeHtml(p.name)}</h5>
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
-                    <span style="color:var(--color-primary); font-weight:700;">${item.rating}점 ★</span>
+                    <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
-                ${item.commentA || item.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(item.commentA || item.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar">
-                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${item.placeId})">
-                        ✏️ 사진 수정 / 추가
+                ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
+                <div class="gallery-action-bar" style="display:flex; gap:6px; margin-top:4px;">
+                    <button class="btn btn-primary" style="flex:1; font-size:0.75rem; padding:0.25rem; height:28px;" onclick="openGallerySliderModal(${p.id}, 0)">
+                        🖼️ 사진 감상 (${photoCount}장)
+                    </button>
+                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem; height:28px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">
+                        ✏️ 수정
                     </button>
                 </div>
             </div>
@@ -3536,6 +3586,92 @@ async function renderGallery() {
 
     lucide.createIcons();
 }
+
+// Multi-Photo Gallery Lightbox Slider Engine
+let activeGalleryPhotos = [];
+let activePhotoIndex = 0;
+let activePlaceInfo = {};
+
+window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
+    const place = await db.places.get(placeId);
+    if (!place) return;
+
+    activeGalleryPhotos = place.photos || (place.photo ? [place.photo] : []);
+    if (activeGalleryPhotos.length === 0) return;
+
+    activePhotoIndex = Math.max(0, Math.min(initialIdx, activeGalleryPhotos.length - 1));
+    
+    const dateObj = new Date(place.createdAt);
+    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+    
+    activePlaceInfo = {
+        name: place.name,
+        meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
+        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
+    };
+
+    updateGallerySliderUI();
+
+    const modal = document.getElementById("modal-gallery-slider");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+function updateGallerySliderUI() {
+    const mainImg = document.getElementById("gallery-slider-main-img");
+    const nameEl = document.getElementById("gallery-slider-place-name");
+    const metaEl = document.getElementById("gallery-slider-place-meta");
+    const commEl = document.getElementById("gallery-slider-comments");
+    const thumbsContainer = document.getElementById("gallery-slider-thumbs");
+
+    if (mainImg) mainImg.src = activeGalleryPhotos[activePhotoIndex];
+    if (nameEl) nameEl.textContent = activePlaceInfo.name;
+    if (metaEl) metaEl.textContent = `${activePlaceInfo.meta} [${activePhotoIndex + 1} / ${activeGalleryPhotos.length}]`;
+    if (commEl) {
+        if (activePlaceInfo.comments) {
+            commEl.style.display = "block";
+            commEl.textContent = activePlaceInfo.comments;
+        } else {
+            commEl.style.display = "none";
+        }
+    }
+
+    if (thumbsContainer) {
+        thumbsContainer.innerHTML = "";
+        if (activeGalleryPhotos.length > 1) {
+            thumbsContainer.style.display = "flex";
+            activeGalleryPhotos.forEach((imgSrc, idx) => {
+                const thumb = document.createElement("img");
+                thumb.src = imgSrc;
+                thumb.className = `gallery-slider-thumb ${idx === activePhotoIndex ? 'active' : ''}`;
+                thumb.onclick = () => selectGallerySliderImage(idx);
+                thumbsContainer.appendChild(thumb);
+            });
+        } else {
+            thumbsContainer.style.display = "none";
+        }
+    }
+}
+
+window.navigateGallerySlider = function(direction) {
+    if (activeGalleryPhotos.length <= 1) return;
+    activePhotoIndex = (activePhotoIndex + direction + activeGalleryPhotos.length) % activeGalleryPhotos.length;
+    updateGallerySliderUI();
+};
+
+window.selectGallerySliderImage = function(idx) {
+    if (idx >= 0 && idx < activeGalleryPhotos.length) {
+        activePhotoIndex = idx;
+        updateGallerySliderUI();
+    }
+};
+
+window.closeGallerySliderModal = function() {
+    const modal = document.getElementById("modal-gallery-slider");
+    if (modal) modal.classList.remove("active");
+};
 
 // ==========================================
 // 14. Smartphone Mobile Pair & QR Modal Engine
