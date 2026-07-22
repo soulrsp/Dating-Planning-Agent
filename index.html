@@ -399,14 +399,16 @@
                 
                 <div class="form-group">
                     <label for="add-place-category">장소 종류</label>
-                    <select id="add-place-category">
+                    <select id="add-place-category" onchange="toggleCustomCategoryInput('add')">
                         <option value="Cafe">카페 (Cafe)</option>
                         <option value="Restaurant">맛집 (Restaurant)</option>
                         <option value="Bar">술집/바 (Bar)</option>
                         <option value="Park">공원/산책 (Park)</option>
                         <option value="Museum">문화/미술관 (Museum)</option>
                         <option value="Other">기타 (Other)</option>
+                        <option value="custom">✏️ 직접 입력</option>
                     </select>
+                    <input type="text" id="add-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
                 </div>
 
                 <div class="form-group">
@@ -474,9 +476,15 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="visit-review">오늘의 즐거웠던 기억/기록 *</label>
-                    <textarea id="visit-review" rows="4" placeholder="여기서 어떤 재밌는 추억을 남겼는지 기록하세요 💖" required></textarea>
+                <div class="form-group-row" style="margin-top:0.4rem;">
+                    <div class="form-group">
+                        <label for="visit-comment-a">💬 <span id="visit-lbl-comment-a">초코</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-a" placeholder="예: 맛있는 음식 먹어서 너무 행복했어! 💕">
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-comment-b">💬 <span id="visit-lbl-comment-b">딸기</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-b" placeholder="예: 다음에 꼭 또 오고 싶어! ✨">
+                    </div>
                 </div>
 
                 <div class="form-group-row">
@@ -528,14 +536,16 @@
                 <div class="form-group-row">
                     <div class="form-group">
                         <label for="edit-place-category">카테고리 *</label>
-                        <select id="edit-place-category">
+                        <select id="edit-place-category" onchange="toggleCustomCategoryInput('edit')">
                             <option value="Restaurant">음식점 (Restaurant)</option>
                             <option value="Cafe">카페 (Cafe)</option>
                             <option value="Bar">주류 (Bar)</option>
                             <option value="Park">공원/산책 (Park)</option>
                             <option value="Museum">전시/문화 (Museum)</option>
                             <option value="Other">기타 (Other)</option>
+                            <option value="custom">✏️ 직접 입력</option>
                         </select>
+                        <input type="text" id="edit-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
                     </div>
                     <div class="form-group">
                         <label for="edit-place-date">방문/등록 날짜 *</label>
@@ -589,6 +599,14 @@
                                 <option value="B" id="edit-opt-partner-b">딸기(B)</option>
                                 <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-place-photo">커플 추억 사진 추가/수정 (선택, 여러 장 가능)</label>
+                        <input type="file" id="edit-place-photo" accept="image/*" multiple style="display: none;">
+                        <div class="photo-preview-box" id="edit-place-photo-preview">
+                            <span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>
                         </div>
                     </div>
                 </div>
