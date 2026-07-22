@@ -86,6 +86,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Cleanup legacy test comments if present
     await cleanupLegacyComments();
 
+    // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
+    if (syncRoomId && (naverClientId || geminiApiKey)) {
+        setTimeout(() => triggerSyncUpload(), 300);
+    }
+
     // Refresh UI Data
     await updateDashboardStats();
     await renderPlacesList();
@@ -2347,7 +2352,8 @@ async function loadFromCloud() {
             return;
         }
 
-        if (resData.timestamp && resData.timestamp > lastSyncedTimestamp) {
+        // ALWAYS process room settings metadata (Naver Client ID, Gemini Key, Partner Names)
+        if (typeof resData === 'object') {
             let namesChanged = false;
             if (resData.partnerAName && resData.partnerAName !== partnerAName) {
                 partnerAName = resData.partnerAName;
@@ -2372,7 +2378,7 @@ async function loadFromCloud() {
                 localStorage.setItem("aura_naver_client_id", naverClientId);
                 const el = document.getElementById("settings-naver-client-id");
                 if (el) el.value = naverClientId;
-                if (naverClientId && (!window.naver || !window.naver.maps)) {
+                if (naverClientId) {
                     loadNaverMapScript(naverClientId);
                 }
             }
@@ -2383,7 +2389,9 @@ async function loadFromCloud() {
                 const el = document.getElementById("settings-gemini-key");
                 if (el) el.value = geminiApiKey;
             }
+        }
 
+        if (resData.timestamp && resData.timestamp > lastSyncedTimestamp) {
             let fetchedPlaces = [];
             try {
                 fetchedPlaces = JSON.parse(resData.placesData);
@@ -2392,6 +2400,9 @@ async function loadFromCloud() {
             }
 
             if (Array.isArray(fetchedPlaces)) {
+                // Sanitize all fetched places to strip any legacy test strings
+                fetchedPlaces.forEach(fp => sanitizePlaceObject(fp));
+
                 const localPlaces = await db.places.toArray();
                 const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
                 const fetchedCompareStr = JSON.stringify(fetchedPlaces);
@@ -2975,25 +2986,45 @@ async function copyShareLinkToClipboard(text) {
     }
 }
 
+function sanitizePlaceObject(p) {
+    if (!p) return p;
+    const cleanStr = (str) => {
+        if (typeof str !== 'string' || !str) return str;
+        if (str.includes("이선아") || str.includes("선아") || str.includes("위시리스트 충족") || str.includes("바보")) {
+            return "";
+        }
+        return str;
+    };
+    p.review = cleanStr(p.review);
+    p.commentA = cleanStr(p.commentA);
+    p.commentB = cleanStr(p.commentB);
+    if (p.notes && typeof p.notes === 'string') {
+        if (p.notes.includes("이선아") || p.notes.includes("선아") || p.notes.includes("위시리스트 충족") || p.notes.includes("바보")) {
+            p.notes = p.notes.replace(/이선아의 위시리스트 충족!?/gi, "")
+                             .replace(/물멍하기 좋은 카페 선아 바보/gi, "")
+                             .replace(/선아/gi, "")
+                             .replace(/바보/gi, "")
+                             .trim();
+        }
+    }
+    return p;
+}
+
 async function cleanupLegacyComments() {
     try {
         const places = await db.places.toArray();
+        let anyModified = false;
         for (const p of places) {
-            let modified = false;
-            const filterText = (str) => {
-                if (!str) return str;
-                if (str.includes("위시리스트 충족") || str.includes("선아") || str.includes("바보")) {
-                    modified = true;
-                    return "";
-                }
-                return str;
-            };
-            const cleanReview = filterText(p.review);
-            const cleanA = filterText(p.commentA);
-            const cleanB = filterText(p.commentB);
-            if (modified) {
-                await db.places.update(p.id, { review: cleanReview, commentA: cleanA, commentB: cleanB });
+            const beforeStr = JSON.stringify(p);
+            sanitizePlaceObject(p);
+            const afterStr = JSON.stringify(p);
+            if (beforeStr !== afterStr) {
+                await db.places.update(p.id, { notes: p.notes, review: p.review, commentA: p.commentA, commentB: p.commentB });
+                anyModified = true;
             }
+        }
+        if (anyModified) {
+            triggerSyncUpload();
         }
     } catch(e) {
         console.error("Cleanup legacy comments error:", e);
