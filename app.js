@@ -3405,23 +3405,31 @@ async function renderCalendar() {
         });
 
         // Match places with date & group by type (Visited vs Wishlist)
-        const visitedPlaces = datePlaces.filter(p => p.isVisited === 1);
-        const wishlistPlaces = datePlaces.filter(p => p.isVisited === 0);
+        const datePlaces = places.filter(p => {
+            const pDate = p.createdAt || p.date;
+            const ms = parseAnyDate(pDate);
+            if (ms <= 0) return false;
+            const iso = new Date(ms).toISOString().split("T")[0];
+            return iso === fullDateStr;
+        });
+
+        const visitedPlaces = datePlaces.filter(p => parseInt(p.isVisited) === 1);
+        const wishlistPlaces = datePlaces.filter(p => parseInt(p.isVisited) === 0);
 
         let badgesHtml = "";
         if (visitedPlaces.length > 0 || wishlistPlaces.length > 0) {
-            badgesHtml += `<div style="display:flex; flex-direction:column; gap:2px; margin-top:2px;">`;
+            badgesHtml += `<div class="cal-badges-container" style="display:flex; flex-direction:column; gap:2px; margin-top:2px; align-items:center;">`;
             if (visitedPlaces.length > 0) {
                 badgesHtml += `
-                    <button class="cal-btn-visited" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'visited')">
-                        🌸 다녀옴 (${visitedPlaces.length})
+                    <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
+                        🌸 <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>
                     </button>
                 `;
             }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
-                    <button class="cal-btn-wishlist" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'wishlist')">
-                        💌 위시 (${wishlistPlaces.length})
+                    <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
+                        💌 <span class="badge-text">위시 (${wishlistPlaces.length})</span>
                     </button>
                 `;
             }
@@ -3479,32 +3487,36 @@ function renderSelectedDateDetails(dateStr, places) {
 
     itemsEl.innerHTML = "";
     datePlaces.forEach(p => {
-        const isVis = p.isVisited === 1;
-        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">🌸 다녀온 곳</span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(162,155,254,0.15); color:#6C5CE7; font-weight:700;">💌 위시리스트</span>`;
+        const isVis = parseInt(p.isVisited) === 1;
+        const statusBadge = isVis 
+            ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); font-weight:700; width:fit-content;">📍 다녀온 곳</span>` 
+            : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); font-weight:700; width:fit-content;">📍 위시리스트</span>`;
+
+        const rawComment = p.commentA || p.commentB || p.notes || "";
+        const commentStr = rawComment.replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
         const div = document.createElement("div");
         div.style.cssText = `
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.65rem 0.85rem;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.75rem 0.9rem;
             background: rgba(255, 101, 132, 0.04);
             border: 1px solid rgba(255, 101, 132, 0.12);
             border-radius: 12px;
             margin-bottom: 0.5rem;
-            flex-wrap: wrap;
-            gap: 8px;
+            gap: 4px;
+            width: 100%;
         `;
         div.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px;">
+            <div style="display:flex; align-items:center; gap:6px;">
                 ${statusBadge}
-                <strong style="font-size:0.92rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
-                <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-                ${p.commentA || p.commentB ? `<span style="font-size:0.75rem; color:var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</span>` : ''}
-                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
+                <span style="font-size:0.75rem; color:var(--color-primary); background:rgba(255,101,132,0.08); padding:1px 6px; border-radius:4px;">${escapeHtml(p.category)}</span>
             </div>
+            ${commentStr ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px;">💬 ${escapeHtml(commentStr)}</div>` : ''}
         `;
         itemsEl.appendChild(div);
     });
