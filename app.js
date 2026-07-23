@@ -1575,6 +1575,10 @@ async function handleAddPlaceSubmit(e) {
         lng = 126.9780 + (Math.random() - 0.5) * 0.03;
     }
 
+    const isUndated = document.getElementById("add-place-undated")?.checked;
+    const dateVal = document.getElementById("add-place-date")?.value;
+    const createdAtStr = isUndated ? "" : (dateVal ? new Date(dateVal).toISOString() : new Date().toISOString());
+
     try {
         await db.places.add({
             name,
@@ -1591,7 +1595,7 @@ async function handleAddPlaceSubmit(e) {
             payer: "A",
             peopleCount: 2,
             photo: "",
-            createdAt: new Date().toISOString()
+            createdAt: createdAtStr
         });
 
         showToast(`${name} 장소가 저장되었습니다 🌸`, "success");
@@ -1912,7 +1916,6 @@ async function handleEditPlaceSubmit(e) {
     const catCustom = document.getElementById("edit-place-custom-category").value.trim();
     const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
 
-    const dateVal = document.getElementById("edit-place-date").value;
     const addressVal = document.getElementById("edit-place-address").value.trim();
     
     const commentAEl = document.getElementById("edit-place-comment-a");
@@ -1921,7 +1924,9 @@ async function handleEditPlaceSubmit(e) {
     const place = await db.places.get(id);
     if (!place) return;
 
-    const updatedDate = dateVal ? new Date(dateVal).toISOString() : place.createdAt;
+    const isUndated = document.getElementById("edit-place-undated")?.checked;
+    const dateVal = document.getElementById("edit-place-date")?.value;
+    const updatedDate = isUndated ? "" : (dateVal ? new Date(dateVal).toISOString() : (place.createdAt || new Date().toISOString()));
 
     let updatePayload = {
         name: name,
@@ -2137,7 +2142,7 @@ async function renderPlacesList() {
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : ''}
+                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> <span style="background:rgba(255,101,132,0.12); color:var(--color-primary); padding:2px 6px; border-radius:6px; font-weight:700;">📅 날짜 미정 🌸</span></div>`}
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
                             <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
                             <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
@@ -2449,16 +2454,19 @@ async function startCloudSyncLoop() {
     syncIntervalId = setInterval(async () => {
         await loadFromCloud();
         await loadPhotosFromCloud();
+        await loadMemoryPhotosFromCloud();
     }, 5000);
     
     // Establish 10-second interval loop for heavy photos syncing
     photoSyncIntervalId = setInterval(async () => {
         await loadPhotosFromCloud();
+        await loadMemoryPhotosFromCloud();
     }, 10000);
 
     // Run immediately on start
     await loadFromCloud();
     await loadPhotosFromCloud();
+    await loadMemoryPhotosFromCloud();
 }
 
 async function saveToCloud() {
@@ -4067,6 +4075,9 @@ window.saveMemoryGalleryPhotos = async function() {
             customMemoryPhotos = [...customMemoryPhotos, ...newPhotos];
             localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
             renderLovelyMemoryGallery();
+            if (syncRoomId) {
+                await uploadMemoryPhotosToCloud();
+            }
             showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
             closeEditMemoryGalleryModal();
             return;
@@ -4076,6 +4087,44 @@ window.saveMemoryGalleryPhotos = async function() {
     showToast("새로 선택된 사진이 없습니다.", "info");
     closeEditMemoryGalleryModal();
 };
+
+async function uploadMemoryPhotosToCloud() {
+    if (!syncRoomId || !customMemoryPhotos) return;
+    try {
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memories.json`;
+        await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                memories: customMemoryPhotos,
+                ts: Date.now()
+            })
+        });
+        console.log("[Memory Sync] Lovely memories uploaded to cloud room.");
+    } catch(e) {
+        console.error("[Memory Sync] Upload failed:", e);
+    }
+}
+
+async function loadMemoryPhotosFromCloud() {
+    if (!syncRoomId) return;
+    try {
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memories.json?t=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.memories) && data.memories.length > 0) {
+            if (JSON.stringify(customMemoryPhotos) !== JSON.stringify(data.memories)) {
+                customMemoryPhotos = data.memories;
+                localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+                renderLovelyMemoryGallery();
+                console.log("[Memory Sync] Lovely memories synchronized from cloud room.");
+            }
+        }
+    } catch(e) {
+        console.error("[Memory Sync] Load failed:", e);
+    }
+}
 
 window.downloadAllMemoryGalleryPhotos = async function() {
     const photosToDownload = (customMemoryPhotos && customMemoryPhotos.length > 0) ? customMemoryPhotos : DEFAULT_MEMORY_PHOTOS;
