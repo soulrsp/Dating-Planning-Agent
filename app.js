@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (banner) {
         banner.addEventListener("click", async () => {
             if (!syncRoomId) {
-                let roomId = prompt("연결할 커플 동기화 방 이름을 입력하세요 (예: love1004, 초코딸기)", "love1004");
+                let roomId = prompt("?�결??커플 ?�기??�??�름???�력?�세??(?? love1004, 초코?�기)", "love1004");
                 if (!roomId) return;
                 roomId = roomId.trim();
                 if (roomId) {
@@ -202,17 +202,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                     startCloudSyncLoop();
                     
                     await copyShareLinkToClipboard(newUrl);
-                    showToast(`동기화 룸 '${roomId}'에 연결되었으며 공유 링크가 복사되었습니다! 💖`, "success");
+                    showToast(`?�기??�?'${roomId}'???�결?�었?�며 공유 링크가 복사?�었?�니?? ?��`, "success");
                 }
             } else {
                 const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(syncRoomId)}`;
                 await copyShareLinkToClipboard(shareUrl);
-                showToast("실시간 동기화 공유 링크가 클립보드에 복사되었습니다! 💌", "success");
+                showToast("?�시�??�기??공유 링크가 ?�립보드??복사?�었?�니?? ?��", "success");
             }
         });
     }
 
-    // Couple Names Inline Edit (click on "초코 ♥ 딸기" to edit)
+    // Couple Names Inline Edit (click on "초코 ???�기" to edit)
     const coupleNamesEl = document.getElementById("couple-names-editable");
     if (coupleNamesEl) {
         coupleNamesEl.addEventListener("click", (e) => {
@@ -238,16 +238,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
             `;
             popover.innerHTML = `
-                <div style="font-size:0.75rem; color:var(--color-text-low); margin-bottom:0.5rem; font-weight:600; text-align:center;">커플 이름 수정 💕</div>
+                <div style="font-size:0.75rem; color:var(--color-text-low); margin-bottom:0.5rem; font-weight:600; text-align:center;">커플 ?�름 ?�정 ?��</div>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.6rem;">
-                    <input id="edit-name-a" type="text" value="${partnerAName}" placeholder="A 이름" 
+                    <input id="edit-name-a" type="text" value="${partnerAName}" placeholder="A ?�름" 
                         style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
-                    <span style="display:flex; align-items:center; color:var(--color-primary); font-size:0.85rem;">♥</span>
-                    <input id="edit-name-b" type="text" value="${partnerBName}" placeholder="B 이름" 
+                    <span style="display:flex; align-items:center; color:var(--color-primary); font-size:0.85rem;">??/span>
+                    <input id="edit-name-b" type="text" value="${partnerBName}" placeholder="B ?�름" 
                         style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
                 </div>
                 <button id="btn-save-couple-names" style="width:100%; padding:0.45rem; border:none; background:linear-gradient(135deg, var(--color-primary) 0%, #FF85A1 100%); color:white; border-radius:10px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all 0.2s ease;">
-                    저장하기 💖
+                    ?�?�하�??��
                 </button>
             `;
             
@@ -261,7 +261,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Save handler
             document.getElementById("btn-save-couple-names").addEventListener("click", () => {
                 const newA = document.getElementById("edit-name-a").value.trim() || "초코";
-                const newB = document.getElementById("edit-name-b").value.trim() || "딸기";
+                const newB = document.getElementById("edit-name-b").value.trim() || "?�기";
                 
                 partnerAName = newA;
                 partnerBName = newB;
@@ -274,7 +274,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 
                 updatePartnerNamesUI();
                 popover.remove();
-                showToast(`커플 이름이 '${newA} ♥ ${newB}'(으)로 변경되었습니다! 💕`, "success");
+                showToast(`커플 ?�름??'${newA} ??${newB}'(??�?변경되?�습?�다! ?��`, "success");
                 triggerSyncUpload();
             });
             
@@ -375,15 +375,15 @@ function switchTab(tabId) {
     
     // Page Title Update
     const titleTextMap = {
-        "dashboard": "러블리 대시보드 Overview",
-        "wishlist": "데이트 위시리스트 🌸",
-        "visited": "함께 다녀온 곳 💖",
-        "calendar": "우리의 데이트 달력 🗓️",
-        "gallery": "우리의 데이트 추억 갤러리 📸",
-        "ai-planner": "AURA 러블리 AI 플래너",
-        "settings": "AURA 환경 설정"
+        "dashboard": "?�블�??�?�보??Overview",
+        "wishlist": "?�이???�시리스???��",
+        "visited": "?�께 ?��???�??��",
+        "calendar": "?�리???�이???�력 ?���?,
+        "gallery": "?�리???�이??추억 갤러�??��",
+        "ai-planner": "AURA ?�블�?AI ?�래??,
+        "settings": "AURA ?�경 ?�정"
     };
-    document.getElementById("page-title-text").textContent = titleTextMap[tabId] || "AURA 데이트 플래너";
+    document.getElementById("page-title-text").textContent = titleTextMap[tabId] || "AURA ?�이???�래??;
     
     // Force map component size refresh
     if (tabId === "dashboard") {
@@ -445,7 +445,7 @@ function updatePartnerNamesUI() {
     if (mobileB) mobileB.textContent = partnerBName;
 
     const mobileCouple = document.getElementById("mobile-couple-names");
-    if (mobileCouple) mobileCouple.textContent = `${partnerAName} ♥ ${partnerBName}`;
+    if (mobileCouple) mobileCouple.textContent = `${partnerAName} ??${partnerBName}`;
 
     const setLblA = document.getElementById("settle-label-a");
     const setLblB = document.getElementById("settle-label-b");
@@ -565,7 +565,7 @@ async function updateMapMarkers() {
                     <div style="padding: 10px; font-family:var(--font-body); width:180px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
                         <strong style="color:var(--color-text-high); font-size:0.9rem;">${place.name}</strong>
                         <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${place.category}</div>
-                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${place.notes || '메모 없음'}</p>
+                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${place.notes || '메모 ?�음'}</p>
                     </div>
                 `,
                 borderWidth: 0,
@@ -592,7 +592,7 @@ async function updateMapMarkers() {
         // Background Auto Coordinate Repair Engine (Corrects any off-target mountain/river coordinates to Naver Official Building Roofs)
         if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
             places.forEach(place => {
-                const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^?��\s*메모:\s*/, "").trim();
                 if (rawAddr && rawAddr.length > 5) {
                     naver.maps.Service.geocode({ query: rawAddr }, (status, response) => {
                         if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
@@ -657,32 +657,32 @@ async function updateMapMarkers() {
 
 // Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
 const AURA_LOCAL_PLACE_KB = [
-    // 부원냉삼집 (대전 관평동 / 배울1로 호반써밋프라자점)
-    { name: "부원냉삼집 (대전 관평동점)", address: "대전광역시 유성구 배울1로 126 호반써밋프라자 107호", lat: 36.42580, lng: 127.39420, category: "Restaurant", keywords: ["부원", "부원냉삼", "부원냉삼집", "관평동", "배울1로", "호반써밋", "용산동", "관평동맛집"] },
+    // 부?�냉?�집 (?�??관?�동 / 배울1�??�반?�밋?�라?�점)
+    { name: "부?�냉?�집 (?�??관?�동??", address: "?�?�광??�� ?�성�?배울1�?126 ?�반?�밋?�라??107??, lat: 36.42580, lng: 127.39420, category: "Restaurant", keywords: ["부??, "부?�냉??, "부?�냉?�집", "관?�동", "배울1�?, "?�반?�밋", "?�산??, "관?�동맛집"] },
 
-    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점 - Naver Map POI Building Coordinates)
-    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
-    { name: "충남순대 (세종 금남본점)", address: "세종특별자치시 금남면 용포로 97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남순대", "세종충남순대", "금남면", "용포리", "세종 충남순대"] },
-    { name: "충남순대국밥 (대전 유성 봉명점)", address: "대전광역시 유성구 유성대로 694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남순대", "유성 충남순대", "유성대로", "대전 충남순대"] },
-    { name: "충남순대 (천안 아우내점)", address: "충청남도 천안시 동남구 병천면 아우내장터길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남순대", "병천순대", "천안 충남순대"] },
-    { name: "충남순대 (공주 신관점)", address: "충청남도 공주시 번영1로 33", lat: 36.47154, lng: 127.13521, category: "Restaurant", keywords: ["충남순대", "공주 충남순대"] },
-    { name: "충남순대 (청주 가경점)", address: "충청북도 청주시 흥덕구 풍산로 18", lat: 36.62891, lng: 127.43521, category: "Restaurant", keywords: ["충남순대", "청주 충남순대"] },
-    { name: "충남순대 (아산 온천점)", address: "충청남도 아산시 온천대로 1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남순대", "아산 충남순대"] },
-    { name: "충남순대 (논산 강경점)", address: "충청남도 논산시 강경읍 계백로 125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남순대", "논산 충남순대"] },
+    // 김?�화 충남?��? & 충남?��? (?�국 주요 8�?매장 �?본점 - Naver Map POI Building Coordinates)
+    { name: "김?�화 충남?��? (?�???�성 구룡?�점)", address: "?�?�광??�� ?�성�?구룡?�전�?3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김?�화", "충남?��?", "김?�화충남?��?", "김?�화 충남?��?", "구룡?�전�?, "?�성�?구룡?�전�?, "?�??충남?��?"] },
+    { name: "충남?��? (?�종 금남본점)", address: "?�종?�별?�치??금남�??�포�?97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남?��?", "?�종충남?��?", "금남�?, "?�포�?, "?�종 충남?��?"] },
+    { name: "충남?��?�?�� (?�???�성 봉명??", address: "?�?�광??�� ?�성�??�성?��?694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남?��?", "?�성 충남?��?", "?�성?��?, "?�??충남?��?"] },
+    { name: "충남?��? (천안 ?�우?�점)", address: "충청?�도 천안???�남�?병천�??�우?�장?�길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남?��?", "병천?��?", "천안 충남?��?"] },
+    { name: "충남?��? (공주 ?��???", address: "충청?�도 공주??번영1�?33", lat: 36.47154, lng: 127.13521, category: "Restaurant", keywords: ["충남?��?", "공주 충남?��?"] },
+    { name: "충남?��? (�?�� 가경점)", address: "충청북도 �?��???�덕�??�산�?18", lat: 36.62891, lng: 127.43521, category: "Restaurant", keywords: ["충남?��?", "�?�� 충남?��?"] },
+    { name: "충남?��? (?�산 ?�천??", address: "충청?�도 ?�산???�천?��?1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남?��?", "?�산 충남?��?"] },
+    { name: "충남?��? (?�산 강경??", address: "충청?�도 ?�산??강경??계백�?125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남?��?", "?�산 충남?��?"] },
 
-    // 진남포면옥 & 진남포 (부분 검색어 지원 - Naver Map POI Building Coordinates)
-    { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.44025, lng: 127.38285, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
-    { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
+    // 진남?�면??& 진남??(부�?검?�어 지??- Naver Map POI Building Coordinates)
+    { name: "진남?�면??(?�???�성구점)", address: "?�?�광??�� ?�성�?봉산�?6번길 34", lat: 36.44025, lng: 127.38285, category: "Restaurant", keywords: ["진남??, "진남?�면??, "봉산�?6번길", "?�?�맛�?] },
+    { name: "진남?�면??(?�울 ?�수본점)", address: "?�울?�별??중구 ?�산�?108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남??, "진남?�면??, "?�수??, "?�산�?] },
     
-    // 민테크 (전국 8개 전 지점 / 본사 / 오피스 / 연구소 / 공장)
-    { name: "민테크 대전본사", address: "대전광역시 유성구 테크노2로 187", lat: 36.4251, lng: 127.3914, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 서울사무소", address: "서울특별시 강남구 테헤란로 212", lat: 37.5028, lng: 127.0384, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 R&D 연구센터", address: "대전광역시 유성구 탑립동 844", lat: 36.4288, lng: 127.3951, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 충북 오송공장", address: "충청북도 청주시 흥덕구 오송읍 생명1로 12", lat: 36.6312, lng: 127.3205, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 경기 화성연구소", address: "경기도 화성시 동탄첨단산업1로 57", lat: 37.2014, lng: 127.0945, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 울산지사", address: "울산광역시 남구 테크노산업로 55", lat: 35.5085, lng: 129.3112, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 창원사무소", address: "경상남도 창원시 성산구 중앙대로 105", lat: 35.2215, lng: 128.6812, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 포항시험센터", address: "경상북도 포항시 남구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테크", "mintech"] }
+    // 민테??(?�국 8�???지??/ 본사 / ?�피??/ ?�구??/ 공장)
+    { name: "민테???�?�본??, address: "?�?�광??�� ?�성�??�크??�?187", lat: 36.4251, lng: 127.3914, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테???�울?�무??, address: "?�울?�별??강남�??�헤?��?212", lat: 37.5028, lng: 127.0384, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테??R&D ?�구?�터", address: "?�?�광??�� ?�성�??�립??844", lat: 36.4288, lng: 127.3951, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테??충북 ?�송공장", address: "충청북도 �?��???�덕�??�송???�명1�?12", lat: 36.6312, lng: 127.3205, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테??경기 ?�성?�구??, address: "경기???�성???�탄첨단?�업1�?57", lat: 37.2014, lng: 127.0945, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테???�산지??, address: "?�산광역???�구 ?�크?�산?�로 55", lat: 35.5085, lng: 129.3112, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테??창원?�무??, address: "경상?�도 창원???�산�?중앙?��?105", lat: 35.2215, lng: 128.6812, category: "Other", keywords: ["민테??, "mintech"] },
+    { name: "민테???�항?�험?�터", address: "경상북도 ?�항???�구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테??, "mintech"] }
 ];
 
 function searchLocalKnowledgeBase(query) {
@@ -702,7 +702,7 @@ function searchLocalKnowledgeBase(query) {
             return true;
         }
 
-        // 2. Tokenized multi-word search (e.g. "부원냉삼집 대전 관평동점" or "김순화 충남순대")
+        // 2. Tokenized multi-word search (e.g. "부?�냉?�집 ?�??관?�동?? or "김?�화 충남?��?")
         if (tokens.length > 1) {
             const tokenMatch = tokens.every(tok => 
                 nameClean.includes(tok) || addrClean.includes(tok) || kwList.some(k => k.includes(tok))
@@ -760,10 +760,10 @@ function getUserCurrentLocation() {
 
 // Move map directly to user's current GPS position
 window.moveToUserCurrentLocation = async function() {
-    showToast("현재 내 위치를 탐색 중입니다... 🎯", "success");
+    showToast("?�재 ???�치�??�색 중입?�다... ?��", "success");
     const loc = await getUserCurrentLocation();
     if (!loc) {
-        showToast("위치 권한이 필요하거나 내 위치를 가져올 수 없습니다 📍", "warning");
+        showToast("?�치 권한???�요?�거?????�치�?가?�올 ???�습?�다 ?��", "warning");
         return;
     }
     
@@ -774,7 +774,7 @@ window.moveToUserCurrentLocation = async function() {
     } else if (map) {
         map.setView([loc.lat, loc.lng], 16);
     }
-    showToast("현재 내 위치 중심으로 러브 맵이 이동했습니다! 🎯", "success");
+    showToast("?�재 ???�치 중심?�로 ?�브 맵이 ?�동?�습?�다! ?��", "success");
 };
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -802,7 +802,7 @@ function formatDistanceStr(km) {
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
     
-    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
+    // Generate fallback queries (e.g. "부?�냉?�집 ?�??관?�동?? -> "부?�냉?�집 ?�??, "부?�냉?�집", "부?�냉??)
     const words = query.trim().split(/\s+/);
     if (words.length > 1) {
         tryQueries.push(words[0]);
@@ -811,7 +811,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
         }
     }
     
-    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
+    const cleanBrand = query.replace(/(?�??관?�동|관?�동???�성�?구룡?�점|??$/g, "").trim();
     if (cleanBrand && !tryQueries.includes(cleanBrand)) {
         tryQueries.push(cleanBrand);
     }
@@ -854,7 +854,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
                         const lng = parseFloat(item.x);
                         return {
                             name: item.name || query,
-                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                            address: item.roadAddress || item.address || "?�이�?지??검???�소",
                             lat: lat,
                             lng: lng,
                             category: item.category || "Restaurant"
@@ -871,7 +871,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
 
 // Reset & Re-Geocode All Saved Place Pins to Official Building Roof Coordinates
 window.resetAllPlaceMapPins = async function() {
-    showToast("저장된 장소의 지도 핀 위치를 네이버 공식 건물 좌표로 리셋 중입니다... 🔄", "info");
+    showToast("?�?�된 ?�소??지???� ?�치�??�이�?공식 건물 좌표�?리셋 중입?�다... ?��", "info");
     const places = await db.places.toArray();
     let updatedCount = 0;
     
@@ -883,9 +883,9 @@ window.resetAllPlaceMapPins = async function() {
         const kbMatch = AURA_LOCAL_PLACE_KB.find(kb => {
             const kbName = kb.name.toLowerCase();
             const kwList = (kb.keywords || []).map(k => k.toLowerCase());
-            return (pName.includes("김순화") && kbName.includes("김순화")) ||
-                   (pName.includes("부원") && kbName.includes("부원")) ||
-                   (pName.includes("진남포") && kbName.includes("진남포")) ||
+            return (pName.includes("김?�화") && kbName.includes("김?�화")) ||
+                   (pName.includes("부??) && kbName.includes("부??)) ||
+                   (pName.includes("진남??) && kbName.includes("진남??)) ||
                    kwList.some(k => k.length > 1 && (pName.includes(k) || pNotes.includes(k)));
         });
 
@@ -896,7 +896,7 @@ window.resetAllPlaceMapPins = async function() {
             });
             updatedCount++;
         } else if (place.notes || place.address) {
-            const cleanAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+            const cleanAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^?��\s*메모:\s*/, "").trim();
             if (cleanAddr.length > 4) {
                 const refined = await refineCoordinatesViaNaverGeocoder(cleanAddr);
                 if (refined) {
@@ -910,7 +910,7 @@ window.resetAllPlaceMapPins = async function() {
     await updateDashboardStats();
     await renderPlacesList();
     updateMapMarkers();
-    showToast(`저장된 다녀온 곳 & 장소 핀 ${updatedCount}개를 네이버 공식 건물 위치로 리셋 및 재설정 완료했습니다! 📍✨`, "success");
+    showToast(`?�?�된 ?��???�?& ?�소 ?� ${updatedCount}개�? ?�이�?공식 건물 ?�치�?리셋 �??�설???�료?�습?�다! ?��??, "success");
 };
 
 // Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 800ms safety timeout)
@@ -955,20 +955,20 @@ function refineCoordinatesViaNaverGeocoder(address) {
     });
 }
 
-// 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
+// 6. In-App Map Real-Time Search Pipeline (Local KB ??Naver Geocoder ??Naver POI API ??AI ??Nominatim)
 async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
     const query = inputEl.value.trim();
     if (!query) {
-        showToast("검색어를 입력해 주세요 📍", "warning");
+        showToast("검?�어�??�력??주세???��", "warning");
         return;
     }
     
     // Clear old search markers and panel
     clearSearchMarkers();
     
-    showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "info");
+    showToast(`'${query}' ?�소�??�이�?지?�에???�색 중입?�다... ?��`, "info");
     
     let combinedResults = [];
 
@@ -993,7 +993,7 @@ async function handleInAppMapSearch() {
         console.warn("[Naver Dynamic Search]", err);
     }
 
-    // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
+    // 4. Naver Address Geocoder (Exact address lookup ??best for road-name addresses)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
@@ -1060,10 +1060,10 @@ async function handleInAppMapSearch() {
 
     if (uniqueResults.length > 0) {
         renderMapSearchResults(uniqueResults);
-        const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
-        showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
+        const proximityNotice = userLoc ? " (???�치 가까운 ???�렬)" : "";
+        showToast(`'${query}' 검??결과 �?${uniqueResults.length}건을 찾았?�니??${proximityNotice} ?��`, "success");
     } else {
-        showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장 이름을 정확히 입력해 보세요 📍`, "warning");
+        showToast(`'${query}' 검??결과�?찾�? 못했?�니?? ?�로�?주소??매장 ?�름???�확???�력??보세???��`, "warning");
     }
 }
 window.handleInAppMapSearch = handleInAppMapSearch;
@@ -1129,7 +1129,7 @@ function searchNaverGeocoder(query) {
                 
                 return {
                     name: displayTitle,
-                    address: shortAddr || "네이버 지도 주소",
+                    address: shortAddr || "?�이�?지??주소",
                     lat: parseFloat(addr.y),
                     lng: parseFloat(addr.x),
                     category: "Other"
@@ -1150,7 +1150,7 @@ const GEMINI_CANDIDATE_MODELS = [
 
 // Core robust Gemini API Caller with automatic model fallback
 async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = true) {
-    if (!geminiApiKey) throw new Error("Gemini API Key가 등록되지 않았습니다.");
+    if (!geminiApiKey) throw new Error("Gemini API Key가 ?�록?��? ?�았?�니??");
 
     let lastError = null;
     
@@ -1190,7 +1190,7 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
 
             const data = await response.json();
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error("AI 응답 데이터가 비어있습니다.");
+            if (!text) throw new Error("AI ?�답 ?�이?��? 비어?�습?�다.");
             return text;
         } catch (err) {
             lastError = err;
@@ -1201,7 +1201,7 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
         }
     }
     
-    throw lastError || new Error("모든 Gemini 모델 호출에 실패했습니다.");
+    throw lastError || new Error("모든 Gemini 모델 ?�출???�패?�습?�다.");
 }
 
 // Dedicated Gemini API call for map geocoding & multi-branch search
@@ -1209,12 +1209,12 @@ async function callGeminiSearchAPI(query) {
     const searchPrompt = `You are a Local Geocoding & Business Search utility for South Korea.
 The user searched for: "${query}"
 Find 4-8 REAL, SPECIFIC, EXISTING company branches, stores, offices, venues, or locations matching "${query}" in South Korea.
-For example, if the query is a company or brand name (such as "민테크", "스타벅스", "CGV"), list 4-8 of their REAL distinct branches/offices/locations across South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
+For example, if the query is a company or brand name (such as "민테??, "?��?벅스", "CGV"), list 4-8 of their REAL distinct branches/offices/locations across South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
 
 Return STRICTLY a JSON array of objects with this format (no markdown, no preamble):
 [
   {
-    "name": "Exact Branch or Location Name in Korean (e.g., 민테크 대전본사, 민테크 서울사무소)",
+    "name": "Exact Branch or Location Name in Korean (e.g., 민테???�?�본?? 민테???�울?�무??",
     "address": "Detailed Real Korean Address",
     "lat": 37.xxxx or 36.xxxx (latitude in South Korea),
     "lng": 127.xxxx or 128.xxxx (longitude in South Korea),
@@ -1267,7 +1267,7 @@ function renderMapSearchResults(results) {
         results.forEach((res, idx) => {
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const distBadge = (res.distanceKm && res.distanceKm !== Infinity) 
-                ? `<span style="font-size:0.68rem; color:var(--color-primary); background:rgba(255,101,132,0.1); border:1px solid rgba(255,101,132,0.25); padding:1px 6px; border-radius:8px; margin-left:6px; font-weight:normal; display:inline-block;">📍 내 위치에서 ${formatDistanceStr(res.distanceKm)}</span>` 
+                ? `<span style="font-size:0.68rem; color:var(--color-primary); background:rgba(255,101,132,0.1); border:1px solid rgba(255,101,132,0.25); padding:1px 6px; border-radius:8px; margin-left:6px; font-weight:normal; display:inline-block;">?�� ???�치?�서 ${formatDistanceStr(res.distanceKm)}</span>` 
                 : '';
 
             cardsHtml += `
@@ -1276,16 +1276,14 @@ function renderMapSearchResults(results) {
                     <div class="search-result-addr">${res.address}</div>
                     <div class="search-result-actions">
                         <button class="btn btn-outline search-btn-sm" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
-                            🎯 위치보기
+                            ?�� ?�치보기
                         </button>
                         <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult('${encodedData}')">
-                            💖 위시리스트
-                        </button>
+                            ?�� ?�시리스??                        </button>
                         <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
-                            📸 다녀온 곳
-                        </button>
+                            ?�� ?��???�?                        </button>
                         <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl('${encodedData}')">
-                            📋 URL 복사
+                            ?�� URL 복사
                         </button>
                     </div>
                 </div>
@@ -1294,8 +1292,8 @@ function renderMapSearchResults(results) {
 
         panel.innerHTML = `
             <div class="search-results-header">
-                <span>📍 네이버 지도 검색 결과 (${results.length}건)</span>
-                <button class="btn-close-results" onclick="clearSearchMarkers()">닫기 ✖</button>
+                <span>?�� ?�이�?지??검??결과 (${results.length}�?</span>
+                <button class="btn-close-results" onclick="clearSearchMarkers()">?�기 ??/button>
             </div>
             <div class="search-results-list">
                 ${cardsHtml}
@@ -1329,14 +1327,12 @@ function renderMapSearchResults(results) {
                         <div style="font-size:0.7rem; color:#FF9F1C; margin-bottom:8px;">${res.address}</div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px; margin-bottom:4px;">
                             <button class="btn btn-primary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
-                                💖 위시리스트
-                            </button>
+                                ?�� ?�시리스??                            </button>
                             <button class="btn btn-secondary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
-                                📸 다녀온 곳
-                            </button>
+                                ?�� ?��???�?                            </button>
                         </div>
                         <button class="btn btn-outline" style="padding:0.3rem 0.4rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="copyNaverMapUrl('${encodedData}')">
-                            📋 네이버 지도 URL 복사
+                            ?�� ?�이�?지??URL 복사
                         </button>
                     </div>
                 `,
@@ -1376,10 +1372,10 @@ function renderMapSearchResults(results) {
                     <strong style="font-size: 0.85rem; color: var(--color-text-high); display:block;">${idx + 1}. ${res.name}</strong>
                     <div style="font-size: 0.7rem; color: var(--color-text-low); margin-bottom:6px;">${res.address}</div>
                     <div style="display:flex; gap:4px; margin-bottom:4px;">
-                        <button class="btn btn-primary" style="padding:0.25rem 0.4rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">💖 위시리스트</button>
-                        <button class="btn btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.7rem; background:#FF9F1C; color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">📸 다녀온 곳</button>
+                        <button class="btn btn-primary" style="padding:0.25rem 0.4rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">?�� ?�시리스??/button>
+                        <button class="btn btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.7rem; background:#FF9F1C; color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">?�� ?��???�?/button>
                     </div>
-                    <button class="btn btn-outline" style="padding:0.25rem 0.4rem; font-size:0.7rem; width:100%;" onclick="copyNaverMapUrl('${encodedData}')">📋 URL 복사</button>
+                    <button class="btn btn-outline" style="padding:0.25rem 0.4rem; font-size:0.7rem; width:100%;" onclick="copyNaverMapUrl('${encodedData}')">?�� URL 복사</button>
                 </div>
             `;
             
@@ -1392,14 +1388,14 @@ function renderMapSearchResults(results) {
     }
 }
 
-// Mock search results removed — all searches now use real Naver POI/Geocoder data only
+// Mock search results removed ??all searches now use real Naver POI/Geocoder data only
 
 // Copy Naver Map direct URL for a search result
 window.copyNaverMapUrl = function(encoded) {
     const data = JSON.parse(decodeURIComponent(encoded));
     const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${data.lat},${data.lng},15,0,0,0,dh`;
     copyShareLinkToClipboard(naverUrl);
-    showToast(`'${data.name}' 네이버 지도 URL 복사 완료! 📋 (신규 추가에 붙여넣어 보세요)`, "success");
+    showToast(`'${data.name}' ?�이�?지??URL 복사 ?�료! ?�� (?�규 추�???붙여?�어 보세??`, "success");
 };
 
 // Save search result directly to Wishlist (with Naver Geocoder coordinate refinement)
@@ -1414,14 +1410,14 @@ window.saveMapSearchResult = async function(encoded) {
             if (refined) {
                 saveLat = refined.lat;
                 saveLng = refined.lng;
-                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) ??Naver Geocoder (${saveLat},${saveLng})`);
             }
         }
 
         const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
         const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
         if (existing) {
-            showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
+            showToast(`'${data.name}'?�(?? ?��? ?�시리스?�에 존재?�니?? ?��`, "info");
             clearSearchMarkers();
             return;
         }
@@ -1433,7 +1429,7 @@ window.saveMapSearchResult = async function(encoded) {
             lat: saveLat,
             lng: saveLng,
             priority: "medium",
-            notes: `${data.address || ''} - AURA 네이버 지도 저장 💖`.trim(),
+            notes: `${data.address || ''} - AURA ?�이�?지???�???��`.trim(),
             isVisited: 0,
             rating: 0,
             review: "",
@@ -1444,7 +1440,7 @@ window.saveMapSearchResult = async function(encoded) {
             createdAt: new Date().toISOString()
         });
         
-        showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
+        showToast(`'${data.name}'???�이???�시리스?�에 ?�았?�니?? ?��`, "success");
         clearSearchMarkers();
         await updateDashboardStats();
         await renderPlacesList();
@@ -1452,7 +1448,7 @@ window.saveMapSearchResult = async function(encoded) {
         
         triggerSyncUpload();
     } catch(err) {
-        showToast("장소 저장 실패: " + err.message, "danger");
+        showToast("?�소 ?�???�패: " + err.message, "danger");
     }
 };
 
@@ -1468,7 +1464,7 @@ window.saveMapSearchResultVisited = async function(encoded) {
             if (refined) {
                 saveLat = refined.lat;
                 saveLng = refined.lng;
-                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+                console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) ??Naver Geocoder (${saveLat},${saveLng})`);
             }
         }
 
@@ -1476,19 +1472,19 @@ window.saveMapSearchResultVisited = async function(encoded) {
         const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
         if (existing) {
             if (existing.isVisited === 1) {
-                showToast(`'${data.name}'은(는) 이미 다녀온 곳에 등록되어 있습니다! 📸`, "info");
+                showToast(`'${data.name}'?�(?? ?��? ?��???곳에 ?�록?�어 ?�습?�다! ?��`, "info");
                 clearSearchMarkers();
                 return;
             } else {
                 await db.places.update(existing.id, {
                     isVisited: 1,
                     rating: 5,
-                    review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
+                    review: "?�브맵을 ?�해 ?�께 ?��???추천 ?�이???�소! ?��",
                     url: existing.url || naverUrl,
                     lat: saveLat,
                     lng: saveLng
                 });
-                showToast(`'${data.name}'을(를) 다녀온 곳으로 변경 완료했습니다! 📸`, "success");
+                showToast(`'${data.name}'??�? ?��???곳으�?변�??�료?�습?�다! ?��`, "success");
                 clearSearchMarkers();
                 await updateDashboardStats();
                 await renderPlacesList();
@@ -1505,10 +1501,10 @@ window.saveMapSearchResultVisited = async function(encoded) {
             lat: saveLat,
             lng: saveLng,
             priority: "medium",
-            notes: `${data.address || ''} - AURA 러브맵 다녀온 곳 📸`.trim(),
+            notes: `${data.address || ''} - AURA ?�브�??��???�??��`.trim(),
             isVisited: 1,
             rating: 5,
-            review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
+            review: "?�브맵을 ?�해 ?�께 ?��???추천 ?�이???�소! ?��",
             expense: 0,
             payer: "A",
             peopleCount: 2,
@@ -1516,14 +1512,14 @@ window.saveMapSearchResultVisited = async function(encoded) {
             createdAt: new Date().toISOString()
         });
         
-        showToast(`'${data.name}'을(를) 함께 다녀온 곳에 기록했습니다! 📸`, "success");
+        showToast(`'${data.name}'??�? ?�께 ?��???곳에 기록?�습?�다! ?��`, "success");
         clearSearchMarkers();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
     } catch(err) {
-        showToast("다녀온 곳 저장 실패: " + err.message, "danger");
+        showToast("?��???�??�???�패: " + err.message, "danger");
     }
 };
 
@@ -1538,7 +1534,7 @@ function handleMapUrlInput(e) {
         const lng = parseFloat(googleMatch[2]);
         document.getElementById("add-place-lat").value = lat;
         document.getElementById("add-place-lng").value = lng;
-        showToast("구글 지도 링크 좌표를 파싱 완료했습니다!", "success");
+        showToast("구�? 지??링크 좌표�??�싱 ?�료?�습?�다!", "success");
         return;
     }
 
@@ -1554,7 +1550,7 @@ function handleMapUrlInput(e) {
         }
         document.getElementById("add-place-lat").value = lat;
         document.getElementById("add-place-lng").value = lng;
-        showToast("네이버 지도 링크에서 좌표 보정 획득 완료!", "success");
+        showToast("?�이�?지??링크?�서 좌표 보정 ?�득 ?�료!", "success");
         return;
     }
 
@@ -1564,7 +1560,7 @@ function handleMapUrlInput(e) {
         const lng = 126.9780 + (Math.random() - 0.5) * 0.02;
         document.getElementById("add-place-lat").value = lat.toFixed(6);
         document.getElementById("add-place-lng").value = lng.toFixed(6);
-        showToast("단축 주소는 보안 제약으로 브라우저 단독 좌표 획득이 안 되어 임시 매핑합니다.", "warning");
+        showToast("?�축 주소??보안 ?�약?�로 브라?��? ?�독 좌표 ?�득?????�어 ?�시 매핑?�니??", "warning");
     }
 }
 
@@ -1618,14 +1614,14 @@ async function handleAddPlaceSubmit(e) {
             createdAt: createdAtStr
         });
 
-        showToast(`${name} 장소가 저장되었습니다 🌸`, "success");
+        showToast(`${name} ?�소가 ?�?�되?�습?�다 ?��`, "success");
         closeAddPlaceModal();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
     } catch (err) {
-        showToast("장소 추가 실패: " + err.message, "danger");
+        showToast("?�소 추�? ?�패: " + err.message, "danger");
     }
 }
 
@@ -1653,14 +1649,14 @@ async function openVisitModal(placeId, placeName) {
 function closeVisitModal() {
     document.getElementById("modal-visit-log").classList.remove("active");
     document.getElementById("form-visit-log").reset();
-    document.getElementById("visit-photo-preview").innerHTML = `<span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>`;
+    document.getElementById("visit-photo-preview").innerHTML = `<span>?�기�??�릭???��?지�??�택?�세?? (?�러 ???�택 가?? ?��</span>`;
 }
 
 function handlePhotoUploadPreview(e) {
     const files = e.target.files;
     const previewContainer = document.getElementById("visit-photo-preview");
     if (!files || files.length === 0) {
-        previewContainer.innerHTML = `<span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>`;
+        previewContainer.innerHTML = `<span>?�기�??�릭???��?지�??�택?�세?? (?�러 ???�택 가?? ?��</span>`;
         return;
     }
     
@@ -1765,7 +1761,7 @@ async function handleVisitLogSubmit(e) {
 
         await db.places.update(id, updateObj);
         
-        showToast("방문 기록 및 파트너 코멘트가 저장되었습니다 💖", "success");
+        showToast("방문 기록 �??�트??코멘?��? ?�?�되?�습?�다 ?��", "success");
         closeVisitModal();
         
         // Proactively upload photos to standalone Firebase DB path if sync active
@@ -1778,7 +1774,7 @@ async function handleVisitLogSubmit(e) {
         updateMapMarkers();
         triggerSyncUpload();
     } catch(err) {
-        showToast("기록 등록 실패: " + err.message, "danger");
+        showToast("기록 ?�록 ?�패: " + err.message, "danger");
     }
 }
 
@@ -1814,7 +1810,7 @@ async function openEditPlaceModal(id) {
     document.getElementById("edit-place-date").value = dateStr;
 
     // Clean address from notes
-    const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^?��\s*메모:\s*/, "").trim();
     document.getElementById("edit-place-address").value = cleanAddress;
 
     // Partner comment labels & values
@@ -1853,7 +1849,7 @@ async function openEditPlaceModal(id) {
                     photoPreview.appendChild(img);
                 });
             } else {
-                photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
+                photoPreview.innerHTML = `<span>?�기�??�릭???��?지�??�택/?�정?�세?? (?�러 ???�택 가?? ?��</span>`;
             }
         }
     } else {
@@ -1871,7 +1867,7 @@ function closeEditPlaceModal() {
     if (form) form.reset();
     const photoPreview = document.getElementById("edit-place-photo-preview");
     if (photoPreview) {
-        photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
+        photoPreview.innerHTML = `<span>?�기�??�릭???��?지�??�택/?�정?�세?? (?�러 ???�택 가?? ?��</span>`;
     }
 }
 window.closeEditPlaceModal = closeEditPlaceModal;
@@ -1884,12 +1880,12 @@ window.quickEditComment = async function(id, partnerKey) {
     const fieldKey = partnerKey === "A" ? "commentA" : "commentB";
     const currentVal = place[fieldKey] || "";
 
-    const inputVal = prompt(`💬 [${partnerName}] 한줄 코멘트를 입력/수정해 주세요:`, currentVal);
+    const inputVal = prompt(`?�� [${partnerName}] ?�줄 코멘?��? ?�력/?�정??주세??`, currentVal);
     if (inputVal !== null) {
         const updateObj = {};
         updateObj[fieldKey] = inputVal.trim();
         await db.places.update(id, updateObj);
-        showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
+        showToast(`[${partnerName}] 코멘?��? ?�?�되?�습?�다! ?��`, "success");
         await renderPlacesList();
         triggerSyncUpload();
     }
@@ -1898,11 +1894,11 @@ window.quickEditComment = async function(id, partnerKey) {
 window.fixEditModalCoordinates = async function() {
     const address = document.getElementById("edit-place-address").value.trim();
     if (!address) {
-        showToast("보정할 주소를 입력해 주세요! 📍", "warning");
+        showToast("보정??주소�??�력??주세?? ?��", "warning");
         return;
     }
     
-    showToast("네이버 공식 지적도 건물 좌표를 조회 중입니다... 🎯", "success");
+    showToast("?�이�?공식 지?�도 건물 좌표�?조회 중입?�다... ?��", "success");
     
     if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
         naver.maps.Service.geocode({ query: address }, (status, response) => {
@@ -1914,16 +1910,16 @@ window.fixEditModalCoordinates = async function() {
                 const id = parseInt(document.getElementById("edit-place-id").value);
                 if (id) {
                     db.places.update(id, { lat: lat, lng: lng }).then(() => {
-                        showToast(`네이버 공식 건물 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})로 100% 정밀 보정되었습니다! 🎯`, "success");
+                        showToast(`?�이�?공식 건물 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})�?100% ?��? 보정?�었?�니?? ?��`, "success");
                         updateMapMarkers();
                     });
                 }
             } else {
-                showToast("해당 주소의 지적도 좌표를 찾지 못했습니다. 도로명 주소를 확인해 주세요 📍", "warning");
+                showToast("?�당 주소??지?�도 좌표�?찾�? 못했?�니?? ?�로�?주소�??�인??주세???��", "warning");
             }
         });
     } else {
-        showToast("네이버 지도 지적도 서비스가 준비 중입니다.", "warning");
+        showToast("?�이�?지??지?�도 ?�비?��? 준�?중입?�다.", "warning");
     }
 };
 
@@ -2000,14 +1996,14 @@ async function handleEditPlaceSubmit(e) {
 
     try {
         await db.places.update(id, updatePayload);
-        showToast(`'${name}' 수정사항이 반영되었습니다! 💖`, "success");
+        showToast(`'${name}' ?�정?�항??반영?�었?�니?? ?��`, "success");
         closeEditPlaceModal();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
     } catch(err) {
-        showToast("수정 실패: " + err.message, "danger");
+        showToast("?�정 ?�패: " + err.message, "danger");
     }
 }
 
@@ -2070,7 +2066,7 @@ window.viewPlaceOnLoveMap = function(lat, lng, encodedName) {
         } else if (map) {
             map.setView([lat, lng], 16);
         }
-        showToast(`'${name}' 위치로 러브 맵이 이동했습니다! 📍`, "success");
+        showToast(`'${name}' ?�치�??�브 맵이 ?�동?�습?�다! ?��`, "success");
     }, 300);
 };
 
@@ -2085,18 +2081,18 @@ function escapeHtml(str) {
 }
 
 function renderCommentsBlock(place) {
-    const textA = place.commentA ? escapeHtml(place.commentA) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
-    const textB = place.commentB ? escapeHtml(place.commentB) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
+    const textA = place.commentA ? escapeHtml(place.commentA) : '<span style="color:var(--color-text-low); font-style:italic;">코멘???�성?�기 ?�️</span>';
+    const textB = place.commentB ? escapeHtml(place.commentB) : '<span style="color:var(--color-text-low); font-style:italic;">코멘???�성?�기 ?�️</span>';
 
     return `
         <div class="place-comments-box" style="font-size:0.78rem; margin-top:0.4rem; margin-bottom:0.6rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
-            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘???�성/?�정 (?�릭)">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">?�� ${partnerAName}</span>
                 <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textA}</div>
                 <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
             </div>
-            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘???�성/?�정 (?�릭)">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">?�� ${partnerBName}</span>
                 <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textB}</div>
                 <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
             </div>
@@ -2133,7 +2129,7 @@ async function renderPlacesList() {
             wishlistContainer.innerHTML = `
                 <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--color-text-med);">
                     <i data-lucide="heart" style="width:40px; height:40px; margin:0 auto 1rem; color:var(--color-primary);"></i>
-                    <p>위시리스트가 비어있어요. 가고 싶은 데이트 스팟을 추가해보세요 🌸</p>
+                    <p>?�시리스?��? 비어?�어?? 가�??��? ?�이???�팟??추�??�보?�요 ?��</p>
                 </div>
             `;
         } else {
@@ -2148,12 +2144,12 @@ async function renderPlacesList() {
                 const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
                 
                 // Clean address
-                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^?��\s*메모:\s*/, "").trim();
 
                 let cardContent = `
                     <div class="place-card-top-actions">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="?�정 (?�️)"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="??�� (?���?"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
@@ -2162,12 +2158,11 @@ async function renderPlacesList() {
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> <span style="background:rgba(255,101,132,0.12); color:var(--color-primary); padding:2px 6px; border-radius:6px; font-weight:700;">📅 날짜 미정 🌸</span></div>`}
+                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 ?�정??</strong> ${dateStr}</div>` : `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 ?�정??</strong> <span style="background:rgba(255,101,132,0.12); color:var(--color-primary); padding:2px 6px; border-radius:6px; font-weight:700;">?�� ?�짜 미정 ?��</span></div>`}
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '?�록??주소 ?�보'}</div>
                             <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
-                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
-                            </button>
+                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지?�에??보기 ?���?                            </button>
                         </div>
                     </div>
                 `;
@@ -2176,9 +2171,9 @@ async function renderPlacesList() {
 
                 cardContent += `
                     <div class="place-actions">
-                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
+                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> ?�이�?지??/a>` : ''}
                         <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, '${place.name}')">
-                            <i data-lucide="check"></i> 방문 완료 📸
+                            <i data-lucide="check"></i> 방문 ?�료 ?��
                         </button>
                     </div>
                 `;
@@ -2216,7 +2211,7 @@ async function renderPlacesList() {
             visitedContainer.innerHTML = `
                 <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--color-text-med);">
                     <i data-lucide="smile" style="width:40px; height:40px; margin:0 auto 1rem; color:var(--color-secondary);"></i>
-                    <p>아직 다녀온 데이트 장소가 없어요. 데이트를 다녀온 후 후기를 남겨보세요! 💕</p>
+                    <p>?�직 ?��????�이???�소가 ?�어?? ?�이?��? ?��??????�기�??�겨보세?? ?��</p>
                 </div>
             `;
         } else {
@@ -2231,12 +2226,12 @@ async function renderPlacesList() {
                 const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
                 
                 // Clean address
-                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^?��\s*메모:\s*/, "").trim();
 
                 let cardContent = `
                     <div class="place-card-top-actions">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
+                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="?�정 (?�️)"><i data-lucide="edit-3"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="??�� (?���?"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
                         <span class="place-category-badge badge-${(place.category || 'other').toLowerCase()}">${place.category}</span>
@@ -2244,12 +2239,11 @@ async function renderPlacesList() {
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
+                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문??</strong> ${dateStr}</div>` : ''}
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '?�록??주소 ?�보'}</div>
                             <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
-                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
-                            </button>
+                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지?�에??보기 ?���?                            </button>
                         </div>
                     </div>
                 `;
@@ -2261,7 +2255,7 @@ async function renderPlacesList() {
                 
                 let payerName = partnerAName;
                 if (place.payer === "B") payerName = partnerBName;
-                else if (place.payer === "DUTCH") payerName = "반반 더치페이 🤝";
+                else if (place.payer === "DUTCH") payerName = "반반 ?�치?�이 ?��";
                 
                 cardContent += renderCommentsBlock(place);
 
@@ -2272,7 +2266,7 @@ async function renderPlacesList() {
                     ${place.review ? `<p class="visited-review-snippet" style="margin-top:0.3rem; margin-bottom:0.5rem;">"${escapeHtml(place.review)}"</p>` : ''}
                     <div class="place-meta-item" style="font-size:0.78rem;">
                         <i data-lucide="coins"></i>
-                        <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
+                        <span>결제?? <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
                     </div>
                 `;
 
@@ -2283,12 +2277,12 @@ async function renderPlacesList() {
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <button type="button" class="btn-toggle-card-photos" onclick="toggleCardPhotos(${place.id})" style="font-size:0.72rem; padding:0.2rem 0.55rem; border-radius:10px; background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--color-primary); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
                                     <i data-lucide="image" style="width:13px; height:13px;"></i>
-                                    <span id="toggle-photo-text-${place.id}">추억 사진 (${photoList.length}장) 숨기기 🔽</span>
+                                    <span id="toggle-photo-text-${place.id}">추억 ?�진 (${photoList.length}?? ?�기�??��</span>
                                 </button>
                             </div>
                             <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
                                 ${photoList.map((pSrc, pIdx) => `
-                                    <img src="${pSrc}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+                                    <img src="${pSrc}" alt="추억 ?�진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
                                 `).join('')}
                             </div>
                         </div>
@@ -2313,7 +2307,7 @@ async function renderPlacesList() {
 }
 
 async function deletePlace(id, name) {
-    if (!confirm(`'${name}' 장소를 영구히 삭제하시겠습니까?`)) return;
+    if (!confirm(`'${name}' ?�소�??�구????��?�시겠습?�까?`)) return;
     
     try {
         // Tombstone update (Soft delete flag to guarantee multi-device sync deletion)
@@ -2334,13 +2328,13 @@ async function deletePlace(id, name) {
             }
         }
 
-        showToast("장소가 영구 삭제되었습니다.", "success");
+        showToast("?�소가 ?�구 ??��?�었?�니??", "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
     } catch(err) {
-        showToast("삭제 오류: " + err.message, "danger");
+        showToast("??�� ?�류: " + err.message, "danger");
     }
 }
 
@@ -2362,7 +2356,7 @@ async function updateDashboardStats() {
         document.getElementById("next-date-title").textContent = upcoming.name;
         document.getElementById("next-date-dday").textContent = "Wishlist";
     } else {
-        document.getElementById("next-date-title").textContent = "아직 약속이 없어요 😢";
+        document.getElementById("next-date-title").textContent = "?�직 ?�속???�어???��";
         document.getElementById("next-date-dday").textContent = "D-Day";
     }
     
@@ -2405,19 +2399,19 @@ async function updateDashboardStats() {
     
     const resultTextEl = document.getElementById("dutchpay-result-text");
     if (paidByA === 0 && paidByB === 0) {
-        resultTextEl.textContent = "정산할 내역이 없습니다 💖";
+        resultTextEl.textContent = "?�산???�역???�습?�다 ?��";
     } else {
         const total = paidByA + paidByB;
         const half = total / 2;
         
         if (paidByA > paidByB) {
             const diff = half - paidByB;
-            resultTextEl.innerHTML = `<strong>${partnerBName}</strong> ➔ <strong>${partnerAName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> 송금해 주세요! 💌`;
+            resultTextEl.innerHTML = `<strong>${partnerBName}</strong> ??<strong>${partnerAName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> ?�금??주세?? ?��`;
         } else if (paidByB > paidByA) {
             const diff = half - paidByA;
-            resultTextEl.innerHTML = `<strong>${partnerAName}</strong> ➔ <strong>${partnerBName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> 송금해 주세요! 💌`;
+            resultTextEl.innerHTML = `<strong>${partnerAName}</strong> ??<strong>${partnerBName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> ?�금??주세?? ?��`;
         } else {
-            resultTextEl.textContent = "완벽하게 1/N 정산 완료! 💖";
+            resultTextEl.textContent = "?�벽?�게 1/N ?�산 ?�료! ?��";
         }
     }
 
@@ -2428,10 +2422,10 @@ async function updateDashboardStats() {
         if (visitedLogs.length > 0) {
             latestReviewEl.innerHTML = `
                 <strong>${visitedLogs[0].name}</strong>: 
-                "${visitedLogs[0].review || '소감 없음'}" <span style="display:block; font-size:0.75rem; margin-top:4px; color:var(--color-text-low);">${visitedLogs[0].rating || 5}점 ★</span>
+                "${visitedLogs[0].review || '?�감 ?�음'}" <span style="display:block; font-size:0.75rem; margin-top:4px; color:var(--color-text-low);">${visitedLogs[0].rating || 5}????/span>
             `;
         } else {
-            latestReviewEl.textContent = `"아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"`;
+            latestReviewEl.textContent = `"?�직 ?�록???��???�?로그가 ?�습?�다. ?�이???�소�??��??????�감???�겨보세??"`;
         }
     }
 }
@@ -2450,8 +2444,8 @@ async function startCloudSyncLoop() {
     if (!syncRoomId) {
         if (pulse) pulse.style.display = "none";
         if (mobilePulse) mobilePulse.style.display = "none";
-        if (statusText) statusText.innerHTML = `실시간 동기화 연결하기 🔗`;
-        if (mobileStatusText) mobileStatusText.textContent = "동기화 🔗";
+        if (statusText) statusText.innerHTML = `?�시�??�기???�결?�기 ?��`;
+        if (mobileStatusText) mobileStatusText.textContent = "?�기???��";
         if (banner) {
             banner.style.background = "rgba(124, 92, 104, 0.1)";
             banner.style.color = "var(--color-text-med)";
@@ -2462,8 +2456,8 @@ async function startCloudSyncLoop() {
 
     if (pulse) pulse.style.display = "inline-block";
     if (mobilePulse) mobilePulse.style.display = "inline-block";
-    if (statusText) statusText.innerHTML = `연결 룸: <strong>${syncRoomId}</strong> 🔗`;
-    if (mobileStatusText) mobileStatusText.innerHTML = `룸:${syncRoomId} 🔗`;
+    if (statusText) statusText.innerHTML = `?�결 �? <strong>${syncRoomId}</strong> ?��`;
+    if (mobileStatusText) mobileStatusText.innerHTML = `�?${syncRoomId} ?��`;
     if (banner) {
         banner.style.background = "rgba(255, 101, 132, 0.1)";
         banner.style.color = "var(--color-primary)";
@@ -2685,7 +2679,7 @@ function triggerSyncUpload() {
     }, 50);
 }
 
-// ── Firebase Photos REST API sync ──
+// ?�?� Firebase Photos REST API sync ?�?�
 async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
     if (!syncRoomId || !base64ImagesArray || base64ImagesArray.length === 0) return;
     try {
@@ -2774,11 +2768,11 @@ async function handleChatSubmit(e) {
     appendChatMessage(query, "user");
 
     if (!geminiApiKey) {
-        appendChatMessage("죄송해요! Gemini API Key가 등록되어 있지 않아요. [설정] 탭으로 가서 API Key를 저장한 후 다시 말해 주세요 🌸", "bot");
+        appendChatMessage("죄송?�요! Gemini API Key가 ?�록?�어 ?��? ?�아?? [?�정] ??���?가??API Key�??�?�한 ???�시 말해 주세???��", "bot");
         return;
     }
 
-    const thinkingId = appendChatMessage("생각하는 중입니다... 러블리 코스를 짜고 있어요! ✨", "bot", true);
+    const thinkingId = appendChatMessage("?�각?�는 중입?�다... ?�블�?코스�?짜고 ?�어?? ??, "bot", true);
     
     try {
         const responseText = await callGeminiAPI(query);
@@ -2794,41 +2788,41 @@ async function handleChatSubmit(e) {
         removeChatBubble(thinkingId);
         const errLower = (err.message || "").toLowerCase();
         if (errLower.includes("quota") || errLower.includes("exceeded") || errLower.includes("429") || errLower.includes("resource_exhausted")) {
-            showToast("Gemini API 무료 사용량 한도가 초과되었습니다. [에이전트 설정] 탭에서 유효한 키를 확인하시거나 잠시 후 다시 시도해 주세요! 🔑", "warning");
+            showToast("Gemini API 무료 ?�용???�도가 초과?�었?�니?? [?�이?�트 ?�정] ??��???�효???��? ?�인?�시거나 ?�시 ???�시 ?�도??주세?? ?��", "warning");
             
             const fallbackCourse = {
-                itinerary_title: "🌸 AURA 러블리 시그니처 데이트 코스",
-                description: "(Gemini API 일일 사용량 한도 초과로 AURA 시그니처 추천 코스를 안심 제공해 드립니다!) 연남동 경의선 숲길을 손잡고 걷는 낭만적인 데이트 코스입니다.",
+                itinerary_title: "?�� AURA ?�블�??�그?�처 ?�이??코스",
+                description: "(Gemini API ?�일 ?�용???�도 초과�?AURA ?�그?�처 추천 코스�??�심 ?�공???�립?�다!) ?�남??경의???�길???�잡�?걷는 ??��?�인 ?�이??코스?�니??",
                 places: [
                     {
-                        name: "연남동 경의선 숲길 공원",
+                        name: "?�남??경의???�길 공원",
                         category: "Park",
                         lat: 37.5612,
                         lng: 126.9248,
-                        notes: "손잡고 조용히 대화하며 산책하기 좋은 오솔길 🌿",
+                        notes: "?�잡�?조용???�?�하�??�책?�기 좋�? ?�솔�??��",
                         estimatedCost: 0
                     },
                     {
-                        name: "연남동 테일러커피",
+                        name: "?�남???�일?�커??,
                         category: "Cafe",
                         lat: 37.5618,
                         lng: 126.9255,
-                        notes: "달콤한 아인슈페너 커피와 시그니처 디저트가 일품인 카페 ☕",
+                        notes: "?�콤???�인?�페??커피?� ?�그?�처 ?��??��? ?�품??카페 ??,
                         estimatedCost: 18000
                     },
                     {
-                        name: "연남동 카쿠시타",
+                        name: "?�남??카쿠?��?",
                         category: "Restaurant",
                         lat: 37.5624,
                         lng: 126.9262,
-                        notes: "분위기 좋은 일식 명란 크림 파스타 & 와인 다이닝 🍝🍷",
+                        notes: "분위�?좋�? ?�식 명�? ?�림 ?�스?� & ?�???�이???��?��",
                         estimatedCost: 45000
                     }
                 ]
             };
             renderAICourseCard(fallbackCourse);
         } else {
-            appendChatMessage("AI 코스 실시간 추천에 문제가 생겼어요: " + err.message, "bot");
+            appendChatMessage("AI 코스 ?�시�?추천??문제가 ?�겼?�요: " + err.message, "bot");
         }
     }
 }
@@ -2915,7 +2909,7 @@ function renderAICourseCard(course) {
                 <div class="itinerary-step-desc">${place.notes}</div>
                 <div class="itinerary-transit">
                     <i data-lucide="coins" style="width:12px; height:12px;"></i>
-                    <span>예상 비용: ${formatCurrency(place.estimatedCost)}</span>
+                    <span>?�상 비용: ${formatCurrency(place.estimatedCost)}</span>
                 </div>
             </div>
         `;
@@ -2923,7 +2917,7 @@ function renderAICourseCard(course) {
 
     bubbleWrapper.innerHTML = `
         <div class="msg-bubble" style="width: 100%;">
-            <div style="margin-bottom: 0.5rem;">🌸 <strong>AI 플래너가 추천하는 데이트 코스</strong></div>
+            <div style="margin-bottom: 0.5rem;">?�� <strong>AI ?�래?��? 추천?�는 ?�이??코스</strong></div>
             <div>${course.description}</div>
             
             <div class="itinerary-card" id="${uniqueCourseId}">
@@ -2935,12 +2929,11 @@ function renderAICourseCard(course) {
                     ${placesHtml}
                 </div>
                 <div class="itinerary-meta">
-                    <span>추천 데이트 코스 장소: ${course.places.length}곳</span>
+                    <span>추천 ?�이??코스 ?�소: ${course.places.length}�?/span>
                 </div>
                 <div style="margin-top:0.5rem;">
                     <button class="btn btn-primary" style="width:100%; justify-content:center; padding:0.5rem;" onclick="saveAICourseToWishlist('${encodeURIComponent(JSON.stringify(course.places))}')">
-                        <i data-lucide="folder-heart"></i> 이 코스 전체 보관함에 저장
-                    </button>
+                        <i data-lucide="folder-heart"></i> ??코스 ?�체 보�??�에 ?�??                    </button>
                 </div>
             </div>
         </div>
@@ -2977,14 +2970,14 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
             savedCount++;
         }
         
-        showToast(`${savedCount}개의 데이트 코스가 보관함(위시리스트)에 추가되었습니다!`, "success");
+        showToast(`${savedCount}개의 ?�이??코스가 보�????�시리스????추�??�었?�니??`, "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload();
         switchTab("wishlist");
     } catch(err) {
-        showToast("코스 저장 실패: " + err.message, "danger");
+        showToast("코스 ?�???�패: " + err.message, "danger");
     }
 };
 
@@ -3017,7 +3010,7 @@ async function saveSettings() {
     document.getElementById("budget-limit-text").textContent = formatCurrency(budgetLimit);
     updatePartnerNamesUI();
     
-    showToast("AURA 환경 설정이 안전하게 저장되었습니다 💖", "success");
+    showToast("AURA ?�경 ?�정???�전?�게 ?�?�되?�습?�다 ?��", "success");
     checkApiKeyAlert();
     await updateDashboardStats();
     await renderPlacesList();
@@ -3043,7 +3036,7 @@ async function exportData() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showToast("데이터 백업 파일 다운로드 중...", "success");
+    showToast("?�이??백업 ?�일 ?�운로드 �?..", "success");
 }
 
 function importData(e) {
@@ -3054,7 +3047,7 @@ function importData(e) {
     reader.onload = async function(event) {
         try {
             const places = JSON.parse(event.target.result);
-            if (!Array.isArray(places)) throw new Error("유효한 데이터 리스트가 아닙니다.");
+            if (!Array.isArray(places)) throw new Error("?�효???�이??리스?��? ?�닙?�다.");
             
             await db.places.clear();
             await db.places.bulkAdd(places.map(p => {
@@ -3062,13 +3055,13 @@ function importData(e) {
                 return p;
             }));
             
-            showToast("보관함 복원이 무사히 완료되었습니다! 🌸", "success");
+            showToast("보�???복원??무사???�료?�었?�니?? ?��", "success");
             await updateDashboardStats();
             await renderPlacesList();
             updateMapMarkers();
             triggerSyncUpload();
         } catch(err) {
-            showToast("가져오기 실패: " + err.message, "danger");
+            showToast("가?�오�??�패: " + err.message, "danger");
         }
     };
     reader.readAsText(file);
@@ -3078,7 +3071,7 @@ function importData(e) {
 
 // 15. UI Helpers
 function formatCurrency(amount) {
-    return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount).replace("₩", "") + "원";
+    return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount).replace("??, "") + "??;
 }
 
 function showToast(message, type = "success") {
@@ -3192,11 +3185,11 @@ async function downloadAllPhotos() {
     });
     
     if (allPhotos.length === 0) {
-        showToast("다운로드할 사진이 없습니다 📷", "warning");
+        showToast("?�운로드???�진???�습?�다 ?��", "warning");
         return;
     }
     
-    showToast("사진 압축 및 다운로드를 시작합니다...", "info");
+    showToast("?�진 ?�축 �??�운로드�??�작?�니??..", "info");
     
     try {
         const zip = new JSZip();
@@ -3214,9 +3207,9 @@ async function downloadAllPhotos() {
         downloadAnchor.click();
         document.body.removeChild(downloadAnchor);
         
-        showToast("모든 사진 다운로드 완료! 💖", "success");
+        showToast("모든 ?�진 ?�운로드 ?�료! ?��", "success");
     } catch (e) {
-        showToast("다운로드 중 오류가 발생했습니다: " + e.message, "danger");
+        showToast("?�운로드 �??�류가 발생?�습?�다: " + e.message, "danger");
         console.error("ZIP download failed:", e);
     }
 }
@@ -3244,7 +3237,7 @@ function sanitizePlaceObject(p) {
     if (!p) return p;
     const cleanStr = (str) => {
         if (typeof str !== 'string' || !str) return str;
-        if (str.includes("이선아") || str.includes("선아") || str.includes("위시리스트 충족") || str.includes("바보")) {
+        if (str.includes("?�선??) || str.includes("?�아") || str.includes("?�시리스??충족") || str.includes("바보")) {
             return "";
         }
         return str;
@@ -3253,10 +3246,10 @@ function sanitizePlaceObject(p) {
     p.commentA = cleanStr(p.commentA);
     p.commentB = cleanStr(p.commentB);
     if (p.notes && typeof p.notes === 'string') {
-        if (p.notes.includes("이선아") || p.notes.includes("선아") || p.notes.includes("위시리스트 충족") || p.notes.includes("바보")) {
-            p.notes = p.notes.replace(/이선아의 위시리스트 충족!?/gi, "")
-                             .replace(/물멍하기 좋은 카페 선아 바보/gi, "")
-                             .replace(/선아/gi, "")
+        if (p.notes.includes("?�선??) || p.notes.includes("?�아") || p.notes.includes("?�시리스??충족") || p.notes.includes("바보")) {
+            p.notes = p.notes.replace(/?�선?�의 ?�시리스??충족!?/gi, "")
+                             .replace(/물멍?�기 좋�? 카페 ?�아 바보/gi, "")
+                             .replace(/?�아/gi, "")
                              .replace(/바보/gi, "")
                              .trim();
         }
@@ -3314,10 +3307,10 @@ async function cleanJunkData(showToastMsg = false) {
             triggerSyncUpload();
 
             if (showToastMsg) {
-                showToast(`${removedCount}개의 유령/삭제/중복 데이터가 완벽하게 정제 및 클라우드 소멸되었습니다! 🧹`, "success");
+                showToast(`${removedCount}개의 ?�령/??��/중복 ?�이?��? ?�벽?�게 ?�제 �??�라?�드 ?�멸?�었?�니?? ?��`, "success");
             }
         } else if (showToastMsg) {
-            showToast("이상 데이터가 없으며 목록이 매우 깨끗합니다! 💖", "info");
+            showToast("?�상 ?�이?��? ?�으�?목록??매우 깨끗?�니?? ?��", "info");
         }
     } catch(e) {
         console.error("Clean junk data error:", e);
@@ -3345,10 +3338,10 @@ window.toggleCardPhotos = function(placeId) {
     
     if (container.style.display === "none") {
         container.style.display = "flex";
-        if (textEl) textEl.textContent = textEl.textContent.replace("보기 🔼", "숨기기 🔽");
+        if (textEl) textEl.textContent = textEl.textContent.replace("보기 ?��", "?�기�??��");
     } else {
         container.style.display = "none";
-        if (textEl) textEl.textContent = textEl.textContent.replace("숨기기 🔽", "보기 🔼");
+        if (textEl) textEl.textContent = textEl.textContent.replace("?�기�??��", "보기 ?��");
     }
 };
 
@@ -3384,7 +3377,7 @@ window.goTodayCalendar = function() {
 async function renderCalendar() {
     const monthTitle = document.getElementById("calendar-month-title");
     if (monthTitle) {
-        monthTitle.textContent = `${currentCalendarYear}년 ${currentCalendarMonth + 1}월`;
+        monthTitle.textContent = `${currentCalendarYear}??${currentCalendarMonth + 1}??;
     }
 
     const gridContainer = document.getElementById("calendar-days-grid");
@@ -3438,18 +3431,18 @@ async function renderCalendar() {
 
         let badgesHtml = "";
         if (visitedPlaces.length > 0 || wishlistPlaces.length > 0) {
-            badgesHtml += `<div style="display:flex; flex-direction:column; gap:2px; margin-top:2px;">`;
+            badgesHtml += `<div class="cal-badges-container">`;
             if (visitedPlaces.length > 0) {
                 badgesHtml += `
-                    <button class="cal-btn-visited" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'visited')">
-                        🌸 다녀옴 (${visitedPlaces.length})
+                    <button class="cal-btn-visited">
+                        ?�� ?��???(${visitedPlaces.length})
                     </button>
                 `;
             }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
-                    <button class="cal-btn-wishlist" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'wishlist')">
-                        💌 위시 (${wishlistPlaces.length})
+                    <button class="cal-btn-wishlist">
+                        ?�� ?�시 (${wishlistPlaces.length})
                     </button>
                 `;
             }
@@ -3485,7 +3478,7 @@ function renderSelectedDateDetails(dateStr, places) {
     if (!titleEl || !itemsEl) return;
 
     const dateObj = new Date(dateStr);
-    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록` : `${dateStr} 데이트 기록`;
+    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}??${dateObj.getMonth() + 1}??${dateObj.getDate()}???�이??기록` : `${dateStr} ?�이??기록`;
     titleEl.textContent = formattedTitle;
 
     const datePlaces = places.filter(p => {
@@ -3499,7 +3492,7 @@ function renderSelectedDateDetails(dateStr, places) {
     if (datePlaces.length === 0) {
         itemsEl.innerHTML = `
             <div style="text-align:center; padding:1.2rem; color:var(--color-text-med); font-size:0.85rem;">
-                이 날짜에는 아직 등록된 데이트 일정이나 다녀온 기록이 없습니다. 🌸
+                ???�짜?�는 ?�직 ?�록???�이???�정?�나 ?��???기록???�습?�다. ?��
             </div>
         `;
         return;
@@ -3508,7 +3501,7 @@ function renderSelectedDateDetails(dateStr, places) {
     itemsEl.innerHTML = "";
     datePlaces.forEach(p => {
         const isVis = p.isVisited === 1;
-        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">🌸 다녀온 곳</span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(162,155,254,0.15); color:#6C5CE7; font-weight:700;">💌 위시리스트</span>`;
+        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">?�� ?��???�?/span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(162,155,254,0.15); color:#6C5CE7; font-weight:700;">?�� ?�시리스??/span>`;
 
         const div = document.createElement("div");
         div.style.cssText = `
@@ -3531,11 +3524,11 @@ function renderSelectedDateDetails(dateStr, places) {
                     <strong style="font-size:0.95rem; color:var(--color-text-dark); word-break:break-all;">${escapeHtml(p.name)}</strong>
                     <span style="font-size:0.75rem; color:var(--color-text-med); white-space:nowrap;">(${p.category})</span>
                 </div>
-                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.75rem; height:28px; border-color:var(--color-primary); color:var(--color-primary); flex-shrink:0; margin-left:8px;" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
+                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.75rem; height:28px; border-color:var(--color-primary); color:var(--color-primary); flex-shrink:0; margin-left:8px;" onclick="openEditPlaceModal(${p.id})">?�️ ?�정</button>
             </div>
             ${p.commentA || p.commentB ? `
             <div style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.8); padding:0.6rem; border-radius:8px; font-size:0.82rem; color:#444; border:1px dashed rgba(255,101,132,0.3); word-break:break-word;">
-                💬 "${escapeHtml(p.commentA || p.commentB)}"
+                ?�� "${escapeHtml(p.commentA || p.commentB)}"
             </div>` : ''}
         `;
         itemsEl.appendChild(div);
@@ -3569,14 +3562,14 @@ async function renderGallery() {
     });
 
     if (countEl) {
-        countEl.textContent = `함께 다녀온 ${galleryPlaces.length}곳의 장소에서 기록된 총 ${totalPhotoCount}장의 소중한 커플 추억 💖`;
+        countEl.textContent = `?�께 ?��???${galleryPlaces.length}곳의 ?�소?�서 기록??�?${totalPhotoCount}?�의 ?�중??커플 추억 ?��`;
     }
 
     if (galleryPlaces.length === 0) {
         container.innerHTML = `
             <div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:var(--color-text-med);">
                 <i data-lucide="camera" style="width:48px; height:48px; opacity:0.3; margin-bottom:0.8rem;"></i>
-                <p style="font-size:0.95rem;">아직 등록된 추억 사진이 없습니다.<br>'함께 다녀온 곳'의 장소 기록에 예쁜 추억 사진을 업로드해 보세요! 🌸</p>
+                <p style="font-size:0.95rem;">?�직 ?�록??추억 ?�진???�습?�다.<br>'?�께 ?��???�????�소 기록???�쁜 추억 ?�진???�로?�해 보세?? ?��</p>
             </div>
         `;
         lucide.createIcons();
@@ -3598,23 +3591,23 @@ async function renderGallery() {
             <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">
                 <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
                 <div class="gallery-img-overlay">
-                    <span>🔍 추억 갤러리 감상하기</span>
+                    <span>?�� 추억 갤러�?감상?�기</span>
                 </div>
-                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3); pointer-events:none;">🖼️ ${photoCount}장</span>` : ''}
+                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3); pointer-events:none;">?���?${photoCount}??/span>` : ''}
             </div>
             <div class="gallery-card-body">
                 <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
-                    <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
+                    <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}????/span>
                 </div>
-                ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
+                ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">?�� "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
                 <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:auto; padding-top:4px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
-                        ✏️ 사진 수정 / 추가
+                        ?�️ ?�진 ?�정 / 추�?
                     </button>
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06); justify-content:center;" onclick="downloadPlacePhotosZip(${p.id})">
-                        📥 전체 사진 다운로드
+                        ?�� ?�체 ?�진 ?�운로드
                     </button>
                 </div>
             </div>
@@ -3652,8 +3645,8 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     activePlaceInfo = {
         id: place.id,
         name: place.name,
-        meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
-        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
+        meta: `${dateStr} · ${place.rating || 5}????· (${place.category})`,
+        comments: place.commentA || place.commentB ? `?�� ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
     };
 
     updateGallerySliderUI();
@@ -3722,10 +3715,10 @@ window.closeGallerySliderModal = function() {
 // Delete Current Photo in Lightbox Slider Modal
 window.deleteCurrentSliderPhoto = async function() {
     if (!activePlaceInfo || !activePlaceInfo.id) {
-        showToast("삭제할 장소 정보가 없습니다.", "warning");
+        showToast("??��???�소 ?�보가 ?�습?�다.", "warning");
         return;
     }
-    if (!confirm("이 추억 사진을 삭제하시겠습니까?")) return;
+    if (!confirm("??추억 ?�진????��?�시겠습?�까?")) return;
 
     const placeId = activePlaceInfo.id;
     const place = await db.places.get(placeId);
@@ -3745,7 +3738,7 @@ window.deleteCurrentSliderPhoto = async function() {
         await uploadPhotoToCloud(placeId, photoList);
     }
 
-    showToast("사진이 삭제되었습니다.", "success");
+    showToast("?�진????��?�었?�니??", "success");
 
     await updateDashboardStats();
     await renderPlacesList();
@@ -3770,41 +3763,41 @@ window.openApiGuideModal = function(type) {
     const bodyEl = document.getElementById("modal-api-guide-body");
     
     if (type === 'gemini') {
-        if (titleEl) titleEl.textContent = "🤖 Gemini API Key 발급 및 설정 가이드";
+        if (titleEl) titleEl.textContent = "?�� Gemini API Key 발급 �??�정 가?�드";
         if (bodyEl) {
             bodyEl.innerHTML = `
                 <div style="background:rgba(255,101,132,0.06); padding:0.85rem; border-radius:14px; border:1px solid rgba(255,101,132,0.2); margin-bottom:0.9rem;">
-                    <strong>✨ Gemini API Key란?</strong><br>
-                    AURA 러블리 AI 플래너가 맞춤 데이트 코스를 추천할 때 사용되는 100% 무료 Google AI 키입니다.
+                    <strong>??Gemini API Key?�?</strong><br>
+                    AURA ?�블�?AI ?�래?��? 맞춤 ?�이??코스�?추천?????�용?�는 100% 무료 Google AI ?�입?�다.
                 </div>
-                <h4 style="margin:0.8rem 0 0.4rem 0; color:var(--color-primary);">📌 발급 절차 (1분 소요 / 100% 무료)</h4>
+                <h4 style="margin:0.8rem 0 0.4rem 0; color:var(--color-primary);">?�� 발급 ?�차 (1�??�요 / 100% 무료)</h4>
                 <ol style="padding-left:1.2rem; margin:0;">
                     <li style="margin-bottom:0.4rem;">
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--color-primary); font-weight:700; text-decoration:underline;">Google AI Studio API Key 발급 페이지 (클릭)</a>에 접속합니다.
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--color-primary); font-weight:700; text-decoration:underline;">Google AI Studio API Key 발급 ?�이지 (?�릭)</a>???�속?�니??
                     </li>
-                    <li style="margin-bottom:0.4rem;">구글 계정으로 로그인 후 <strong>[Create API key]</strong> 버튼을 클릭합니다.</li>
-                    <li style="margin-bottom:0.4rem;">발급된 <code>AIza...</code> 형태의 키 문자열을 복사합니다.</li>
-                    <li>설정 탭의 <strong>Gemini API Key</strong> 입력란에 붙여넣고 하단 <strong>[설정 저장하기]</strong>를 눌러주세요!</li>
+                    <li style="margin-bottom:0.4rem;">구�? 계정?�로 로그????<strong>[Create API key]</strong> 버튼???�릭?�니??</li>
+                    <li style="margin-bottom:0.4rem;">발급??<code>AIza...</code> ?�태????문자?�을 복사?�니??</li>
+                    <li>?�정 ??�� <strong>Gemini API Key</strong> ?�력?�??붙여?�고 ?�단 <strong>[?�정 ?�?�하�?</strong>�??�러주세??</li>
                 </ol>
             `;
         }
     } else {
-        if (titleEl) titleEl.textContent = "🗺️ 네이버 지도 Client ID 발급 및 설정 가이드";
+        if (titleEl) titleEl.textContent = "?���??�이�?지??Client ID 발급 �??�정 가?�드";
         if (bodyEl) {
             bodyEl.innerHTML = `
                 <div style="background:rgba(162,155,254,0.08); padding:0.85rem; border-radius:14px; border:1px solid rgba(162,155,254,0.25); margin-bottom:0.9rem;">
-                    <strong>🗺️ 네이버 지도 Client ID란?</strong><br>
-                    국내 주요 맛집/카페 장소 검색 및 고화질 네이버 벡터 지도를 로드하기 위한 클라우드 Key입니다. (미입력 시 글로벌 기본 지도로 작동합니다)
+                    <strong>?���??�이�?지??Client ID?�?</strong><br>
+                    �?�� 주요 맛집/카페 ?�소 검??�?고화�??�이�?벡터 지?��? 로드?�기 ?�한 ?�라?�드 Key?�니?? (미입????글로벌 기본 지?�로 ?�동?�니??
                 </div>
-                <h4 style="margin:0.8rem 0 0.4rem 0; color:#6C5CE7;">📌 발급 절차 (네이버 회원 무료)</h4>
+                <h4 style="margin:0.8rem 0 0.4rem 0; color:#6C5CE7;">?�� 발급 ?�차 (?�이�??�원 무료)</h4>
                 <ol style="padding-left:1.2rem; margin:0;">
                     <li style="margin-bottom:0.4rem;">
-                        <a href="https://www.ncloud.com" target="_blank" style="color:#6C5CE7; font-weight:700; text-decoration:underline;">네이버 클라우드 플랫폼 (ncloud.com) (클릭)</a>에 접속하여 로그인합니다.
+                        <a href="https://www.ncloud.com" target="_blank" style="color:#6C5CE7; font-weight:700; text-decoration:underline;">?�이�??�라?�드 ?�랫??(ncloud.com) (?�릭)</a>???�속?�여 로그?�합?�다.
                     </li>
-                    <li style="margin-bottom:0.4rem;">우측 상단 <strong>[콘솔]</strong> ➔ 좌측 메뉴 <strong>[AI·NAVER API]</strong> ➔ <strong>[Application 등록]</strong>을 클릭합니다.</li>
-                    <li style="margin-bottom:0.4rem;">서비스 중 <strong>Web Dynamic Map</strong> 항목을 체크합니다.</li>
-                    <li style="margin-bottom:0.4rem;">서비스 URL에 <code>https://soulrsp.github.io</code> 및 <code>http://localhost</code>를 추가 등록합니다.</li>
-                    <li>발급 완료 후 <strong>Client ID</strong> (영문/숫자 조합)를 복사하여 설정 탭에 붙여넣어 주세요!</li>
+                    <li style="margin-bottom:0.4rem;">?�측 ?�단 <strong>[콘솔]</strong> ??좌측 메뉴 <strong>[AI·NAVER API]</strong> ??<strong>[Application ?�록]</strong>???�릭?�니??</li>
+                    <li style="margin-bottom:0.4rem;">?�비??�?<strong>Web Dynamic Map</strong> ??��??체크?�니??</li>
+                    <li style="margin-bottom:0.4rem;">?�비??URL??<code>https://soulrsp.github.io</code> �?<code>http://localhost</code>�?추�? ?�록?�니??</li>
+                    <li>발급 ?�료 ??<strong>Client ID</strong> (?�문/?�자 조합)�?복사?�여 ?�정 ??�� 붙여?�어 주세??</li>
                 </ol>
             `;
         }
@@ -3847,16 +3840,16 @@ window.downloadPlacePhotosZip = async function(placeId) {
     if (!place) return;
     const photoList = place.photos || (place.photo ? [place.photo] : []);
     if (photoList.length === 0) {
-        showToast("다운로드할 사진이 없습니다 📷", "warning");
+        showToast("?�운로드???�진???�습?�다 ?��", "warning");
         return;
     }
 
     if (photoList.length === 1) {
-        downloadBase64Image(photoList[0], `${place.name}_추억사진.jpg`);
-        showToast(`'${place.name}' 사진 1장이 다운로드되었습니다! 📥`, "success");
+        downloadBase64Image(photoList[0], `${place.name}_추억?�진.jpg`);
+        showToast(`'${place.name}' ?�진 1?�이 ?�운로드?�었?�니?? ?��`, "success");
     } else {
         try {
-            showToast(`'${place.name}' 추억 사진 ${photoList.length}장을 압축 다운로드합니다... 📦`, "info");
+            showToast(`'${place.name}' 추억 ?�진 ${photoList.length}?�을 ?�축 ?�운로드?�니??.. ?��`, "info");
             const zip = new JSZip();
             const cleanName = place.name.replace(/[/\\?%*:|"<>. ]/g, "_");
             photoList.forEach((pSrc, idx) => {
@@ -3866,14 +3859,14 @@ window.downloadPlacePhotosZip = async function(placeId) {
             const content = await zip.generateAsync({ type: "blob" });
             const downloadAnchor = document.createElement("a");
             downloadAnchor.href = URL.createObjectURL(content);
-            downloadAnchor.download = `${cleanName}_추억사진_${photoList.length}장.zip`;
+            downloadAnchor.download = `${cleanName}_추억?�진_${photoList.length}??zip`;
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             document.body.removeChild(downloadAnchor);
-            showToast("모든 사진 다운로드 완료! 💖", "success");
+            showToast("모든 ?�진 ?�운로드 ?�료! ?��", "success");
         } catch(e) {
             photoList.forEach((pSrc, idx) => downloadBase64Image(pSrc, `${place.name}_${idx+1}.jpg`));
-            showToast("사진 다운로드가 시작되었습니다! 📥", "success");
+            showToast("?�진 ?�운로드가 ?�작?�었?�니?? ?��", "success");
         }
     }
 };
@@ -3881,9 +3874,9 @@ window.downloadPlacePhotosZip = async function(placeId) {
 window.downloadCurrentSliderPhoto = function() {
     if (!activeGalleryPhotos || activeGalleryPhotos.length === 0) return;
     const currentSrc = activeGalleryPhotos[activePhotoIndex];
-    const placeTitle = activePlaceInfo ? activePlaceInfo.name : "추억사진";
-    downloadBase64Image(currentSrc, `${placeTitle}_사진_${activePhotoIndex + 1}.jpg`);
-    showToast("현재 확대된 고화질 사진이 다운로드되었습니다! 📥", "success");
+    const placeTitle = activePlaceInfo ? activePlaceInfo.name : "추억?�진";
+    downloadBase64Image(currentSrc, `${placeTitle}_?�진_${activePhotoIndex + 1}.jpg`);
+    showToast("?�재 ?��???고화�??�진???�운로드?�었?�니?? ?��", "success");
 };
 
 function downloadBase64Image(base64Str, filename) {
@@ -3919,26 +3912,26 @@ window.openDateDetailsModal = async function(dateStr, type = 'all') {
     
     if (titleEl) {
         const dObj = new Date(dateStr);
-        const typeLabel = type === 'visited' ? '🌸 함께 다녀온 장소' : (type === 'wishlist' ? '💌 데이트 위시리스트' : '기록');
-        titleEl.textContent = `${dObj.getFullYear()}년 ${dObj.getMonth() + 1}월 ${dObj.getDate()}일 ${typeLabel} (${filtered.length}건)`;
+        const typeLabel = type === 'visited' ? '?�� ?�께 ?��????�소' : (type === 'wishlist' ? '?�� ?�이???�시리스?? : '기록');
+        titleEl.textContent = `${dObj.getFullYear()}??${dObj.getMonth() + 1}??${dObj.getDate()}??${typeLabel} (${filtered.length}�?`;
     }
 
     if (bodyEl) {
         if (filtered.length === 0) {
-            bodyEl.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--color-text-med);">해당 날짜에 등록된 내역이 없습니다.</div>`;
+            bodyEl.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--color-text-med);">?�당 ?�짜???�록???�역???�습?�다.</div>`;
         } else {
             let html = "";
             filtered.forEach(p => {
                 const isVis = p.isVisited === 1;
-                const badge = isVis ? `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">🌸 다녀온 곳</span>` : `<span style="background:rgba(162,155,254,0.15); color:#6C5CE7; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">💌 위시리스트</span>`;
+                const badge = isVis ? `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">?�� ?��???�?/span>` : `<span style="background:rgba(162,155,254,0.15); color:#6C5CE7; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">?�� ?�시리스??/span>`;
                 html += `
                     <div style="background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.15); border-radius:12px; padding:0.75rem; margin-bottom:0.6rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
                             <div>${badge} <strong style="margin-left:4px; font-size:0.9rem; color:var(--color-text-high);">${escapeHtml(p.name)}</strong></div>
-                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="closeDateDetailsModal(); openEditPlaceModal(${p.id});">✏️ 수정</button>
+                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="closeDateDetailsModal(); openEditPlaceModal(${p.id});">?�️ ?�정</button>
                         </div>
-                        ${p.notes ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:0.2rem;">📍 ${escapeHtml(p.notes)}</div>` : ''}
-                        ${p.commentA || p.commentB ? `<div style="font-size:0.75rem; color:var(--color-primary); margin-top:0.35rem; background:rgba(255,255,255,0.7); padding:0.25rem 0.45rem; border-radius:6px; border-left:3px solid var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
+                        ${p.notes ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:0.2rem;">?�� ${escapeHtml(p.notes)}</div>` : ''}
+                        ${p.commentA || p.commentB ? `<div style="font-size:0.75rem; color:var(--color-primary); margin-top:0.35rem; background:rgba(255,255,255,0.7); padding:0.25rem 0.45rem; border-radius:6px; border-left:3px solid var(--color-primary);">?�� "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
                     </div>
                 `;
             });
@@ -4043,12 +4036,12 @@ window.closeMemoryLightboxModal = function() {
 
 window.deleteCurrentMemoryPhoto = function() {
     if (!customMemoryPhotos || customMemoryPhotos.length === 0) return;
-    if (!confirm("이 추억 사진을 러블리 메모리에서 삭제하시겠습니까?")) return;
+    if (!confirm("??추억 ?�진???�블�?메모리에????��?�시겠습?�까?")) return;
 
     customMemoryPhotos.splice(activeMemoryPhotoIndex, 1);
     localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
     renderLovelyMemoryGallery();
-    showToast("추억 사진이 삭제되었습니다.", "success");
+    showToast("추억 ?�진????��?�었?�니??", "success");
 
     if (customMemoryPhotos.length === 0) {
         customMemoryPhotos = [...DEFAULT_MEMORY_PHOTOS];
@@ -4108,13 +4101,13 @@ window.saveMemoryGalleryPhotos = async function() {
             if (syncRoomId) {
                 await uploadMemoryPhotosToCloud();
             }
-            showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
+            showToast(`?�리???�블�?메모리에 ${newPhotos.length}?�의 ?�진???�적 추�??�었?�니?? (�?${customMemoryPhotos.length}?? ?��`, "success");
             closeEditMemoryGalleryModal();
             return;
         }
     }
     
-    showToast("새로 선택된 사진이 없습니다.", "info");
+    showToast("?�로 ?�택???�진???�습?�다.", "info");
     closeEditMemoryGalleryModal();
 };
 
@@ -4159,34 +4152,34 @@ async function loadMemoryPhotosFromCloud() {
 window.downloadAllMemoryGalleryPhotos = async function() {
     const photosToDownload = (customMemoryPhotos && customMemoryPhotos.length > 0) ? customMemoryPhotos : DEFAULT_MEMORY_PHOTOS;
     if (photosToDownload.length === 0) {
-        showToast("다운로드할 메모리 사진이 없습니다.", "warning");
+        showToast("?�운로드??메모�??�진???�습?�다.", "warning");
         return;
     }
 
     try {
-        showToast(`러블리 메모리 대표 사진 ${photosToDownload.length}장을 압축 다운로드합니다... 📦`, "info");
+        showToast(`?�블�?메모�??�???�진 ${photosToDownload.length}?�을 ?�축 ?�운로드?�니??.. ?��`, "info");
         const zip = new JSZip();
         for (let i = 0; i < photosToDownload.length; i++) {
             const pSrc = photosToDownload[i];
             if (pSrc.startsWith("data:")) {
                 const base64Data = pSrc.split(',')[1];
-                zip.file(`러블리_메모리_${i + 1}.jpg`, base64Data, { base64: true });
+                zip.file(`?�블�?메모�?${i + 1}.jpg`, base64Data, { base64: true });
             } else {
                 const blob = await fetch(pSrc).then(r => r.blob());
-                zip.file(`러블리_메모리_${i + 1}.jpg`, blob);
+                zip.file(`?�블�?메모�?${i + 1}.jpg`, blob);
             }
         }
         const content = await zip.generateAsync({ type: "blob" });
         const downloadAnchor = document.createElement("a");
         downloadAnchor.href = URL.createObjectURL(content);
-        downloadAnchor.download = `AURA_러블리_메모리_${photosToDownload.length}장.zip`;
+        downloadAnchor.download = `AURA_?�블�?메모�?${photosToDownload.length}??zip`;
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         document.body.removeChild(downloadAnchor);
-        showToast("러블리 메모리 전체 사진 다운로드 완료! 💖", "success");
+        showToast("?�블�?메모�??�체 ?�진 ?�운로드 ?�료! ?��", "success");
     } catch(e) {
-        photosToDownload.forEach((pSrc, idx) => downloadBase64Image(pSrc, `러블리_메모리_${idx+1}.jpg`));
-        showToast("다운로드가 시작되었습니다! 📥", "success");
+        photosToDownload.forEach((pSrc, idx) => downloadBase64Image(pSrc, `?�블�?메모�?${idx+1}.jpg`));
+        showToast("?�운로드가 ?�작?�었?�니?? ?��", "success");
     }
 };
 
@@ -4222,7 +4215,7 @@ window.copyShareRoomUrl = async function() {
     if (!inputEl || !inputEl.value) return;
 
     await copyShareLinkToClipboard(inputEl.value);
-    showToast("스마트폰 연동 링크가 클립보드에 복사되었습니다! 💌", "success");
+    showToast("?�마?�폰 ?�동 링크가 ?�립보드??복사?�었?�니?? ?��", "success");
 };
 
 // PWA Install Prompt Listener
@@ -4232,3 +4225,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
     deferredPwaPrompt = e;
     console.log('[PWA] beforeinstallprompt event captured');
 });
+
+
+
