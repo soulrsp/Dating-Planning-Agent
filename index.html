@@ -88,10 +88,6 @@
                     <i data-lucide="smile"></i>
                     <span>함께 다녀온 곳</span>
                 </button>
-                <button class="nav-item" data-tab="calendar">
-                    <i data-lucide="calendar"></i>
-                    <span>데이트 달력</span>
-                </button>
                 <button class="nav-item" data-tab="gallery">
                     <i data-lucide="camera"></i>
                     <span>추억 갤러리</span>
@@ -152,7 +148,7 @@
                     </div>
 
                     <!-- Map and Budget/Settlement -->
-                    <div class="main-grid-row">
+                    <div class="main-grid-row" style="display:flex; flex-direction:column;">
                         <!-- Interactive Map Card -->
                         <div class="card map-card flex-grow">
                             <div class="card-header">
@@ -184,6 +180,81 @@
                             <div class="map-container-wrapper">
                                 <!-- Naver Map / Leaflet Map Container -->
                                 <div id="map"></div>
+                            </div>
+                        </div>
+
+                        <!-- Calendar Container (Moved from tab-calendar) -->
+                        <div class="calendar-container card" id="dashboard-calendar-container">
+                            <div class="calendar-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
+                                    <span class="sub-text" style="font-size:0.8rem; color:var(--color-text-med);">위시리스트 및 다녀온 데이트 장소가 날짜별로 자동 연동됩니다.</span>
+                                </div>
+                                <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:4px 10px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08);">
+                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-left" style="width:18px; height:18px;"></i></button>
+                                    <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:1.05rem; min-width:115px; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
+                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:18px; height:18px;"></i></button>
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.2rem 0.65rem; border-radius:20px; font-size:0.75rem; margin-left:2px;">오늘 🌸</button>
+                                </div>
+                            </div>
+
+                            <div class="calendar-weekdays-row" style="display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; font-weight:700; font-size:0.85rem; padding:0.6rem 0; background:rgba(255,101,132,0.06); border-radius:12px; margin-bottom:0.6rem;">
+                                <div class="weekday sun" style="color:#E63946;">일</div>
+                                <div class="weekday">월</div>
+                                <div class="weekday">화</div>
+                                <div class="weekday">수</div>
+                                <div class="weekday">목</div>
+                                <div class="weekday">금</div>
+                                <div class="weekday sat" style="color:#457B9D;">토</div>
+                            </div>
+
+                            <div class="calendar-days-grid" id="calendar-days-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;">
+                                <!-- Dynamic day cells rendered by app.js -->
+                            </div>
+                        </div>
+
+                        <!-- Selected Date Details Panel -->
+                        <div class="card selected-date-panel" id="selected-date-panel" style="margin-top:0;">
+                            <div class="selected-date-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,101,132,0.15); padding-bottom:0.6rem; margin-bottom:0.8rem;">
+                                <h4 style="margin:0; font-size:1.02rem; color:var(--color-text-dark); display:flex; align-items:center; gap:6px;">
+                                    <i data-lucide="heart" class="text-primary"></i>
+                                    <span id="selected-date-title">선택한 날짜의 데이트 기록</span>
+                                </h4>
+                            </div>
+                            <div class="selected-date-items" id="selected-date-items">
+                                <!-- Selected date items rendered by app.js -->
+                            </div>
+                        </div>
+
+                        <!-- Latest Visited Review Card -->
+                        <div class="card flex-column">
+                            <div class="upcoming-details">
+                                <h4 class="sub-heading">마지막 다녀온 곳의 추억</h4>
+                                <div class="visited-quote-box" id="latest-visited-review">
+                                    "아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Couple Memory Gallery Widget -->
+                        <div class="card flex-column memory-gallery-widget">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:6px;">
+                                <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
+                                <div style="display:flex; gap:6px;">
+                                    <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06);" onclick="downloadAllMemoryGalleryPhotos()">
+                                        📥 전체 다운로드
+                                    </button>
+                                    <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="document.getElementById('memory-gallery-files').click()">
+                                        📸 추가
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="memory-grid" id="dashboard-memory-grid">
+                                <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple2.jpg" alt="Sunny Day" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple3.jpg" alt="Night Street" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple4.jpg" alt="Cute Pinch" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple5.jpg" alt="Punch Fight" class="gallery-img"></div>
                             </div>
                         </div>
 
@@ -227,39 +298,6 @@
                                     </div>
                                 </div>
                             </div>
-
-                            <hr class="divider">
-                            
-                            <div class="upcoming-details">
-                                <h4 class="sub-heading">마지막 다녀온 곳의 추억</h4>
-                                <div class="visited-quote-box" id="latest-visited-review">
-                                    "아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"
-                                </div>
-                            </div>
-
-                            <hr class="divider">
-
-                            <!-- Couple Memory Gallery Widget -->
-                            <div class="memory-gallery-widget">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:6px;">
-                                    <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
-                                    <div style="display:flex; gap:6px;">
-                                        <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06);" onclick="downloadAllMemoryGalleryPhotos()">
-                                            📥 전체 다운로드
-                                        </button>
-                                        <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="document.getElementById('memory-gallery-files').click()">
-                                            📸 추가
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="memory-grid" id="dashboard-memory-grid">
-                                    <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
-                                    <div class="memory-item"><img src="images/couple2.jpg" alt="Sunny Day" class="gallery-img"></div>
-                                    <div class="memory-item"><img src="images/couple3.jpg" alt="Night Street" class="gallery-img"></div>
-                                    <div class="memory-item"><img src="images/couple4.jpg" alt="Cute Pinch" class="gallery-img"></div>
-                                    <div class="memory-item"><img src="images/couple5.jpg" alt="Punch Fight" class="gallery-img"></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -300,62 +338,19 @@
                 </div>
             </section>
 
-            <!-- Tab: Date Calendar -->
-            <section id="tab-calendar" class="tab-pane">
-                <div class="calendar-container card">
-                    <div class="calendar-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
-                        <div>
-                            <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
-                            <span class="sub-text" style="font-size:0.8rem; color:var(--color-text-med);">위시리스트 및 다녀온 데이트 장소가 날짜별로 자동 연동됩니다.</span>
-                        </div>
-                        <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:4px 10px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08);">
-                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-left" style="width:18px; height:18px;"></i></button>
-                            <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:1.05rem; min-width:115px; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
-                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:18px; height:18px;"></i></button>
-                            <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.2rem 0.65rem; border-radius:20px; font-size:0.75rem; margin-left:2px;">오늘 🌸</button>
-                        </div>
-                    </div>
 
-                    <div class="calendar-weekdays-row" style="display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; font-weight:700; font-size:0.85rem; padding:0.6rem 0; background:rgba(255,101,132,0.06); border-radius:12px; margin-bottom:0.6rem;">
-                        <div class="weekday sun" style="color:#E63946;">일</div>
-                        <div class="weekday">월</div>
-                        <div class="weekday">화</div>
-                        <div class="weekday">수</div>
-                        <div class="weekday">목</div>
-                        <div class="weekday">금</div>
-                        <div class="weekday sat" style="color:#457B9D;">토</div>
-                    </div>
-
-                    <div class="calendar-days-grid" id="calendar-days-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;">
-                        <!-- Dynamic day cells rendered by app.js -->
-                    </div>
-                </div>
-
-                <!-- Selected Date Details Panel -->
-                <div class="card selected-date-panel" id="selected-date-panel" style="margin-top:1.2rem;">
-                    <div class="selected-date-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,101,132,0.15); padding-bottom:0.6rem; margin-bottom:0.8rem;">
-                        <h4 style="margin:0; font-size:1.02rem; color:var(--color-text-dark); display:flex; align-items:center; gap:6px;">
-                            <i data-lucide="heart" class="text-primary"></i>
-                            <span id="selected-date-title">선택한 날짜의 데이트 기록</span>
-                        </h4>
-                    </div>
-                    <div class="selected-date-items" id="selected-date-items">
-                        <!-- Selected date items rendered by app.js -->
-                    </div>
-                </div>
-            </section>
 
             <!-- Tab: Memory Gallery -->
             <section id="tab-gallery" class="tab-pane">
-                <div class="gallery-container card">
-                    <div class="gallery-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
+                <div class="gallery-container">
+                    <div class="gallery-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px; padding: 1rem 1.5rem 0 1.5rem;">
                         <div>
-                            <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="camera" class="margin-right-sm text-primary"></i>우리의 데이트 추억 갤러리 📸</h3>
-                            <span class="sub-text" id="gallery-photo-count" style="font-size:0.8rem; color:var(--color-text-med);">함께 다녀온 장소에 기록된 소중한 커플 사진들</span>
+                            <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="camera" class="margin-right-sm text-primary"></i>추억 포토 갤러리 📸</h3>
+                            <span class="sub-text" id="gallery-photo-count" style="font-size:0.8rem; color:var(--color-text-med);">함께 다녀온 곳에 등록된 모든 커플 사진들</span>
                         </div>
                     </div>
 
-                    <div class="gallery-grid" id="gallery-photos-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:1.25rem;">
+                    <div class="gallery-grid" id="gallery-photos-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1.25rem; padding: 0 1.5rem 1.5rem 1.5rem;">
                         <!-- Dynamic photo cards rendered by app.js -->
                     </div>
                 </div>
@@ -906,10 +901,6 @@
         <button class="mobile-nav-item" data-tab="visited">
             <i data-lucide="smile"></i>
             <span>다녀온곳</span>
-        </button>
-        <button class="mobile-nav-item" data-tab="calendar">
-            <i data-lucide="calendar"></i>
-            <span>달력</span>
         </button>
         <button class="mobile-nav-item" data-tab="gallery">
             <i data-lucide="camera"></i>
