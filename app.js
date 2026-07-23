@@ -133,6 +133,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Search input listeners for Wishlist and Visited tabs
     const wishSearch = document.getElementById("wishlist-search-input");
     if (wishSearch) wishSearch.addEventListener("input", renderPlacesList);
+
+    // Gallery & Memory swipe logic
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    const handleSwipe = (modalId, navFunc) => {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, {passive: true});
+        modal.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchEndX < touchStartX - 40) navFunc(1); // Swipe left -> next
+            if (touchEndX > touchStartX + 40) navFunc(-1); // Swipe right -> prev
+        }, {passive: true});
+    };
+
+    handleSwipe('modal-gallery-slider', (dir) => { if(window.navigateGallerySlider) window.navigateGallerySlider(dir); });
+    handleSwipe('modal-memory-slider', (dir) => { if(window.navigateMemorySlider) window.navigateMemorySlider(dir); });
     const visitSearch = document.getElementById("visited-search-input");
     if (visitSearch) visitSearch.addEventListener("input", renderPlacesList);
 
@@ -3407,6 +3427,7 @@ async function renderCalendar() {
         });
 
         // Match places with date & group by type (Visited vs Wishlist)
+        const datePlaces = places.filter(p => p.date === fullDateStr);
         const visitedPlaces = datePlaces.filter(p => p.isVisited === 1);
         const wishlistPlaces = datePlaces.filter(p => p.isVisited === 0);
 
