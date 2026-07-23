@@ -3521,18 +3521,20 @@ function renderSelectedDateDetails(dateStr, places) {
             border-radius: 12px;
             margin-bottom: 0.6rem;
             gap: 10px;
+            box-sizing: border-box;
+            width: 100%;
         `;
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; width:100%; align-items:flex-start;">
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:flex-start; box-sizing:border-box;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:1; min-width:0;">
                     ${statusBadge}
-                    <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
-                    <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
+                    <strong style="font-size:0.95rem; color:var(--color-text-dark); word-break:break-all;">${escapeHtml(p.name)}</strong>
+                    <span style="font-size:0.75rem; color:var(--color-text-med); white-space:nowrap;">(${p.category})</span>
                 </div>
                 <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.75rem; height:28px; border-color:var(--color-primary); color:var(--color-primary); flex-shrink:0; margin-left:8px;" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
             </div>
             ${p.commentA || p.commentB ? `
-            <div style="width:100%; background:rgba(255,255,255,0.8); padding:0.6rem; border-radius:8px; font-size:0.82rem; color:#444; border:1px dashed rgba(255,101,132,0.3);">
+            <div style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.8); padding:0.6rem; border-radius:8px; font-size:0.82rem; color:#444; border:1px dashed rgba(255,101,132,0.3); word-break:break-word;">
                 💬 "${escapeHtml(p.commentA || p.commentB)}"
             </div>` : ''}
         `;
