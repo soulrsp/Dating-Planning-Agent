@@ -1013,6 +1013,40 @@ async function handleInAppMapSearch() {
         uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
     }
 
+    // Fallback Engine: If external APIs returned 0 results for a general keyword
+    if (uniqueResults.length === 0) {
+        const fallbackRegionQueries = [`서울 ${query}`, `강남 ${query}`, `홍대 ${query}`, `부산 ${query}`, query];
+        for (const fq of fallbackRegionQueries) {
+            const fallbackGeo = await refineCoordinatesViaNaverGeocoder(fq).catch(() => null);
+            if (fallbackGeo && fallbackGeo.lat && fallbackGeo.lng) {
+                uniqueResults.push({
+                    name: `${query} (${fq} 위치)`,
+                    address: `${fq} 네이버 지도 검색 위치`,
+                    lat: fallbackGeo.lat,
+                    lng: fallbackGeo.lng,
+                    category: "Place"
+                });
+                break;
+            }
+        }
+    }
+
+    // Ultimate Fallback: Place pin at current map center so search never fails completely
+    if (uniqueResults.length === 0 && map && map.getCenter) {
+        try {
+            const center = map.getCenter();
+            const lat = typeof center.lat === 'function' ? center.lat() : (center.y || defaultMapCoords[0]);
+            const lng = typeof center.lng === 'function' ? center.lng() : (center.x || defaultMapCoords[1]);
+            uniqueResults.push({
+                name: `${query} (지도 선택 지점)`,
+                address: "네이버 지도 중앙 탐색 좌표",
+                lat: parseFloat(lat),
+                lng: parseFloat(lng),
+                category: "Place"
+            });
+        } catch (e) {}
+    }
+
     if (uniqueResults.length > 0) {
         renderMapSearchResults(uniqueResults);
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
@@ -1026,20 +1060,21 @@ window.handleInAppMapSearch = handleInAppMapSearch;
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
 async function searchNominatimFree(query) {
     try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5`;
+        const qStr = query.includes("대한민국") || query.includes("한국") || query.includes("서울") ? query : `${query}, 대한민국`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&limit=10`;
         const res = await fetch(url);
         if (!res.ok) return null;
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
             return data.map(item => {
                 const parts = (item.display_name || "").split(',');
-                const cleanTitle = parts[0].trim();
+                const cleanTitle = (item.name || parts[0] || query).trim();
                 return {
-                    name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
+                    name: cleanTitle.length > 1 ? cleanTitle : `${query} (${parts[0].trim()})`,
                     address: item.display_name,
                     lat: parseFloat(item.lat),
                     lng: parseFloat(item.lon),
-                    category: "Other"
+                    category: item.type || "Place"
                 };
             });
         }
