@@ -2035,7 +2035,7 @@ body {
         width: 10px !important;
         height: 10px !important;
         border-radius: 50% !important;
-        background: rgba(255, 101, 132, 0.8) !important;
+        background: #74B9FF !important;
         border: none !important;
         cursor: pointer;
         margin-top: 2px;
@@ -2046,7 +2046,7 @@ body {
         width: 10px !important;
         height: 10px !important;
         border-radius: 50% !important;
-        background: rgba(162, 155, 254, 0.8) !important;
+        background: #FF6584 !important;
         border: none !important;
         cursor: pointer;
         margin-top: 2px;
