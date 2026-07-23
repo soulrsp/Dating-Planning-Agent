@@ -3449,7 +3449,7 @@ function renderSelectedDateDetails(dateStr, places) {
     itemsEl.innerHTML = "";
     datePlaces.forEach(p => {
         const isVis = p.isVisited === 1;
-        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">🌸 다녀온 곳</span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(162,155,254,0.15); color:#6C5CE7; font-weight:700;">💌 위시리스트</span>`;
+        const statusBadge = isVis ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#0984e3; font-weight:700;">🌸 다녀온 곳</span>` : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">💌 위시리스트</span>`;
 
         const div = document.createElement("div");
         div.style.cssText = `
@@ -3464,13 +3464,12 @@ function renderSelectedDateDetails(dateStr, places) {
             gap: 10px;
         `;
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; width:100%; align-items:flex-start;">
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    ${statusBadge}
-                    <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
-                    <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <div>${statusBadge}</div>
+                <div style="display:block;">
+                    <strong style="font-size:0.95rem; color:var(--color-text-dark); word-break:keep-all;">${escapeHtml(p.name)}</strong>
+                    <span style="font-size:0.75rem; color:var(--color-text-med); margin-left:4px; display:inline-block;">(${p.category})</span>
                 </div>
-                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.75rem; height:28px; border-color:var(--color-primary); color:var(--color-primary); flex-shrink:0; margin-left:8px;" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
             </div>
             ${p.commentA || p.commentB ? `
             <div style="width:100%; background:rgba(255,255,255,0.8); padding:0.6rem; border-radius:8px; font-size:0.82rem; color:#444; border:1px dashed rgba(255,101,132,0.3);">
@@ -3869,7 +3868,7 @@ window.openDateDetailsModal = async function(dateStr, type = 'all') {
             let html = "";
             filtered.forEach(p => {
                 const isVis = p.isVisited === 1;
-                const badge = isVis ? `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">🌸 다녀온 곳</span>` : `<span style="background:rgba(162,155,254,0.15); color:#6C5CE7; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">💌 위시리스트</span>`;
+                const badge = isVis ? `<span style="background:rgba(116,185,255,0.15); color:#0984e3; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">🌸 다녀온 곳</span>` : `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">💌 위시리스트</span>`;
                 html += `
                     <div style="background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.15); border-radius:12px; padding:0.75rem; margin-bottom:0.6rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
