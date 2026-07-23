@@ -559,6 +559,7 @@ async function updateMapMarkers() {
                     anchor: new naver.maps.Point(8, 8)
                 }
             });
+            place._markerRef = marker;
             
             const infowindow = new naver.maps.InfoWindow({
                 content: `
@@ -593,7 +594,7 @@ async function updateMapMarkers() {
         if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
             places.forEach(place => {
                 const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-                if (rawAddr && rawAddr.length > 5) {
+                if (rawAddr && rawAddr.length >= 2) {
                     naver.maps.Service.geocode({ query: rawAddr }, (status, response) => {
                         if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
                             const officialAddr = response.v2.addresses[0];
@@ -742,70 +743,58 @@ function formatDistanceStr(km) {
 // Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
-    
-    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
     const words = query.trim().split(/\s+/);
     if (words.length > 1) {
         tryQueries.push(words[0]);
-        if (words.length > 2) {
-            tryQueries.push(`${words[0]} ${words[1]}`);
-        }
     }
     
-    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
-    if (cleanBrand && !tryQueries.includes(cleanBrand)) {
-        tryQueries.push(cleanBrand);
-    }
-
-    const proxyGenerators = [
-        (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-        (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
-    ];
+    const centerLng = userLng || 126.978;
+    const centerLat = userLat || 37.5665;
 
     for (const q of tryQueries) {
         const encodedQ = encodeURIComponent(q);
-        const centerLng = userLng || 127.388;
-        const centerLat = userLat || 36.438;
-        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
+        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=15`;
+        
+        const proxyUrls = [
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+            `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+        ];
 
-        for (const makeProxy of proxyGenerators) {
+        const fetchPromises = proxyUrls.map(async (proxyUrl) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
             try {
-                const proxyUrl = makeProxy(targetUrl);
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
-                
                 const response = await fetch(proxyUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
-
-                if (!response.ok) continue;
-                
+                if (!response.ok) return null;
                 const data = await response.json();
-                
                 let rawList = [];
                 if (data.result && data.result.place && data.result.place.list) {
                     rawList = data.result.place.list;
                 } else if (data.place && data.place.list) {
                     rawList = data.place.list;
                 }
-                
                 if (Array.isArray(rawList) && rawList.length > 0) {
-                    return rawList.map(item => {
-                        const lat = parseFloat(item.y);
-                        const lng = parseFloat(item.x);
-                        return {
-                            name: item.name || query,
-                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                            lat: lat,
-                            lng: lng,
-                            category: item.category || "Restaurant"
-                        };
-                    });
+                    return rawList.map(item => ({
+                        name: item.name || q,
+                        address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                        lat: parseFloat(item.y),
+                        lng: parseFloat(item.x),
+                        category: item.category || "Restaurant"
+                    }));
                 }
             } catch (err) {
-                // Try next proxy candidate
+                return null;
             }
-        }
+            return null;
+        });
+
+        try {
+            const resultsArray = await Promise.all(fetchPromises);
+            const validResult = resultsArray.find(res => Array.isArray(res) && res.length > 0);
+            if (validResult) return validResult;
+        } catch (e) {}
     }
     return null;
 }
@@ -867,7 +856,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
                 done = true;
                 resolve(null);
             }
-        }, 800);
+        }, 3000);
 
         try {
             naver.maps.Service.geocode({ query: address }, (status, response) => {
@@ -1489,9 +1478,18 @@ function handleMapUrlInput(e) {
         let lat = parseFloat(latMatch[2]);
         let lng = parseFloat(lngMatch[2]);
         if (lat > 1000 || lng > 1000) {
-            // TM128 fallback simulation
-            lat = 37.5665 + (Math.random() - 0.5) * 0.05;
-            lng = 126.9780 + (Math.random() - 0.5) * 0.05;
+            if (window.naver && window.naver.maps && window.naver.maps.TransCoord) {
+                try {
+                    const pt = new naver.maps.Point(lng, lat);
+                    const latLng = naver.maps.TransCoord.fromTM128ToLatLng(pt);
+                    lat = latLng.lat();
+                    lng = latLng.lng();
+                } catch(err) {
+                    lat = 37.5665; lng = 126.9780;
+                }
+            } else {
+                lat = 37.5665; lng = 126.9780;
+            }
         }
         document.getElementById("add-place-lat").value = lat;
         document.getElementById("add-place-lng").value = lng;
@@ -1532,8 +1530,8 @@ async function handleAddPlaceSubmit(e) {
     const priority = document.getElementById("add-place-priority").value;
     
     if (isNaN(lat) || isNaN(lng)) {
-        lat = 37.5665 + (Math.random() - 0.5) * 0.03;
-        lng = 126.9780 + (Math.random() - 0.5) * 0.03;
+        lat = 37.5665;
+        lng = 126.9780;
     }
 
     const isUndated = document.getElementById("add-place-undated")?.checked;
