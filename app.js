@@ -1148,7 +1148,7 @@ async function searchNominatimFree(query) {
     return null;
 }
 
-// Naver Native Geocoder Promise Wrapper
+// Naver Native Geocoder Promise Wrapper (Multi-region branch & location lookup)
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
         if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
@@ -1161,9 +1161,12 @@ function searchNaverGeocoder(query) {
         const queriesToTry = [
             cleanQ,
             `서울 ${cleanQ}`,
-            `마포구 ${cleanQ}`,
-            `강남구 ${cleanQ}`,
-            `부산 ${cleanQ}`
+            `강남 ${cleanQ}`,
+            `마포 ${cleanQ}`,
+            `홍대 ${cleanQ}`,
+            `부산 ${cleanQ}`,
+            `대구 ${cleanQ}`,
+            `인천 ${cleanQ}`
         ];
 
         let combined = [];
@@ -1173,46 +1176,50 @@ function searchNaverGeocoder(query) {
         const finish = () => {
             if (!isResolved) {
                 isResolved = true;
-                if (combined.length > 0) {
-                    resolve(combined);
-                } else {
-                    resolve(null);
-                }
+                resolve(combined.length > 0 ? combined : null);
             }
         };
 
-        const timer = setTimeout(finish, 2000);
+        const timer = setTimeout(finish, 2500);
 
         queriesToTry.forEach((qStr) => {
-            naver.maps.Service.geocode({ query: qStr }, (status, response) => {
-                completed++;
-                if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
-                    response.v2.addresses.forEach((addr) => {
-                        let buildingName = "";
-                        if (addr.addressElements) {
-                            const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
-                            if (el && el.longName) {
-                                buildingName = el.longName;
+            try {
+                naver.maps.Service.geocode({ query: qStr }, (status, response) => {
+                    completed++;
+                    if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                        response.v2.addresses.forEach((addr) => {
+                            let buildingName = "";
+                            if (addr.addressElements) {
+                                const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
+                                if (el && el.longName) {
+                                    buildingName = el.longName;
+                                }
                             }
-                        }
-                        const shortAddr = addr.roadAddress || addr.jibunAddress || "";
-                        const displayName = buildingName ? `${cleanQ} (${buildingName})` : (shortAddr ? `${cleanQ} (${shortAddr})` : cleanQ);
-                        
-                        combined.push({
-                            name: displayName,
-                            address: shortAddr || "네이버 지도 장소",
-                            lat: parseFloat(addr.y),
-                            lng: parseFloat(addr.x),
-                            category: "Place"
+                            const shortAddr = addr.roadAddress || addr.jibunAddress || "";
+                            const displayName = buildingName ? `${cleanQ} (${buildingName})` : (shortAddr ? `${cleanQ} (${shortAddr})` : cleanQ);
+                            
+                            combined.push({
+                                name: displayName,
+                                address: shortAddr || "네이버 지도 장소",
+                                lat: parseFloat(addr.y),
+                                lng: parseFloat(addr.x),
+                                category: "Place"
+                            });
                         });
-                    });
-                }
+                    }
 
+                    if (completed === queriesToTry.length) {
+                        clearTimeout(timer);
+                        finish();
+                    }
+                });
+            } catch (err) {
+                completed++;
                 if (completed === queriesToTry.length) {
                     clearTimeout(timer);
                     finish();
                 }
-            });
+            }
         });
     });
 }
