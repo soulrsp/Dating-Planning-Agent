@@ -308,11 +308,11 @@
                             <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
                             <span class="sub-text" style="font-size:0.8rem; color:var(--color-text-med);">위시리스트 및 다녀온 데이트 장소가 날짜별로 자동 연동됩니다.</span>
                         </div>
-                        <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:8px;">
-                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)"><i data-lucide="chevron-left"></i> 이전달</button>
-                            <span class="calendar-current-month" id="calendar-month-title" style="font-weight:700; font-size:1.1rem; min-width:110px; text-align:center; color:var(--color-primary);">2026년 7월</span>
-                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)">다음달 <i data-lucide="chevron-right"></i></button>
-                            <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.25rem 0.65rem;">오늘</button>
+                        <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:4px 10px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08);">
+                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-left" style="width:18px; height:18px;"></i></button>
+                            <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:1.05rem; min-width:115px; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
+                            <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:32px; height:32px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:18px; height:18px;"></i></button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.2rem 0.65rem; border-radius:20px; font-size:0.75rem; margin-left:2px;">오늘 🌸</button>
                         </div>
                     </div>
 
@@ -505,6 +505,16 @@
                         <option value="custom">✏️ 직접 입력</option>
                     </select>
                     <input type="text" id="add-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
+                </div>
+
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label for="add-place-date" style="margin:0;">방문 예정 날짜</label>
+                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700;">
+                            <input type="checkbox" id="add-place-undated" onchange="toggleUndatedDate('add')"> 📅 날짜 미정
+                        </label>
+                    </div>
+                    <input type="date" id="add-place-date">
                 </div>
 
                 <div class="form-group">
@@ -821,7 +831,7 @@
                 </div>
                 <div class="form-group">
                     <label>새 추억 사진 선택 (여러 장 동시 선택 가능)</label>
-                    <input type="file" id="memory-gallery-files" accept="image/*" multiple style="display:none;">
+                    <input type="file" id="memory-gallery-files" accept="image/*" multiple style="display:none;" onchange="saveMemoryGalleryPhotos()">
                     <div class="photo-preview-box" id="memory-gallery-preview-box" onclick="document.getElementById('memory-gallery-files').click()" style="min-height:70px; cursor:pointer;">
                         <span>여기를 클릭해 대시보드 메인 사진을 추가/수정하세요 📸</span>
                     </div>
