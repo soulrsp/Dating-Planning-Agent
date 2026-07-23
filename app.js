@@ -95,6 +95,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await updateDashboardStats();
     await renderPlacesList();
     renderLovelyMemoryGallery();
+    renderCalendar();
     checkApiKeyAlert();
     startCloudSyncLoop();
 
@@ -373,7 +374,6 @@ function switchTab(tabId) {
                 map.invalidateSize();
             }
         }, 120);
-    } else if (tabId === "calendar") {
         renderCalendar();
     } else if (tabId === "gallery") {
         renderGallery();
