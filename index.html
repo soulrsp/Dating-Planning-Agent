@@ -158,23 +158,7 @@
                                     <span class="badge-visited" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; font-weight:700;">📍 다녀온 곳</span>
                                 </div>
                             </div>
-                            
-                            <!-- Embedded Local Search Inside Map -->
-                            <div class="map-search-bar" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
-                                <div style="display:flex; gap:0.4rem; width:100%;">
-                                    <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query" style="flex-grow:1;">
-                                    <button class="btn btn-primary" id="btn-map-search" onclick="handleInAppMapSearch()" style="white-space:nowrap;">
-                                        <i data-lucide="search"></i> 검색
-                                    </button>
-                                </div>
-                                <div style="display:flex; gap:0.4rem; width:100%;">
-                                        <i data-lucide="crosshair" style="width:14px; height:14px;"></i> 내위치 🎯
-                                    </button>
-                                        <i data-lucide="rotate-ccw" style="width:14px; height:14px;"></i> 핀 리셋 🔄
-                                    </button>
-                                </div>
-                            </div>
-                            
+                                                        
                             <div class="map-container-wrapper">
                                 <!-- Naver Map / Leaflet Map Container -->
                                 <div id="map"></div>
