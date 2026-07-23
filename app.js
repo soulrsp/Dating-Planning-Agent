@@ -938,7 +938,78 @@ function refineCoordinatesViaNaverGeocoder(address) {
     });
 }
 
-// 6. In-App Map Real-Time Search Pipeline (Parallel Execution: Local KB + Naver Geocoder + Nominatim + Gemini AI + Dynamic Naver Proxy)
+// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
+async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
+    const tryQueries = [query];
+    
+    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
+    const words = query.trim().split(/\s+/);
+    if (words.length > 1) {
+        tryQueries.push(words[0]);
+        if (words.length > 2) {
+            tryQueries.push(`${words[0]} ${words[1]}`);
+        }
+    }
+    
+    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
+    if (cleanBrand && !tryQueries.includes(cleanBrand)) {
+        tryQueries.push(cleanBrand);
+    }
+
+    const proxyGenerators = [
+        (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+        (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+    ];
+
+    for (const q of tryQueries) {
+        const encodedQ = encodeURIComponent(q);
+        const centerLng = userLng || 127.388;
+        const centerLat = userLat || 36.438;
+        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
+
+        for (const makeProxy of proxyGenerators) {
+            try {
+                const proxyUrl = makeProxy(targetUrl);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                
+                const response = await fetch(proxyUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) continue;
+                
+                const data = await response.json();
+                
+                let rawList = [];
+                if (data.result && data.result.place && data.result.place.list) {
+                    rawList = data.result.place.list;
+                } else if (data.place && data.place.list) {
+                    rawList = data.place.list;
+                }
+                
+                if (Array.isArray(rawList) && rawList.length > 0) {
+                    return rawList.map(item => {
+                        const lat = parseFloat(item.y);
+                        const lng = parseFloat(item.x);
+                        return {
+                            name: item.name || query,
+                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                            lat: lat,
+                            lng: lng,
+                            category: item.category || "Restaurant"
+                        };
+                    });
+                }
+            } catch (err) {
+                // Try next proxy candidate
+            }
+        }
+    }
+    return null;
+}
+
+// 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
 async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
@@ -950,60 +1021,88 @@ async function handleInAppMapSearch() {
     
     // Clear old search markers and panel
     clearSearchMarkers();
+    
     showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "info");
+    
+    let combinedResults = [];
 
-    const userLoc = await getUserCurrentLocation().catch(() => null);
+    // 1. Local Knowledge Base (Instant, reliable, pre-verified coordinates)
+    const kbResults = searchLocalKnowledgeBase(query);
+    if (kbResults.length > 0) {
+        combinedResults.push(...kbResults);
+    }
+
+    // 2. Detect user's current GPS location (max 1s timeout)
+    const userLoc = await getUserCurrentLocation();
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
 
-    // Run all providers concurrently
-    const providers = [
-        // 1. Local KB
-        Promise.resolve().then(() => searchLocalKnowledgeBase(query)),
-
-        // 2. Official Naver SDK Geocoder
-        (window.naver && window.naver.maps && window.naver.maps.Service) 
-            ? searchNaverGeocoder(query).catch(() => null) 
-            : Promise.resolve(null),
-
-        // 3. Dynamic Naver Proxy (1.5s max race)
-        searchNaverMapPlacesDynamic(query, userLat, userLng).catch(() => null),
-
-        // 4. OpenStreetMap Nominatim
-        searchNominatimFree(query).catch(() => null),
-
-        // 5. Gemini AI Location Finder (if API key configured)
-        geminiApiKey 
-            ? callGeminiSearchAPI(query).then(res => cleanAndParseJSON(res)).catch(() => null) 
-            : Promise.resolve(null)
-    ];
-
-    const settled = await Promise.allSettled(providers);
-    let combinedResults = [];
-
-    settled.forEach(res => {
-        if (res.status === "fulfilled" && Array.isArray(res.value) && res.value.length > 0) {
-            combinedResults.push(...res.value);
+    // 3. Real-time Naver Maps Dynamic POI/Business Search API
+    try {
+        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
+        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
+            combinedResults.push(...dynamicNaverPlaces);
         }
-    });
+    } catch (err) {
+        console.warn("[Naver Dynamic Search]", err);
+    }
 
+    // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
+    if (isNaverMapActive) {
+        try {
+            const naverResults = await searchNaverGeocoder(query);
+            if (Array.isArray(naverResults) && naverResults.length > 0) {
+                combinedResults.push(...naverResults);
+            }
+        } catch (err) {
+            console.warn("[Naver Map Search Error]", err);
+        }
+    }
+    
+    // 5. AI Business Directory & Local Place Search (Finds restaurants & company branches)
+    if (geminiApiKey && combinedResults.length < 2) {
+        try {
+            const responseText = await callGeminiSearchAPI(query);
+            const searchResults = cleanAndParseJSON(responseText);
+            if (Array.isArray(searchResults) && searchResults.length > 0) {
+                combinedResults.push(...searchResults);
+            }
+        } catch (err) {
+            console.warn("[Map Search] Gemini AI search failed:", err.message);
+        }
+    }
+    
+    // 6. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
+    if (combinedResults.length === 0) {
+        try {
+            const freeResults = await searchNominatimFree(query);
+            if (Array.isArray(freeResults) && freeResults.length > 0) {
+                combinedResults.push(...freeResults);
+            }
+        } catch (err) {
+            console.warn("[OpenStreetMap Search Error]", err);
+        }
+    }
+    
     // Deduplicate combined results by name & location proximity
     const uniqueResults = [];
     const seenMap = new Set();
 
     for (const item of combinedResults) {
-        if (!item || !item.lat || !item.lng) continue;
+        if (!item.lat || !item.lng) continue;
         const latFixed = parseFloat(item.lat).toFixed(3);
         const lngFixed = parseFloat(item.lng).toFixed(3);
         const key = `${(item.name || "").trim()}_${latFixed}_${lngFixed}`;
         
         if (!seenMap.has(key)) {
             seenMap.add(key);
+            
             if (userLoc && item.lat && item.lng) {
                 item.distanceKm = calculateDistanceKm(userLoc.lat, userLoc.lng, item.lat, item.lng);
             } else {
                 item.distanceKm = Infinity;
             }
+            
             uniqueResults.push(item);
         }
     }
@@ -1011,40 +1110,6 @@ async function handleInAppMapSearch() {
     // Sort by proximity: Nearest to current user position ranked at top!
     if (userLoc) {
         uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
-    }
-
-    // Fallback Engine: If external APIs returned 0 results for a general keyword
-    if (uniqueResults.length === 0) {
-        const fallbackRegionQueries = [`서울 ${query}`, `강남 ${query}`, `홍대 ${query}`, `부산 ${query}`, query];
-        for (const fq of fallbackRegionQueries) {
-            const fallbackGeo = await refineCoordinatesViaNaverGeocoder(fq).catch(() => null);
-            if (fallbackGeo && fallbackGeo.lat && fallbackGeo.lng) {
-                uniqueResults.push({
-                    name: `${query} (${fq} 위치)`,
-                    address: `${fq} 네이버 지도 검색 위치`,
-                    lat: fallbackGeo.lat,
-                    lng: fallbackGeo.lng,
-                    category: "Place"
-                });
-                break;
-            }
-        }
-    }
-
-    // Ultimate Fallback: Place pin at current map center so search never fails completely
-    if (uniqueResults.length === 0 && map && map.getCenter) {
-        try {
-            const center = map.getCenter();
-            const lat = typeof center.lat === 'function' ? center.lat() : (center.y || defaultMapCoords[0]);
-            const lng = typeof center.lng === 'function' ? center.lng() : (center.x || defaultMapCoords[1]);
-            uniqueResults.push({
-                name: `${query} (지도 선택 지점)`,
-                address: "네이버 지도 중앙 탐색 좌표",
-                lat: parseFloat(lat),
-                lng: parseFloat(lng),
-                category: "Place"
-            });
-        } catch (e) {}
     }
 
     if (uniqueResults.length > 0) {
@@ -1060,8 +1125,7 @@ window.handleInAppMapSearch = handleInAppMapSearch;
 // OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
 async function searchNominatimFree(query) {
     try {
-        const qStr = query.includes("대한민국") || query.includes("한국") || query.includes("서울") ? query : `${query}, 대한민국`;
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&limit=10`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5`;
         const res = await fetch(url);
         if (!res.ok) return null;
         const data = await res.json();
