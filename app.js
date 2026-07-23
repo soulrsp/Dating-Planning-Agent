@@ -765,6 +765,28 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
+// Knowledge base for instant local venue resolution
+const AURA_LOCAL_PLACE_KB = [
+    { name: "김순화 달인 부원면옥", keywords: ["김순화", "부원면옥", "평양냉면", "회현역맛집"], address: "서울 중구 남대문시장4길 41-6", lat: 37.5587, lng: 126.9778, category: "Restaurant" },
+    { name: "진남포면옥", keywords: ["진남포", "진남포면옥", "약수역맛집", "찜닭"], address: "서울 중구 다산로 108", lat: 37.5548, lng: 127.0108, category: "Restaurant" }
+];
+
+function searchLocalKnowledgeBase(query) {
+    if (!query) return [];
+    const q = query.toLowerCase().trim();
+    return AURA_LOCAL_PLACE_KB.filter(kb => {
+        const nameMatch = kb.name.toLowerCase().includes(q);
+        const kwMatch = (kb.keywords || []).some(k => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));
+        return nameMatch || kwMatch;
+    }).map(kb => ({
+        name: kb.name,
+        address: kb.address,
+        lat: kb.lat,
+        lng: kb.lng,
+        category: kb.category
+    }));
+}
+
 // Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Race
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
@@ -787,10 +809,10 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
             `https://thingproxy.freeboard.io/fetch/${targetUrl}`
         ];
 
-        // Race pattern: return as soon as ANY proxy succeeds
+        // Race pattern: return as soon as ANY proxy succeeds within 1.5 seconds
         const racePromises = proxyUrls.map(async (proxyUrl) => {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            const timeoutId = setTimeout(() => controller.abort(), 1500);
             try {
                 const response = await fetch(proxyUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -824,7 +846,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
             const result = await Promise.any(racePromises);
             if (Array.isArray(result) && result.length > 0) return result;
         } catch (aggregateErr) {
-            console.warn(`[Naver Dynamic] All proxies failed for '${q}':`, aggregateErr.errors?.map(e => e.message));
+            console.warn(`[Naver Dynamic] All proxies failed for '${q}'`);
         }
     }
     return null;
@@ -916,7 +938,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
     });
 }
 
-// 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
+// 6. In-App Map Real-Time Search Pipeline (Parallel Execution: Local KB + Naver Geocoder + Nominatim + Gemini AI + Dynamic Naver Proxy)
 async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
@@ -928,88 +950,60 @@ async function handleInAppMapSearch() {
     
     // Clear old search markers and panel
     clearSearchMarkers();
-    
     showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "info");
-    
-    let combinedResults = [];
 
-    // 1. Local Knowledge Base (Instant, reliable, pre-verified coordinates)
-    const kbResults = searchLocalKnowledgeBase(query);
-    if (kbResults.length > 0) {
-        combinedResults.push(...kbResults);
-    }
-
-    // 2. Detect user's current GPS location (max 1s timeout)
-    const userLoc = await getUserCurrentLocation();
+    const userLoc = await getUserCurrentLocation().catch(() => null);
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
 
-    // 3. Real-time Naver Maps Dynamic POI/Business Search API
-    try {
-        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
-        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
-            combinedResults.push(...dynamicNaverPlaces);
-        }
-    } catch (err) {
-        console.warn("[Naver Dynamic Search]", err);
-    }
+    // Run all providers concurrently
+    const providers = [
+        // 1. Local KB
+        Promise.resolve().then(() => searchLocalKnowledgeBase(query)),
 
-    // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
-    if (window.naver && window.naver.maps) {
-        try {
-            const naverResults = await searchNaverGeocoder(query);
-            if (Array.isArray(naverResults) && naverResults.length > 0) {
-                combinedResults.push(...naverResults);
-            }
-        } catch (err) {
-            console.warn("[Naver Map Search Error]", err);
+        // 2. Official Naver SDK Geocoder
+        (window.naver && window.naver.maps && window.naver.maps.Service) 
+            ? searchNaverGeocoder(query).catch(() => null) 
+            : Promise.resolve(null),
+
+        // 3. Dynamic Naver Proxy (1.5s max race)
+        searchNaverMapPlacesDynamic(query, userLat, userLng).catch(() => null),
+
+        // 4. OpenStreetMap Nominatim
+        searchNominatimFree(query).catch(() => null),
+
+        // 5. Gemini AI Location Finder (if API key configured)
+        geminiApiKey 
+            ? callGeminiSearchAPI(query).then(res => cleanAndParseJSON(res)).catch(() => null) 
+            : Promise.resolve(null)
+    ];
+
+    const settled = await Promise.allSettled(providers);
+    let combinedResults = [];
+
+    settled.forEach(res => {
+        if (res.status === "fulfilled" && Array.isArray(res.value) && res.value.length > 0) {
+            combinedResults.push(...res.value);
         }
-    }
-    
-    // 5. AI Business Directory & Local Place Search (Activated when proxy search returns nothing)
-    if (geminiApiKey && combinedResults.length === 0) {
-        try {
-            const responseText = await callGeminiSearchAPI(query);
-            const searchResults = cleanAndParseJSON(responseText);
-            if (Array.isArray(searchResults) && searchResults.length > 0) {
-                combinedResults.push(...searchResults);
-            }
-        } catch (err) {
-            console.warn("[Map Search] Gemini AI search failed:", err.message);
-        }
-    }
-    
-    // 6. OpenStreetMap Nominatim Free Search Engine (Supplementary fallback)
-    if (combinedResults.length < 3) {
-        try {
-            const freeResults = await searchNominatimFree(query);
-            if (Array.isArray(freeResults) && freeResults.length > 0) {
-                combinedResults.push(...freeResults);
-            }
-        } catch (err) {
-            console.warn("[OpenStreetMap Search Error]", err);
-        }
-    }
-    
+    });
+
     // Deduplicate combined results by name & location proximity
     const uniqueResults = [];
     const seenMap = new Set();
 
     for (const item of combinedResults) {
-        if (!item.lat || !item.lng) continue;
+        if (!item || !item.lat || !item.lng) continue;
         const latFixed = parseFloat(item.lat).toFixed(3);
         const lngFixed = parseFloat(item.lng).toFixed(3);
         const key = `${(item.name || "").trim()}_${latFixed}_${lngFixed}`;
         
         if (!seenMap.has(key)) {
             seenMap.add(key);
-            
             if (userLoc && item.lat && item.lng) {
                 item.distanceKm = calculateDistanceKm(userLoc.lat, userLoc.lng, item.lat, item.lng);
             } else {
                 item.distanceKm = Infinity;
             }
-            
             uniqueResults.push(item);
         }
     }
