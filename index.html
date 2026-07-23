@@ -78,7 +78,7 @@
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="dashboard">
                     <i data-lucide="layout-dashboard"></i>
-                    <span>러블리 대시보드</span>
+                    <span>대시보드</span>
                 </button>
                 <button class="nav-item" data-tab="wishlist">
                     <i data-lucide="heart-handshake"></i>
@@ -152,7 +152,7 @@
                         <!-- Interactive Map Card -->
                         <div class="card map-card flex-grow">
                             <div class="card-header">
-                                <h3 class="card-heading">우리의 러브 맵</h3>
+                                <h3 class="card-heading">대시보드</h3>
                                 <div class="map-legend">
                                     <span class="legend-item"><span class="legend-dot bg-primary"></span>위시리스트</span>
                                     <span class="legend-item"><span class="legend-dot bg-secondary"></span>다녀온 곳</span>
@@ -184,7 +184,7 @@
                         </div>
 
                         <!-- Calendar Container (Moved from tab-calendar) -->
-                        <div class="calendar-container card" id="dashboard-calendar-container">
+                        <div class="calendar-container card" id="dashboard-calendar-container" style="flex: 1 1 auto; overflow: visible !important; min-height: 450px;">
                             <div class="calendar-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
                                 <div>
                                     <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
@@ -208,7 +208,7 @@
                                 <div class="weekday sat" style="color:#457B9D;">토</div>
                             </div>
 
-                            <div class="calendar-days-grid" id="calendar-days-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;">
+                            <div class="calendar-days-grid" id="calendar-days-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); grid-auto-rows:minmax(60px, auto); gap:6px; width:100%; min-height:350px; overflow:visible;">
                                 <!-- Dynamic day cells rendered by app.js -->
                             </div>
                         </div>
@@ -327,9 +327,6 @@
                                 <i data-lucide="search"></i>
                                 <input type="text" placeholder="장소 검색" id="visited-search-input">
                             </div>
-                            <button type="button" class="btn btn-outline" id="btn-download-photos" style="gap:6px;">
-                                <i data-lucide="download"></i> 전체 사진 다운로드
-                            </button>
                         </div>
                     </div>
                     <div class="places-grid" id="visited-list-container">
@@ -892,7 +889,7 @@
     <nav class="mobile-bottom-nav">
         <button class="mobile-nav-item active" data-tab="dashboard">
             <i data-lucide="layout-dashboard"></i>
-            <span>러브맵</span>
+            <span>대시보드</span>
         </button>
         <button class="mobile-nav-item" data-tab="wishlist">
             <i data-lucide="heart-handshake"></i>
