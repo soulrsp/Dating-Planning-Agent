@@ -2517,7 +2517,21 @@ body {
 }
 @media (max-width: 768px) {
     .cal-btn-visited, .cal-btn-wishlist {
-        font-size: 0 !important;
         color: transparent !important;
+        text-indent: 100% !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        width: 10px !important;
+        height: 10px !important;
+        min-width: 10px !important;
+        border-radius: 50% !important;
+        border: none !important;
+    }
+    .cal-btn-visited {
+        background: #74B9FF !important;
+    }
+    .cal-btn-wishlist {
+        background: #FF6584 !important;
     }
 }
