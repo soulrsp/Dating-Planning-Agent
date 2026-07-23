@@ -3579,7 +3579,7 @@ async function renderGallery() {
                     <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:auto; padding-top:4px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
                         ✏️ 사진 수정 / 추가
                     </button>
