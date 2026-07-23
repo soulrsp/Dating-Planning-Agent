@@ -15,6 +15,7 @@ let map = null;
 let leafletMarkersGroup = null;
 let naverMarkers = [];
 let naverSearchMarkers = [];
+let activeInfoWindow = null;
 let isNaverMapActive = false;
 
 let currentActiveTab = "dashboard";
@@ -523,6 +524,14 @@ function initNaverMap() {
             position: naver.maps.Position.RIGHT_CENTER
         }
     });
+
+    // Close any open popup when clicking on empty map space
+    naver.maps.Event.addListener(map, "click", () => {
+        if (activeInfoWindow) {
+            activeInfoWindow.close();
+            activeInfoWindow = null;
+        }
+    });
     
     updateMapMarkers();
 }
@@ -575,10 +584,15 @@ async function updateMapMarkers() {
             });
             
             naver.maps.Event.addListener(marker, "click", () => {
+                if (activeInfoWindow && activeInfoWindow !== infowindow) {
+                    activeInfoWindow.close();
+                }
                 if (infowindow.getMap()) {
                     infowindow.close();
+                    activeInfoWindow = null;
                 } else {
                     infowindow.open(map, marker);
+                    activeInfoWindow = infowindow;
                 }
             });
             
@@ -924,7 +938,7 @@ async function handleInAppMapSearch() {
     }
 
     // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
-    if (isNaverMapActive) {
+    if (window.naver && window.naver.maps) {
         try {
             const naverResults = await searchNaverGeocoder(query);
             if (Array.isArray(naverResults) && naverResults.length > 0) {
@@ -1027,45 +1041,68 @@ async function searchNominatimFree(query) {
 // Naver Native Geocoder Promise Wrapper
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
-        if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
+        if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
             console.warn("[Naver Map] Geocoder submodule unavailable.");
             resolve(null);
             return;
         }
-        
-        naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if (status !== naver.maps.Service.Status.OK) {
-                console.warn("[Naver Map] Geocode API status:", status);
-                resolve(null);
-                return;
-            }
-            if (!response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
-                console.info("[Naver Map] Geocode found no address match for:", query);
-                resolve(null);
-                return;
-            }
-            
-            const results = response.v2.addresses.map((addr) => {
-                let buildingName = "";
-                if (addr.addressElements) {
-                    const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
-                    if (el && el.longName) {
-                        buildingName = el.longName;
-                    }
+
+        const cleanQ = query.trim();
+        const queriesToTry = [
+            cleanQ,
+            `서울 ${cleanQ}`,
+            `마포구 ${cleanQ}`,
+            `강남구 ${cleanQ}`,
+            `부산 ${cleanQ}`
+        ];
+
+        let combined = [];
+        let completed = 0;
+        let isResolved = false;
+
+        const finish = () => {
+            if (!isResolved) {
+                isResolved = true;
+                if (combined.length > 0) {
+                    resolve(combined);
+                } else {
+                    resolve(null);
                 }
-                
-                const shortAddr = addr.roadAddress || addr.jibunAddress || "";
-                const displayTitle = buildingName ? `${query} (${buildingName})` : (shortAddr ? `${query}` : query);
-                
-                return {
-                    name: displayTitle,
-                    address: shortAddr || "네이버 지도 주소",
-                    lat: parseFloat(addr.y),
-                    lng: parseFloat(addr.x),
-                    category: "Other"
-                };
+            }
+        };
+
+        const timer = setTimeout(finish, 2000);
+
+        queriesToTry.forEach((qStr) => {
+            naver.maps.Service.geocode({ query: qStr }, (status, response) => {
+                completed++;
+                if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                    response.v2.addresses.forEach((addr) => {
+                        let buildingName = "";
+                        if (addr.addressElements) {
+                            const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
+                            if (el && el.longName) {
+                                buildingName = el.longName;
+                            }
+                        }
+                        const shortAddr = addr.roadAddress || addr.jibunAddress || "";
+                        const displayName = buildingName ? `${cleanQ} (${buildingName})` : (shortAddr ? `${cleanQ} (${shortAddr})` : cleanQ);
+                        
+                        combined.push({
+                            name: displayName,
+                            address: shortAddr || "네이버 지도 장소",
+                            lat: parseFloat(addr.y),
+                            lng: parseFloat(addr.x),
+                            category: "Place"
+                        });
+                    });
+                }
+
+                if (completed === queriesToTry.length) {
+                    clearTimeout(timer);
+                    finish();
+                }
             });
-            resolve(results);
         });
     });
 }
@@ -1276,7 +1313,11 @@ function renderMapSearchResults(results) {
             });
             
             naver.maps.Event.addListener(marker, "click", () => {
+                if (activeInfoWindow && activeInfoWindow !== infowindow) {
+                    activeInfoWindow.close();
+                }
                 infowindow.open(map, marker);
+                activeInfoWindow = infowindow;
                 setTimeout(() => lucide.createIcons(), 50);
             });
             
