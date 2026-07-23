@@ -3427,7 +3427,12 @@ async function renderCalendar() {
         });
 
         // Match places with date & group by type (Visited vs Wishlist)
-        const datePlaces = places.filter(p => p.date === fullDateStr);
+        const datePlaces = places.filter(p => {
+            const pDate = p.createdAt || p.date;
+            const ms = parseAnyDate(pDate);
+            if (ms <= 0) return false;
+            return new Date(ms).toISOString().split("T")[0] === fullDateStr;
+        });
         const visitedPlaces = datePlaces.filter(p => p.isVisited === 1);
         const wishlistPlaces = datePlaces.filter(p => p.isVisited === 0);
 
@@ -3508,26 +3513,28 @@ function renderSelectedDateDetails(dateStr, places) {
         const div = document.createElement("div");
         div.style.cssText = `
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.65rem 0.85rem;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.8rem;
             background: rgba(255, 101, 132, 0.04);
             border: 1px solid rgba(255, 101, 132, 0.12);
             border-radius: 12px;
-            margin-bottom: 0.5rem;
-            flex-wrap: wrap;
-            gap: 8px;
+            margin-bottom: 0.6rem;
+            gap: 10px;
         `;
         div.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px;">
-                ${statusBadge}
-                <strong style="font-size:0.92rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
-                <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:flex-start;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    ${statusBadge}
+                    <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
+                    <span style="font-size:0.75rem; color:var(--color-text-med);">(${p.category})</span>
+                </div>
+                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.75rem; height:28px; border-color:var(--color-primary); color:var(--color-primary); flex-shrink:0; margin-left:8px;" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-                ${p.commentA || p.commentB ? `<span style="font-size:0.75rem; color:var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</span>` : ''}
-                <button class="btn btn-outline" style="padding:0.2rem 0.55rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="openEditPlaceModal(${p.id})">✏️ 수정</button>
-            </div>
+            ${p.commentA || p.commentB ? `
+            <div style="width:100%; background:rgba(255,255,255,0.8); padding:0.6rem; border-radius:8px; font-size:0.82rem; color:#444; border:1px dashed rgba(255,101,132,0.3);">
+                💬 "${escapeHtml(p.commentA || p.commentB)}"
+            </div>` : ''}
         `;
         itemsEl.appendChild(div);
     });
