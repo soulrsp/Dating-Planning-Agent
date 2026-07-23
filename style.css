@@ -2470,3 +2470,40 @@ body {
     border-color: var(--color-primary);
     transform: scale(1.08);
 }
+
+/* Mobile Calendar & Navigation Controls Aesthetics */
+#tab-calendar,
+.calendar-container,
+.calendar-card {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#calendar-days-grid {
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr) !important;
+    grid-auto-rows: minmax(50px, auto) !important;
+    gap: 4px !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+}
+
+.calendar-day-cell {
+    min-height: 50px !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+}
+
+.calendar-nav-controls #btn-cal-prev:hover,
+.calendar-nav-controls #btn-cal-next:hover {
+    background: var(--color-primary) !important;
+    color: #ffffff !important;
+    transform: scale(1.08) !important;
+}
