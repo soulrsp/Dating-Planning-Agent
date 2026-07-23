@@ -580,7 +580,7 @@ async function updateMapMarkers() {
                 `,
                 borderWidth: 0,
                 backgroundColor: "transparent",
-                disableAnchor: true
+                pixelOffset: new naver.maps.Point(0, -8)
             });
             
             naver.maps.Event.addListener(marker, "click", () => {
@@ -604,24 +604,35 @@ async function updateMapMarkers() {
             map.fitBounds(bounds);
         }
         
-        // Background Auto Coordinate Repair Engine (Corrects any off-target mountain/river coordinates to Naver Official Building Roofs)
+        // Background Auto Coordinate Repair Engine (Uses place name as primary geocoding query)
         if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
             places.forEach(place => {
-                const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-                if (rawAddr && rawAddr.length >= 2) {
-                    naver.maps.Service.geocode({ query: rawAddr }, (status, response) => {
+                // Priority: address > name > notes (cleaned)
+                let queryText = (place.address || "").trim();
+                if (!queryText || queryText.length < 3) {
+                    queryText = (place.name || "").trim();
+                }
+                if (!queryText || queryText.length < 2) {
+                    const cleaned = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                    if (cleaned.length > 4) queryText = cleaned;
+                }
+
+                if (queryText && queryText.length >= 2) {
+                    naver.maps.Service.geocode({ query: queryText }, (status, response) => {
                         if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
                             const officialAddr = response.v2.addresses[0];
                             const exactLat = parseFloat(officialAddr.y);
                             const exactLng = parseFloat(officialAddr.x);
                             
-                            // If coordinates differ significantly (> 100 meters), update DB seamlessly
                             if (exactLat > 30 && exactLat < 45 && exactLng > 120 && exactLng < 135) {
-                                if (Math.abs(place.lat - exactLat) > 0.0008 || Math.abs(place.lng - exactLng) > 0.0008) {
-                                    console.log(`[Auto Coordinate Repair] Corrected ${place.name} from (${place.lat}, ${place.lng}) to Naver Official Building Roof (${exactLat}, ${exactLng})`);
-                                    place.lat = exactLat;
-                                    place.lng = exactLng;
+                                const dist = Math.abs(place.lat - exactLat) + Math.abs(place.lng - exactLng);
+                                if (dist > 0.0005) {
+                                    console.log(`[Auto Repair] '${place.name}' query='${queryText}' → (${exactLat}, ${exactLng})`);
                                     db.places.update(place.id, { lat: exactLat, lng: exactLng }).catch(() => {});
+                                    // Move marker on map in real-time
+                                    if (place._markerRef) {
+                                        place._markerRef.setPosition(new naver.maps.LatLng(exactLat, exactLng));
+                                    }
                                 }
                             }
                         }
@@ -754,7 +765,7 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
+// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Race
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
     const words = query.trim().split(/\s+/);
@@ -771,44 +782,50 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
         
         const proxyUrls = [
             `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-            `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+            `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
             `https://thingproxy.freeboard.io/fetch/${targetUrl}`
         ];
 
-        const fetchPromises = proxyUrls.map(async (proxyUrl) => {
+        // Race pattern: return as soon as ANY proxy succeeds
+        const racePromises = proxyUrls.map(async (proxyUrl) => {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
             try {
                 const response = await fetch(proxyUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
-                if (!response.ok) return null;
-                const data = await response.json();
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const text = await response.text();
+                let data;
+                try { data = JSON.parse(text); } catch { throw new Error('Invalid JSON'); }
+                
                 let rawList = [];
                 if (data.result && data.result.place && data.result.place.list) {
                     rawList = data.result.place.list;
                 } else if (data.place && data.place.list) {
                     rawList = data.place.list;
                 }
-                if (Array.isArray(rawList) && rawList.length > 0) {
-                    return rawList.map(item => ({
-                        name: item.name || q,
-                        address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                        lat: parseFloat(item.y),
-                        lng: parseFloat(item.x),
-                        category: item.category || "Restaurant"
-                    }));
-                }
+                if (!Array.isArray(rawList) || rawList.length === 0) throw new Error('Empty list');
+                
+                return rawList.map(item => ({
+                    name: (item.name || q).replace(/<[^>]*>/g, ''),
+                    address: item.roadAddress || item.address || "네이버 지도 검색 장소",
+                    lat: parseFloat(item.y),
+                    lng: parseFloat(item.x),
+                    category: item.category || "Restaurant"
+                }));
             } catch (err) {
-                return null;
+                clearTimeout(timeoutId);
+                throw err;
             }
-            return null;
         });
 
         try {
-            const resultsArray = await Promise.all(fetchPromises);
-            const validResult = resultsArray.find(res => Array.isArray(res) && res.length > 0);
-            if (validResult) return validResult;
-        } catch (e) {}
+            const result = await Promise.any(racePromises);
+            if (Array.isArray(result) && result.length > 0) return result;
+        } catch (aggregateErr) {
+            console.warn(`[Naver Dynamic] All proxies failed for '${q}':`, aggregateErr.errors?.map(e => e.message));
+        }
     }
     return null;
 }
@@ -949,8 +966,8 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 5. AI Business Directory & Local Place Search (Finds restaurants & company branches)
-    if (geminiApiKey && combinedResults.length < 2) {
+    // 5. AI Business Directory & Local Place Search (Activated when proxy search returns nothing)
+    if (geminiApiKey && combinedResults.length === 0) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
@@ -962,8 +979,8 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 6. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
-    if (combinedResults.length === 0) {
+    // 6. OpenStreetMap Nominatim Free Search Engine (Supplementary fallback)
+    if (combinedResults.length < 3) {
         try {
             const freeResults = await searchNominatimFree(query);
             if (Array.isArray(freeResults) && freeResults.length > 0) {
