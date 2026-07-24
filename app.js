@@ -517,6 +517,14 @@ function initNaverMap() {
     updateMapMarkers();
 }
 
+let isInitialMapFit = true;
+
+window.fitAllMapMarkers = function() {
+    isInitialMapFit = true;
+    updateMapMarkers();
+    showToast("전체 장소 마커 보기로 지도 구도가 맞춰졌습니다 🗺️", "info");
+};
+
 async function updateMapMarkers() {
     if (!map) return;
     const places = await db.places.toArray();
@@ -580,8 +588,9 @@ async function updateMapMarkers() {
             bounds.extend(marker.getPosition());
         });
         
-        if (places.length > 0) {
+        if (places.length > 0 && isInitialMapFit) {
             map.fitBounds(bounds);
+            isInitialMapFit = false;
         }
     } else {
         // Leaflet Map Markers Rendering
@@ -619,8 +628,9 @@ async function updateMapMarkers() {
             latLngs.push([place.lat, place.lng]);
         });
         
-        if (latLngs.length > 0) {
+        if (latLngs.length > 0 && isInitialMapFit) {
             map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
+            isInitialMapFit = false;
         }
     }
 }
