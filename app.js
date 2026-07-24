@@ -506,12 +506,56 @@ function initNaverMap() {
         }
     });
 
-    // Close any open popup when clicking empty space on Naver Map
-    naver.maps.Event.addListener(map, "click", () => {
+    // Allow clicking on map to drop a pin and show interactive pin menu
+    naver.maps.Event.addListener(map, "click", (e) => {
         if (activeInfoWindow) {
             activeInfoWindow.close();
             activeInfoWindow = null;
         }
+
+        const lat = e.coord.lat();
+        const lng = e.coord.lng();
+
+        const clickMarkerHtml = `
+            <div style="background-color:#FFD166; width:22px; height:22px; border-radius:50%; border:3px solid #FF4757; box-shadow: 0 0 12px rgba(255,71,87,0.8); transform:translate(-11px, -11px); display:flex; align-items:center; justify-content:center; color:#FF4757; font-weight:bold; font-size:12px;">📍</div>
+        `;
+
+        if (!window.tempClickMarker) {
+            window.tempClickMarker = new naver.maps.Marker({
+                position: e.coord,
+                map: map,
+                icon: {
+                    content: clickMarkerHtml,
+                    anchor: new naver.maps.Point(11, 11)
+                }
+            });
+        } else {
+            window.tempClickMarker.setPosition(e.coord);
+            window.tempClickMarker.setMap(map);
+        }
+
+        const clickInfoWindow = new naver.maps.InfoWindow({
+            content: `
+                <div style="padding: 10px; font-family:var(--font-body); width:210px; background:white; border-radius:14px; border:1.5px solid rgba(255,101,132,0.3); box-shadow:0 8px 20px rgba(0,0,0,0.15);">
+                    <strong style="color:var(--color-text-dark); font-size:0.88rem; display:block; margin-bottom:4px;">📍 지도에 핀 찍기 완료</strong>
+                    <div style="font-size:0.7rem; color:var(--color-text-med); margin-bottom:8px;">위도 ${lat.toFixed(5)}, 경도 ${lng.toFixed(5)}</div>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <button class="btn btn-primary" style="padding:0.3rem 0.5rem; font-size:0.72rem; width:100%; border-radius:8px;" onclick="openAddPlaceWithCoords(${lat}, ${lng})">
+                            💖 이 위치로 위시리스트 추가
+                        </button>
+                        <button class="btn btn-outline" style="padding:0.3rem 0.5rem; font-size:0.72rem; width:100%; border-color:var(--color-secondary); color:var(--color-secondary); border-radius:8px; background:rgba(255,112,150,0.06);" onclick="openPinFixMenu(${lat}, ${lng})">
+                            🎯 기존 장소 핀 위치 보정
+                        </button>
+                    </div>
+                </div>
+            `,
+            borderWidth: 0,
+            backgroundColor: "transparent",
+            pixelOffset: new naver.maps.Point(0, -10)
+        });
+
+        clickInfoWindow.open(map, window.tempClickMarker);
+        activeInfoWindow = clickInfoWindow;
     });
 
     updateMapMarkers();
@@ -539,12 +583,13 @@ async function updateMapMarkers() {
             
             // Custom CSS Bubble style marker HTML for Naver Map
             const contentHtml = `
-                <div class="custom-naver-marker" style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 8px ${shadowColor}; transform:translate(-8px, -8px);"></div>
+                <div class="custom-naver-marker" style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 8px ${shadowColor}; transform:translate(-8px, -8px); cursor:pointer;"></div>
             `;
             
             const marker = new naver.maps.Marker({
                 position: new naver.maps.LatLng(place.lat, place.lng),
                 map: map,
+                draggable: true,
                 icon: {
                     content: contentHtml,
                     anchor: new naver.maps.Point(8, 8)
@@ -574,6 +619,14 @@ async function updateMapMarkers() {
                     infowindow.open(map, marker);
                     activeInfoWindow = infowindow;
                 }
+            });
+
+            naver.maps.Event.addListener(marker, "dragend", async (e) => {
+                const newLat = e.coord.lat();
+                const newLng = e.coord.lng();
+                await db.places.update(place.id, { lat: newLat, lng: newLng });
+                triggerSyncUpload();
+                showToast(`'${place.name}' 마커 위치가 정밀 좌표(${newLat.toFixed(5)}, ${newLng.toFixed(5)})로 보정되었습니다! 🎯`, "success");
             });
             
             naverMarkers.push(marker);
@@ -638,8 +691,15 @@ async function updateMapMarkers() {
                 </div>
             `;
             
-            const marker = L.marker([place.lat, place.lng], { icon: customIcon })
+            const marker = L.marker([place.lat, place.lng], { icon: customIcon, draggable: true })
                 .bindPopup(popupContent);
+
+            marker.on('dragend', async (e) => {
+                const latlng = e.target.getLatLng();
+                await db.places.update(place.id, { lat: latlng.lat, lng: latlng.lng });
+                triggerSyncUpload();
+                showToast(`'${place.name}' 마커가 정밀 좌표(${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)})로 보정되었습니다! 🎯`, "success");
+            });
                 
             leafletMarkersGroup.addLayer(marker);
             latLngs.push([place.lat, place.lng]);
@@ -1948,6 +2008,133 @@ window.fixEditModalCoordinates = async function() {
     } else {
         showToast("네이버 지도 지적도 서비스가 준비 중입니다.", "warning");
     }
+};
+
+window.openDaumPostcodeSearch = function(targetInputId, targetLatId = null, targetLngId = null) {
+    if (typeof daum === 'undefined' || !daum.Postcode) {
+        showToast("우편번호 서비스 스크립트를 로드 중입니다. 잠시 후 다시 시도해 주세요.", "warning");
+        return;
+    }
+
+    new daum.Postcode({
+        oncomplete: function(data) {
+            let fullAddr = data.roadAddress || data.address || "";
+            let extraAddr = "";
+
+            if (data.bname !== '' && /[동|로|가]$/g.test(data.bname)) {
+                extraAddr += data.bname;
+            }
+            if (data.buildingName !== '' && data.apartment === 'Y') {
+                extraAddr += (extraAddr !== '' ? ', ' + data.buildingName : data.buildingName);
+            }
+            if (extraAddr !== '') {
+                fullAddr += ' (' + extraAddr + ')';
+            }
+
+            const targetInput = document.getElementById(targetInputId);
+            if (targetInput) {
+                targetInput.value = fullAddr;
+            }
+
+            showToast(`카카오 도로명 주소 선택 완료: ${data.roadAddress || data.address} 📍`, "info");
+
+            // Convert roadAddress to exact lat/lng via Naver Geocoder
+            if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
+                const queryAddr = data.roadAddress || data.address;
+                naver.maps.Service.geocode({ query: queryAddr }, (status, response) => {
+                    if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                        const addrItem = response.v2.addresses[0];
+                        const lat = parseFloat(addrItem.y);
+                        const lng = parseFloat(addrItem.x);
+
+                        if (targetLatId && document.getElementById(targetLatId)) {
+                            document.getElementById(targetLatId).value = lat;
+                        }
+                        if (targetLngId && document.getElementById(targetLngId)) {
+                            document.getElementById(targetLngId).value = lng;
+                        }
+
+                        if (targetInputId === "edit-place-address") {
+                            const editId = parseInt(document.getElementById("edit-place-id")?.value);
+                            if (editId) {
+                                db.places.update(editId, { lat: lat, lng: lng, address: fullAddr }).then(() => {
+                                    triggerSyncUpload();
+                                    updateMapMarkers();
+                                });
+                            }
+                        }
+
+                        showToast(`선택 주소의 100% 정밀 건물 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})가 자동 매핑되었습니다! 🎯`, "success");
+
+                        if (isNaverMapActive && map) {
+                            map.setCenter(new naver.maps.LatLng(lat, lng));
+                            map.setZoom(16);
+                        }
+                    }
+                });
+            }
+        }
+    }).open();
+};
+
+window.openAddPlaceWithCoords = function(lat, lng) {
+    if (activeInfoWindow) {
+        activeInfoWindow.close();
+        activeInfoWindow = null;
+    }
+    
+    openPlaceModal();
+    const latInput = document.getElementById("add-place-lat");
+    const lngInput = document.getElementById("add-place-lng");
+    if (latInput) latInput.value = lat;
+    if (lngInput) lngInput.value = lng;
+    
+    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.reverseGeocode) {
+        naver.maps.Service.reverseGeocode({
+            coords: new naver.maps.LatLng(lat, lng),
+            orders: [
+                naver.maps.Service.OrderType.ADDR,
+                naver.maps.Service.OrderType.ROAD_ADDR
+            ].join(',')
+        }, function(status, response) {
+            if (status === naver.maps.Service.Status.OK && response.v2) {
+                const addr = response.v2.address ? response.v2.address.jibunAddress || response.v2.address.roadAddress : "";
+                const notesInput = document.getElementById("add-place-notes");
+                if (notesInput && addr) {
+                    notesInput.value = `📍 위치: ${addr}`;
+                }
+            }
+        });
+    }
+    showToast(`선택한 위치(${lat.toFixed(5)}, ${lng.toFixed(5)}) 좌표가 전달되었습니다! 장소명을 입력해주세요 💖`, "info");
+};
+
+window.openPinFixMenu = async function(lat, lng) {
+    if (activeInfoWindow) {
+        activeInfoWindow.close();
+        activeInfoWindow = null;
+    }
+    const places = await db.places.toArray();
+    if (places.length === 0) {
+        showToast("보정할 등록된 장소가 없습니다. 먼저 장소를 추가해 주세요!", "warning");
+        return;
+    }
+
+    const placeNames = places.map((p, idx) => `${idx + 1}. ${p.name} (${p.category})`).join("\n");
+    const choice = prompt(`이 위치(${lat.toFixed(5)}, ${lng.toFixed(5)})로 핀 위치를 이동시킬 장소의 번호를 입력하세요:\n\n${placeNames}`);
+    if (!choice) return;
+
+    const idx = parseInt(choice) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= places.length) {
+        showToast("올바른 번호를 선택해 주세요.", "warning");
+        return;
+    }
+
+    const targetPlace = places[idx];
+    await db.places.update(targetPlace.id, { lat: lat, lng: lng });
+    triggerSyncUpload();
+    updateMapMarkers();
+    showToast(`'${targetPlace.name}' 핀 위치가 지정한 정밀 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})로 이동 완료되었습니다! 🎯`, "success");
 };
 
 async function handleEditPlaceSubmit(e) {
