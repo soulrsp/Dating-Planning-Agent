@@ -210,7 +210,7 @@
                         <div class="card flex-column memory-gallery-widget">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:6px;">
                                 <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
-                                <div style="display:flex; gap:6px;">
+                                <div style="display:flex; gap:6px; margin-left:auto;">
                                     <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06);" onclick="downloadAllMemoryGalleryPhotos()">
                                         📥 전체 다운로드
                                     </button>
@@ -731,12 +731,15 @@
     <div class="modal-overlay" id="modal-gallery-slider">
         <div class="gallery-slider-card">
             <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
-                <div style="display:flex; gap:6px;">
-                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
-                        <i data-lucide="download" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 다운로드 📥
+                <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadPlacePhotosZipFromSlider()">
+                        <i data-lucide="archive" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>전체 📦
                     </button>
-                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="deleteCurrentSliderPhoto()">
-                        <i data-lucide="trash-2" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 사진 삭제 🗑️
+                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
+                        <i data-lucide="download" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>다운로드 📥
+                    </button>
+                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="deleteCurrentSliderPhoto()">
+                        <i data-lucide="trash-2" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>삭제 🗑️
                     </button>
                 </div>
                 <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
