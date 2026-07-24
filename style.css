@@ -403,38 +403,45 @@ body {
     align-items: center;
 }
 
-/* Stats Row */
+/* Stats Row (Sleek 2-Card Layout) */
 .stats-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 1.75rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 0.85rem;
 }
 
 .stat-card {
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.7);
     border: 1px solid var(--color-card-border);
     backdrop-filter: blur(15px);
-    border-radius: 24px;
-    padding: 1.5rem;
+    border-radius: 18px;
+    padding: 0.65rem 1.1rem;
     display: flex;
     align-items: center;
-    gap: 1.25rem;
-    box-shadow: 0 4px 20px rgba(255, 101, 132, 0.04);
+    gap: 0.85rem;
+    box-shadow: 0 4px 18px rgba(255, 101, 132, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(255, 101, 132, 0.1);
 }
 
 .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .stat-icon i {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
 }
 
 .bg-pink-soft {
@@ -455,18 +462,18 @@ body {
 }
 
 .stat-label {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--color-text-low);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 .stat-value {
     font-family: var(--font-heading);
     font-weight: 700;
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     color: var(--color-text-high);
+    line-height: 1.1;
 }
 
 /* Main Grid Layout */
@@ -1894,15 +1901,34 @@ body {
     }
 
     .stats-row {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: repeat(2, 1fr) !important;
         gap: 0.6rem !important;
+        margin-bottom: 0.75rem !important;
     }
 
     .stat-card {
-        padding: 0.85rem 1rem !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 1rem !important;
+        padding: 0.55rem 0.8rem !important;
+        gap: 0.65rem !important;
+        border-radius: 14px !important;
+    }
+
+    .stat-icon {
+        width: 34px !important;
+        height: 34px !important;
+        border-radius: 10px !important;
+    }
+
+    .stat-icon i {
+        width: 18px !important;
+        height: 18px !important;
+    }
+
+    .stat-label {
+        font-size: 0.68rem !important;
+    }
+
+    .stat-value {
+        font-size: 1.15rem !important;
     }
 
     .map-card {
@@ -1916,8 +1942,12 @@ body {
         gap: 0.35rem !important;
     }
 
+    .map-container-wrapper {
+        height: 380px !important;
+    }
+
     #map {
-        height: 340px !important;
+        height: 380px !important;
         min-height: 300px !important;
         border-radius: 14px !important;
         width: 100% !important;
