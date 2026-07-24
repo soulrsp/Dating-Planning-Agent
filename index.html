@@ -689,9 +689,12 @@
                     </div>
                 </div>
 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()">취소</button>
-                    <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
+                <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline" style="border-color:#EF476F; color:#EF476F; background:rgba(239,71,111,0.06); font-size:0.75rem; padding:0.35rem 0.65rem;" onclick="deletePlaceFromEditModal()">장소 전체 삭제 🗑️</button>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()">취소</button>
+                        <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
+                    </div>
                 </div>
             </form>
         </div>
