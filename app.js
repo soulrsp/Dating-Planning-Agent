@@ -533,11 +533,12 @@ async function updateMapMarkers() {
             if (!place.lat || !place.lng) return;
             
             const isVisited = parseInt(place.isVisited) === 1;
-            const markerColor = isVisited ? "var(--color-secondary)" : "var(--color-primary)";
+            const markerColor = isVisited ? "#74B9FF" : "#FF6584";
+            const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
             
             // Custom CSS Bubble style marker HTML for Naver Map
             const contentHtml = `
-                <div class="custom-naver-marker" style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 8px rgba(255,101,132,0.3); transform:translate(-8px, -8px);"></div>
+                <div class="custom-naver-marker" style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 8px ${shadowColor}; transform:translate(-8px, -8px);"></div>
             `;
             
             const marker = new naver.maps.Marker({
@@ -614,11 +615,12 @@ async function updateMapMarkers() {
         places.forEach(place => {
             if (!place.lat || !place.lng) return;
             const isVisited = parseInt(place.isVisited) === 1;
-            const markerColor = isVisited ? "var(--color-secondary)" : "var(--color-primary)";
+            const markerColor = isVisited ? "#74B9FF" : "#FF6584";
+            const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
             
             const customIcon = L.divIcon({
                 className: 'custom-map-marker',
-                html: `<div style="background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px rgba(255,101,132,0.3);"></div>`,
+                html: `<div style="background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px ${shadowColor};"></div>`,
                 iconSize: [14, 14],
                 iconAnchor: [7, 7]
             });
@@ -3479,11 +3481,7 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
     if (!titleEl || !itemsEl) return;
 
     const dateObj = new Date(dateStr);
-    let typeSuffix = "";
-    if (filterType === 'visited') typeSuffix = " (🌸 다녀온 곳)";
-    else if (filterType === 'wishlist') typeSuffix = " (💌 위시리스트)";
-
-    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록${typeSuffix}` : `${dateStr} 데이트 기록${typeSuffix}`;
+    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록` : `${dateStr} 데이트 기록`;
     titleEl.textContent = formattedTitle;
 
     const allDatePlaces = places.filter(p => {
