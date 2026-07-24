@@ -3394,14 +3394,12 @@ async function renderCalendar() {
 
         const cell = document.createElement("div");
         cell.className = "calendar-day-cell";
+        cell.setAttribute("data-date", fullDateStr);
         if (fullDateStr === todayStr) cell.classList.add("today");
         if (fullDateStr === selectedCalendarDateStr) cell.classList.add("selected");
 
         cell.addEventListener("click", () => {
-            document.querySelectorAll(".calendar-day-cell").forEach(c => c.classList.remove("selected"));
-            cell.classList.add("selected");
-            selectedCalendarDateStr = fullDateStr;
-            renderSelectedDateDetails(fullDateStr, places);
+            selectCalendarDateAndRender(fullDateStr, 'all');
         });
 
         // Match places with date & group by type (Visited vs Wishlist)
@@ -3421,14 +3419,14 @@ async function renderCalendar() {
             badgesHtml += `<div class="cal-badges-container" style="display:flex; flex-direction:column; gap:2px; margin-top:2px; align-items:center;">`;
             if (visitedPlaces.length > 0) {
                 badgesHtml += `
-                    <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
+                    <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
                         🌸 <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>
                     </button>
                 `;
             }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
-                    <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); openDateDetailsModal('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
+                    <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
                         💌 <span class="badge-text">위시 (${wishlistPlaces.length})</span>
                     </button>
                 `;
@@ -3459,21 +3457,46 @@ async function renderCalendar() {
     renderSelectedDateDetails(selectedCalendarDateStr, places);
 }
 
-function renderSelectedDateDetails(dateStr, places) {
+window.selectCalendarDateAndRender = async function(dateStr, filterType = 'all') {
+    selectedCalendarDateStr = dateStr;
+    document.querySelectorAll(".calendar-day-cell").forEach(c => c.classList.remove("selected"));
+    const targetCell = document.querySelector(`.calendar-day-cell[data-date="${dateStr}"]`);
+    if (targetCell) targetCell.classList.add("selected");
+    
+    const places = await db.places.toArray();
+    renderSelectedDateDetails(dateStr, places, filterType);
+
+    const detailsEl = document.getElementById("selected-date-title");
+    if (detailsEl) {
+        detailsEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+};
+
+function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
     const titleEl = document.getElementById("selected-date-title");
     const itemsEl = document.getElementById("selected-date-items");
     if (!titleEl || !itemsEl) return;
 
     const dateObj = new Date(dateStr);
-    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록` : `${dateStr} 데이트 기록`;
+    let typeSuffix = "";
+    if (filterType === 'visited') typeSuffix = " (🌸 다녀온 곳)";
+    else if (filterType === 'wishlist') typeSuffix = " (💌 위시리스트)";
+
+    const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록${typeSuffix}` : `${dateStr} 데이트 기록${typeSuffix}`;
     titleEl.textContent = formattedTitle;
 
-    const datePlaces = places.filter(p => {
+    const allDatePlaces = places.filter(p => {
         const pDate = p.createdAt || p.date;
         const ms = parseAnyDate(pDate);
         if (ms <= 0) return false;
         const iso = new Date(ms).toISOString().split("T")[0];
         return iso === dateStr;
+    });
+
+    const datePlaces = allDatePlaces.filter(p => {
+        if (filterType === 'visited') return parseInt(p.isVisited) === 1;
+        if (filterType === 'wishlist') return parseInt(p.isVisited) === 0;
+        return true;
     });
 
     if (datePlaces.length === 0) {
