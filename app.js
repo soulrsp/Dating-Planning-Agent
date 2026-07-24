@@ -2653,8 +2653,18 @@ async function loadFromCloud() {
                         if (!updatePayload.photo && existing.photo) updatePayload.photo = existing.photo;
                         if ((!updatePayload.photos || updatePayload.photos.length === 0) && existing.photos) updatePayload.photos = existing.photos;
                         
-                        await db.places.update(existing.id, updatePayload);
-                        hasChanges = true;
+                        let isDifferent = false;
+                        for (const key of Object.keys(updatePayload)) {
+                            if (JSON.stringify(existing[key]) !== JSON.stringify(updatePayload[key])) {
+                                isDifferent = true;
+                                break;
+                            }
+                        }
+
+                        if (isDifferent) {
+                            await db.places.update(existing.id, updatePayload);
+                            hasChanges = true;
+                        }
                     } else {
                         const newData = { ...fp };
                         delete newData.id;
@@ -2663,8 +2673,8 @@ async function loadFromCloud() {
                     }
                 }
 
-                if (hasChanges || localPlaces.length === 0) {
-                    console.log("[Sync Engine] Local DB updated from cloud.");
+                if (hasChanges) {
+                    console.log("[Sync Engine] Local DB updated from cloud diff.");
                     await updateDashboardStats();
                     await renderPlacesList();
                     updateMapMarkers();
