@@ -2514,7 +2514,7 @@ async function saveToCloud() {
         lastSyncedDataString = bodyStr;
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
         const response = await fetch(url, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: bodyStr
         });
