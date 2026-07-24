@@ -488,13 +488,6 @@ function initLeafletMap() {
     }).addTo(map);
     
     leafletMarkersGroup = L.featureGroup().addTo(map);
-        naver.maps.Event.addListener(map, "click", () => {
-        if (activeInfoWindow) {
-            activeInfoWindow.close();
-            activeInfoWindow = null;
-        }
-    });
-
     updateMapMarkers();
 }
 
@@ -512,7 +505,15 @@ function initNaverMap() {
             position: naver.maps.Position.RIGHT_CENTER
         }
     });
-    
+
+    // Close any open popup when clicking empty space on Naver Map
+    naver.maps.Event.addListener(map, "click", () => {
+        if (activeInfoWindow) {
+            activeInfoWindow.close();
+            activeInfoWindow = null;
+        }
+    });
+
     updateMapMarkers();
 }
 
@@ -532,7 +533,7 @@ async function updateMapMarkers() {
         places.forEach(place => {
             if (!place.lat || !place.lng) return;
             
-            const isVisited = parseInt(place.isVisited) === 1;
+            const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
             const markerColor = isVisited ? "#74B9FF" : "#FF6584";
             const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
             
@@ -564,10 +565,14 @@ async function updateMapMarkers() {
             });
             
             naver.maps.Event.addListener(marker, "click", () => {
-                if (infowindow.getMap()) {
-                    infowindow.close();
+                if (activeInfoWindow) {
+                    activeInfoWindow.close();
+                }
+                if (activeInfoWindow === infowindow) {
+                    activeInfoWindow = null;
                 } else {
                     infowindow.open(map, marker);
+                    activeInfoWindow = infowindow;
                 }
             });
             
@@ -614,7 +619,7 @@ async function updateMapMarkers() {
         
         places.forEach(place => {
             if (!place.lat || !place.lng) return;
-            const isVisited = parseInt(place.isVisited) === 1;
+            const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
             const markerColor = isVisited ? "#74B9FF" : "#FF6584";
             const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
             
