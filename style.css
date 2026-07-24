@@ -1319,8 +1319,10 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(74, 40, 52, 0.4);
     backdrop-filter: blur(8px);
     z-index: 1000;
@@ -1738,6 +1740,15 @@ body {
 }
 
 @media (max-width: 768px) {
+    html, body {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        position: relative !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     /* Hide Desktop Sidebar on Mobile */
     .sidebar {
         display: none !important;
@@ -1756,6 +1767,9 @@ body {
         top: 0;
         left: 0;
         right: 0;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
         height: 52px;
         background: rgba(255, 255, 255, 0.88);
         backdrop-filter: blur(12px);
@@ -1808,6 +1822,9 @@ body {
         bottom: 0;
         left: 0;
         right: 0;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
         height: 64px;
         background: rgba(255, 255, 255, 0.92);
         backdrop-filter: blur(16px);
@@ -1870,12 +1887,18 @@ body {
         padding-top: 52px;
         padding-bottom: 64px;
         min-height: 100vh;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     .main-content {
         padding: 0.85rem;
-        width: 100%;
-        overflow-x: hidden;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     /* Map & Dashboard Layout on Mobile */
@@ -1884,6 +1907,8 @@ body {
         flex-direction: column !important;
         gap: 1rem !important;
         width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .dashboard-grid {
@@ -1891,11 +1916,15 @@ body {
         flex-direction: column !important;
         gap: 1rem !important;
         width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .stats-row {
         grid-template-columns: 1fr !important;
         gap: 0.6rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .stat-card {
@@ -1903,11 +1932,15 @@ body {
         display: flex !important;
         align-items: center !important;
         gap: 1rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .map-card {
         padding: 0.9rem !important;
         border-radius: 18px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .map-card .card-header {
@@ -1921,33 +1954,49 @@ body {
         min-height: 300px !important;
         border-radius: 14px !important;
         width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .budget-card {
         padding: 0.9rem !important;
         border-radius: 18px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .places-grid {
         grid-template-columns: 1fr !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     .place-card {
         padding: 0.85rem;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     /* Mobile Modal Box Fit Rules (Zero Clipping, Fits Viewport) */
     .modal-overlay {
         padding: 0.5rem !important;
         box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
+        overflow-x: hidden !important;
     }
 
     .modal-card,
-    #modal-edit-place .modal-card {
-        width: 95vw !important;
-        max-width: 95vw !important;
+    #modal-edit-place .modal-card,
+    .gallery-slider-card {
+        width: calc(100% - 1rem) !important;
+        max-width: calc(100% - 1rem) !important;
         max-height: 90vh !important;
         padding: 0.75rem 0.85rem !important;
+        box-sizing: border-box !important;
+        margin: 0 auto !important;
+    }
         border-radius: 18px !important;
         box-sizing: border-box !important;
         margin: auto !important;
@@ -2272,7 +2321,7 @@ body {
 #modal-edit-place .modal-card {
     max-height: 92vh !important;
     width: 580px !important;
-    max-width: 95vw !important;
+    max-width: calc(100% - 1rem) !important;
     padding: 1rem 1.3rem !important;
     overflow-y: auto;
 }
@@ -2316,7 +2365,7 @@ body {
 /* Multi-Photo Lightbox Slider Modal */
 .gallery-slider-card {
     position: relative;
-    width: 90vw;
+    width: calc(100% - 1rem);
     max-width: 860px;
     max-height: 92vh;
     border-radius: 20px;
