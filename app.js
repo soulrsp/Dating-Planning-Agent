@@ -561,15 +561,7 @@ function initNaverMap() {
     updateMapMarkers();
 }
 
-let hasMapInitialBoundsFitted = false;
-
-window.resetMapZoom = function() {
-    hasMapInitialBoundsFitted = false;
-    updateMapMarkers(true);
-    showToast("지도가 전체 핀 영역으로 재설정되었습니다! 🗺️", "info");
-};
-
-async function updateMapMarkers(forceFit = false) {
+async function updateMapMarkers() {
     if (!map) return;
     const places = await db.places.toArray();
 
@@ -641,10 +633,8 @@ async function updateMapMarkers(forceFit = false) {
             bounds.extend(marker.getPosition());
         });
         
-        // Fit bounds ONLY on initial load or explicit user action (prevents 5-sec auto-reset zoom)
-        if (places.length > 0 && (!hasMapInitialBoundsFitted || forceFit)) {
+        if (places.length > 0) {
             map.fitBounds(bounds);
-            hasMapInitialBoundsFitted = true;
         }
         
         // Background Auto Coordinate Repair Engine (Corrects any off-target mountain/river coordinates to Naver Official Building Roofs)
@@ -715,9 +705,8 @@ async function updateMapMarkers(forceFit = false) {
             latLngs.push([place.lat, place.lng]);
         });
         
-        if (latLngs.length > 0 && (!hasMapInitialBoundsFitted || forceFit)) {
+        if (latLngs.length > 0) {
             map.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
-            hasMapInitialBoundsFitted = true;
         }
     }
 }
