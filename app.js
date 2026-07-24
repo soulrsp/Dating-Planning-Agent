@@ -3734,6 +3734,23 @@ async function renderGallery() {
         const dateObj = new Date(p.createdAt);
         const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
 
+        const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+        const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+
+        let commentsHtml = '';
+        if (commentA) {
+            commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                <span>${escapeHtml(commentA)}</span>
+            </div>`;
+        }
+        if (commentB) {
+            commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                <span>${escapeHtml(commentB)}</span>
+            </div>`;
+        }
+
         card.innerHTML = `
             <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">
                 <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
@@ -3747,8 +3764,7 @@ async function renderGallery() {
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
                 </div>
-
-                ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
+                ${commentsHtml}
                 <div class="gallery-action-bar" style="margin-top:6px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
                         ✏️ 수정/추가
@@ -3904,114 +3920,46 @@ window.deleteCurrentSliderPhoto = async function() {
     renderGallery();
 };
 
-window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
-    let place = null;
-    if (typeof placeId === 'number') {
-        place = await db.places.get(placeId);
-    }
-    if (!place) {
-        const visitedPlaces = await db.places.where("isVisited").equals(1).toArray();
-        place = visitedPlaces.find(p => p.id == placeId || p.id === placeId);
-    }
-    if (!place) return;
-
-    activeGalleryPhotos = place.photos || (place.photo ? [place.photo] : []);
-    if (activeGalleryPhotos.length === 0) return;
-
-    activePhotoIndex = Math.max(0, Math.min(initialIdx, activeGalleryPhotos.length - 1));
-    
-    const dateObj = new Date(place.createdAt);
-    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
-    
-    activePlaceInfo = {
-        name: place.name,
-        meta: `${dateStr} · (${place.category})`,
-        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
-    };
-
-    updateGallerySliderUI();
-
-    const modal = document.getElementById("modal-gallery-slider");
-    if (modal) {
-        modal.classList.add("active");
-        setTimeout(() => lucide.createIcons(), 50);
-    }
-};
-
-function updateGallerySliderUI() {
-    const mainImg = document.getElementById("gallery-slider-main-img");
-    const nameEl = document.getElementById("gallery-slider-place-name");
-    const metaEl = document.getElementById("gallery-slider-place-meta");
-    const commEl = document.getElementById("gallery-slider-comments");
-    const thumbsContainer = document.getElementById("gallery-slider-thumbs");
-
-    if (mainImg) mainImg.src = activeGalleryPhotos[activePhotoIndex];
-    if (nameEl) nameEl.textContent = activePlaceInfo.name;
-    if (metaEl) metaEl.textContent = `${activePlaceInfo.meta} [${activePhotoIndex + 1} / ${activeGalleryPhotos.length}]`;
-    if (commEl) {
-        if (activePlaceInfo.comments) {
-            commEl.style.display = "block";
-            commEl.textContent = activePlaceInfo.comments;
-        } else {
-            commEl.style.display = "none";
-        }
-    }
-
-    if (thumbsContainer) {
-        thumbsContainer.innerHTML = "";
-        if (activeGalleryPhotos.length > 1) {
-            thumbsContainer.style.display = "flex";
-            activeGalleryPhotos.forEach((imgSrc, idx) => {
-                const thumb = document.createElement("img");
-                thumb.src = imgSrc;
-                thumb.className = `gallery-slider-thumb ${idx === activePhotoIndex ? 'active' : ''}`;
-                thumb.onclick = () => selectGallerySliderImage(idx);
-                thumbsContainer.appendChild(thumb);
-            });
-        } else {
-            thumbsContainer.style.display = "none";
-        }
-    }
-}
-
-window.navigateGallerySlider = function(direction) {
-    if (activeGalleryPhotos.length <= 1) return;
-    activePhotoIndex = (activePhotoIndex + direction + activeGalleryPhotos.length) % activeGalleryPhotos.length;
-    updateGallerySliderUI();
-};
-
-window.selectGallerySliderImage = function(idx) {
-    if (idx >= 0 && idx < activeGalleryPhotos.length) {
-        activePhotoIndex = idx;
-        updateGallerySliderUI();
-    }
-};
-
-window.closeGallerySliderModal = function() {
-    const modal = document.getElementById("modal-gallery-slider");
-    if (modal) modal.classList.remove("active");
-};
-
 // Single & Place Photo Download Engines
 window.downloadPlacePhotosZip = async function(placeId) {
-    const place = await db.places.get(placeId);
-    if (!place) return;
-    const photoList = place.photos || (place.photo ? [place.photo] : []);
+    let place = null;
+    if (placeId) {
+        const numericId = parseInt(placeId);
+        if (!isNaN(numericId)) {
+            place = await db.places.get(numericId);
+        }
+        if (!place) {
+            const all = await db.places.toArray();
+            place = all.find(p => p.id == placeId || p.id === placeId);
+        }
+    }
+    
+    let photoList = [];
+    let placeName = "추억사진";
+
+    if (place) {
+        photoList = place.photos || (place.photo ? [place.photo] : []);
+        placeName = place.name || "추억사진";
+    } else if (activeGalleryPhotos && activeGalleryPhotos.length > 0) {
+        photoList = activeGalleryPhotos;
+        placeName = (activePlaceInfo && activePlaceInfo.name) ? activePlaceInfo.name : "추억사진";
+    }
+
     if (photoList.length === 0) {
         showToast("다운로드할 사진이 없습니다 📷", "warning");
         return;
     }
 
     if (photoList.length === 1) {
-        downloadBase64Image(photoList[0], `${place.name}_추억사진.jpg`);
-        showToast(`'${place.name}' 사진 1장이 다운로드되었습니다! 📥`, "success");
+        downloadBase64Image(photoList[0], `${placeName}_추억사진.jpg`);
+        showToast(`'${placeName}' 사진 1장이 다운로드되었습니다! 📥`, "success");
     } else {
         try {
-            showToast(`'${place.name}' 추억 사진 ${photoList.length}장을 압축 다운로드합니다... 📦`, "info");
+            showToast(`'${placeName}' 추억 사진 ${photoList.length}장을 압축 다운로드합니다... 📦`, "info");
             const zip = new JSZip();
-            const cleanName = place.name.replace(/[/\\?%*:|"<>. ]/g, "_");
+            const cleanName = placeName.replace(/[/\\?%*:|"<>. ]/g, "_");
             photoList.forEach((pSrc, idx) => {
-                const base64Data = pSrc.split(',')[1];
+                const base64Data = pSrc.includes(',') ? pSrc.split(',')[1] : pSrc;
                 zip.file(`${cleanName}_추억_${idx + 1}.jpg`, base64Data, { base64: true });
             });
             const content = await zip.generateAsync({ type: "blob" });
@@ -4023,7 +3971,7 @@ window.downloadPlacePhotosZip = async function(placeId) {
             document.body.removeChild(downloadAnchor);
             showToast("모든 사진 다운로드 완료! 💖", "success");
         } catch(e) {
-            photoList.forEach((pSrc, idx) => downloadBase64Image(pSrc, `${place.name}_${idx+1}.jpg`));
+            photoList.forEach((pSrc, idx) => downloadBase64Image(pSrc, `${placeName}_${idx+1}.jpg`));
             showToast("사진 다운로드가 시작되었습니다! 📥", "success");
         }
     }
@@ -4038,11 +3986,8 @@ window.downloadCurrentSliderPhoto = function() {
 };
 
 window.downloadPlacePhotosZipFromSlider = async function() {
-    if (!activePlaceInfo || !activePlaceInfo.id) {
-        showToast("장소 정보를 찾을 수 없습니다.", "warning");
-        return;
-    }
-    await window.downloadPlacePhotosZip(activePlaceInfo.id);
+    const targetId = activePlaceInfo ? activePlaceInfo.id : null;
+    await window.downloadPlacePhotosZip(targetId);
 };
 
 function downloadBase64Image(base64Str, filename) {
