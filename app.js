@@ -662,7 +662,35 @@ const AURA_LOCAL_PLACE_KB = [
     { name: "민테크 경기 화성연구소", address: "경기도 화성시 동탄첨단산업1로 57", lat: 37.2014, lng: 127.0945, category: "Other", keywords: ["민테크", "mintech"] },
     { name: "민테크 울산지사", address: "울산광역시 남구 테크노산업로 55", lat: 35.5085, lng: 129.3112, category: "Other", keywords: ["민테크", "mintech"] },
     { name: "민테크 창원사무소", address: "경상남도 창원시 성산구 중앙대로 105", lat: 35.2215, lng: 128.6812, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 포항시험센터", address: "경상북도 포항시 남구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테크", "mintech"] }
+    { name: "민테크 포항시험센터", address: "경상북도 포항시 남구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테크", "mintech"] },
+
+    // 대한민국 주요 아파트 단지 (Apartment Complexes)
+    { name: "은마아파트 (강남 대치동)", address: "서울특별시 강남구 삼성로 212", lat: 37.4984, lng: 127.0625, category: "Other", keywords: ["은마", "은마아파트", "대치동은마"] },
+    { name: "반포자이 아파트", address: "서울특별시 서초구 신반포로 270", lat: 37.5053, lng: 127.0094, category: "Other", keywords: ["반포자이", "반포자리아파트"] },
+    { name: "래미안 퍼스티지 아파트", address: "서울특별시 서초구 반포대로 275", lat: 37.5058, lng: 126.9995, category: "Other", keywords: ["래미안퍼스티지", "반포래미안"] },
+    { name: "아크로리버파크 아파트", address: "서울특별시 서초구 신반포로15길 19", lat: 37.5085, lng: 126.9958, category: "Other", keywords: ["아크로리버파크", "아크로리버"] },
+    { name: "헬리오시티 아파트 (송파)", address: "서울특별시 송파구 송파대로 345", lat: 37.4965, lng: 127.1085, category: "Other", keywords: ["헬리오시티", "송파헬리오시티"] },
+    { name: "파크리오 아파트 (잠실)", address: "서울특별시 송파구 올림픽로 435", lat: 37.5212, lng: 127.1078, category: "Other", keywords: ["파크리오", "잠실파크리오"] },
+    { name: "마포 래미안 푸르지오 (마래푸)", address: "서울특별시 마포구 아현설로 30", lat: 37.5535, lng: 126.9538, category: "Other", keywords: ["마래푸", "마포래미안푸르지오", "아현동래미안"] },
+    { name: "경희궁자이 아파트", address: "서울특별시 종로구 송월길 99", lat: 37.5685, lng: 126.9632, category: "Other", keywords: ["경희궁자이", "경희궁자리아파트"] },
+    { name: "도곡 타워팰리스", address: "서울특별시 강남구 언주로30길 56", lat: 37.4888, lng: 127.0545, category: "Other", keywords: ["타워팰리스", "도곡동타워팰리스"] },
+    { name: "올림픽선수기자촌 아파트", address: "서울특별시 송파구 양재대로 1218", lat: 37.5142, lng: 127.1365, category: "Other", keywords: ["올림픽선수촌아파트", "올림픽선수기자촌"] },
+    { name: "올림픽파크포레온 (둔촌주공)", address: "서울특별시 강동구 양재대로 1340", lat: 37.5245, lng: 127.1428, category: "Other", keywords: ["둔촌주공", "올림픽파크포레온"] },
+    { name: "성수 트리마제 아파트", address: "서울특별시 성동구 왕십리로 16", lat: 37.5385, lng: 127.0422, category: "Other", keywords: ["트리마제", "성수동트리마제"] },
+    { name: "한남 더힐", address: "서울특별시 용산구 독서당로 111", lat: 37.5348, lng: 127.0078, category: "Other", keywords: ["한남더힐", "한남동더힐"] },
+    { name: "나인원 한남", address: "서울특별시 용산구 한남대로 91", lat: 37.5352, lng: 127.0042, category: "Other", keywords: ["나인원한남", "나인원"] },
+
+    // 대한민국 주요 랜드마크 & 핫플레이스 (Major Landmarks & Places)
+    { name: "더현대 서울 (여의도)", address: "서울특별시 영등포구 여의대로 108", lat: 37.5258, lng: 126.9284, category: "Other", keywords: ["더현대", "더현대서울", "여의도더현대"] },
+    { name: "롯데월드타워 (잠실)", address: "서울특별시 송파구 올림픽로 300", lat: 37.5126, lng: 127.1025, category: "Other", keywords: ["롯데월드타워", "롯데타워", "잠실롯데타워"] },
+    { name: "코엑스 (COEX 강남)", address: "서울특별시 강남구 영동대로 513", lat: 37.5118, lng: 127.0592, category: "Other", keywords: ["코엑스", "coex", "삼성동코엑스"] },
+    { name: "N서울타워 (남산타워)", address: "서울특별시 용산구 남산공원길 105", lat: 37.5512, lng: 126.9882, category: "Other", keywords: ["남산타워", "N서울타워", "서울타워"] },
+    { name: "63빌딩 (여의도)", address: "서울특별시 영등포구 63로 50", lat: 37.5198, lng: 126.9402, category: "Other", keywords: ["63빌딩", "육삼빌딩"] },
+    { name: "동대문디자인플라자 (DDP)", address: "서울특별시 중구 을지로 281", lat: 37.5668, lng: 127.0095, category: "Museum", keywords: ["ddp", "동대문디자인플라자", "동대문ddp"] },
+    { name: "신세계백화점 강남점", address: "서울특별시 서초구 신반포로 176", lat: 37.5042, lng: 127.0038, category: "Other", keywords: ["신세계강남", "강남신세계"] },
+    { name: "예술의전당", address: "서울특별시 서초구 남부순환로 2406", lat: 37.4785, lng: 127.0118, category: "Museum", keywords: ["예술의전당", "서초예술의전당"] },
+    { name: "카멜커피 (성수본점)", address: "서울특별시 성동구 성수이로7길 7", lat: 37.5428, lng: 127.0542, category: "Cafe", keywords: ["카멜커피", "성수카멜커피", "카멜커피성수"] },
+    { name: "런던 베이글 뮤지엄 (안국점)", address: "서울특별시 종로구 북촌로4길 20", lat: 37.5792, lng: 126.9858, category: "Cafe", keywords: ["런던베이글", "런던베이글뮤지엄", "안국런던베이글"] }
 ];
 
 function searchLocalKnowledgeBase(query) {
@@ -985,8 +1013,8 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 5. AI Business Directory & Local Place Search (Finds restaurants & company branches)
-    if (geminiApiKey && combinedResults.length < 2) {
+    // 5. AI Business Directory & Local Place Search (Finds restaurants, stores & apartment complexes)
+    if (geminiApiKey && combinedResults.length < 4) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
@@ -1074,7 +1102,7 @@ async function searchNominatimFree(query) {
     return null;
 }
 
-// Naver Native Geocoder Promise Wrapper (Supports address, building & apartment complex lookup)
+// Naver Native Geocoder Promise Wrapper (Supports address, building, apartment complex, store & restaurant lookup)
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
         if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
@@ -1088,12 +1116,35 @@ function searchNaverGeocoder(query) {
             cleanQ,
             `서울 ${cleanQ}`,
             `경기 ${cleanQ}`,
-            `부산 ${cleanQ}`
+            `인천 ${cleanQ}`,
+            `부산 ${cleanQ}`,
+            `대구 ${cleanQ}`,
+            `대전 ${cleanQ}`,
+            `광주 ${cleanQ}`,
+            `울산 ${cleanQ}`,
+            `세종 ${cleanQ}`,
+            `강남구 ${cleanQ}`,
+            `서초구 ${cleanQ}`,
+            `송파구 ${cleanQ}`,
+            `마포구 ${cleanQ}`,
+            `성동구 ${cleanQ}`,
+            `영등포구 ${cleanQ}`,
+            `용산구 ${cleanQ}`,
+            `분당 ${cleanQ}`,
+            `일산 ${cleanQ}`,
+            `수원 ${cleanQ}`,
+            `유성구 ${cleanQ}`
         ];
+
+        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 6) {
+            queriesToTry.push(`${cleanQ} 아파트`);
+            queriesToTry.push(`${cleanQ} 빌딩`);
+        }
 
         let combined = [];
         let completed = 0;
         let isResolved = false;
+        const seenCoordinates = new Set();
 
         const finish = () => {
             if (!isResolved) {
@@ -1102,29 +1153,62 @@ function searchNaverGeocoder(query) {
             }
         };
 
-        const timer = setTimeout(finish, 2200);
+        const timer = setTimeout(finish, 2800);
+
+        // Auto category classifier helper
+        const detectCategory = (title, addrStr) => {
+            const combinedText = `${title} ${addrStr}`.toLowerCase();
+            if (combinedText.includes("카페") || combinedText.includes("커피") || combinedText.includes("베이커리") || combinedText.includes("디저트") || combinedText.includes("로스터리")) return "Cafe";
+            if (combinedText.includes("식당") || combinedText.includes("맛집") || combinedText.includes("갈비") || combinedText.includes("냉면") || combinedText.includes("고기") || combinedText.includes("치킨") || combinedText.includes("피자") || combinedText.includes("파스타") || combinedText.includes("스시") || combinedText.includes("국밥") || combinedText.includes("푸드") || combinedText.includes("반점") || combinedText.includes("버거") || combinedText.includes("우동") || combinedText.includes("라멘")) return "Restaurant";
+            if (combinedText.includes("바") || combinedText.includes("펍") || combinedText.includes("호프") || combinedText.includes("주점") || combinedText.includes("와인") || combinedText.includes("맥주") || combinedText.includes("칵테일") || combinedText.includes("포차")) return "Bar";
+            if (combinedText.includes("공원") || combinedText.includes("파크") || combinedText.includes("수목원") || combinedText.includes("식물원") || combinedText.includes("유원지")) return "Park";
+            if (combinedText.includes("미술관") || combinedText.includes("박물관") || combinedText.includes("전시관") || combinedText.includes("갤러리") || combinedText.includes("아트센터")) return "Museum";
+            return "Other";
+        };
 
         queriesToTry.forEach((qStr) => {
             naver.maps.Service.geocode({ query: qStr }, (status, response) => {
                 completed++;
                 if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
                     response.v2.addresses.forEach((addr) => {
+                        const lat = parseFloat(addr.y);
+                        const lng = parseFloat(addr.x);
+                        if (isNaN(lat) || isNaN(lng) || lat < 30 || lat > 45 || lng < 120 || lng > 135) return;
+
+                        const coordKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+                        if (seenCoordinates.has(coordKey)) return;
+                        seenCoordinates.add(coordKey);
+
                         let buildingName = "";
                         if (addr.addressElements) {
-                            const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK") || e.types.includes("APARTMENT")));
+                            const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK") || e.types.includes("APARTMENT") || e.types.includes("SITE_NAME")));
                             if (el && el.longName) {
                                 buildingName = el.longName;
                             }
                         }
                         const shortAddr = addr.roadAddress || addr.jibunAddress || "";
-                        const displayTitle = buildingName ? `${cleanQ} (${buildingName})` : (shortAddr ? `${cleanQ} (${shortAddr})` : cleanQ);
-                        
+                        let displayTitle = cleanQ;
+
+                        if (buildingName) {
+                            if (buildingName.toLowerCase().includes(cleanQ.toLowerCase())) {
+                                displayTitle = buildingName;
+                            } else {
+                                displayTitle = `${cleanQ} (${buildingName})`;
+                            }
+                        } else if (shortAddr) {
+                            if (!cleanQ.includes(shortAddr) && shortAddr.length > 3) {
+                                displayTitle = `${cleanQ} (${shortAddr})`;
+                            }
+                        }
+
+                        const category = detectCategory(displayTitle, shortAddr);
+
                         combined.push({
                             name: displayTitle,
                             address: shortAddr || "네이버 지도 주소",
-                            lat: parseFloat(addr.y),
-                            lng: parseFloat(addr.x),
-                            category: "Other"
+                            lat: lat,
+                            lng: lng,
+                            category: category
                         });
                     });
                 }
@@ -3665,12 +3749,9 @@ async function renderGallery() {
                 </div>
 
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                <div class="gallery-action-bar" style="margin-top:6px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
                         ✏️ 수정/추가
-                    </button>
-                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06); justify-content:center;" onclick="downloadPlacePhotosZip(${p.id})">
-                        📥 전체 사진 다운로드
                     </button>
                 </div>
             </div>
@@ -3954,6 +4035,14 @@ window.downloadCurrentSliderPhoto = function() {
     const placeTitle = activePlaceInfo ? activePlaceInfo.name : "추억사진";
     downloadBase64Image(currentSrc, `${placeTitle}_사진_${activePhotoIndex + 1}.jpg`);
     showToast("현재 확대된 고화질 사진이 다운로드되었습니다! 📥", "success");
+};
+
+window.downloadPlacePhotosZipFromSlider = async function() {
+    if (!activePlaceInfo || !activePlaceInfo.id) {
+        showToast("장소 정보를 찾을 수 없습니다.", "warning");
+        return;
+    }
+    await window.downloadPlacePhotosZip(activePlaceInfo.id);
 };
 
 function downloadBase64Image(base64Str, filename) {
