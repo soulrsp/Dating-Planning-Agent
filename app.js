@@ -1669,19 +1669,23 @@ function closeVisitModal() {
 function handlePhotoUploadPreview(e) {
     const files = e.target.files;
     const previewContainer = document.getElementById("visit-photo-preview");
-    if (!files || files.length === 0) {
-        previewContainer.innerHTML = `<span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>`;
-        return;
-    }
+    if (!previewContainer) return;
+    if (!files || files.length === 0) return;
     
-    previewContainer.innerHTML = "";
+    // Remove placeholder span if present
+    const span = previewContainer.querySelector("span");
+    if (span) span.remove();
+
     Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = function(event) {
-            const img = document.createElement("img");
-            img.src = event.target.result;
-            img.alt = "Preview";
-            previewContainer.appendChild(img);
+            const wrapper = document.createElement("div");
+            wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
+            wrapper.innerHTML = `
+                <img src="${event.target.result}" alt="Preview" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
+                <button type="button" onclick="this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
+            `;
+            previewContainer.appendChild(wrapper);
         };
         reader.readAsDataURL(file);
     });
@@ -1693,14 +1697,20 @@ function handleEditPhotoUploadPreview(e) {
     if (!previewContainer) return;
     if (!files || files.length === 0) return;
     
-    previewContainer.innerHTML = "";
+    // Remove placeholder span if present
+    const span = previewContainer.querySelector("span");
+    if (span) span.remove();
+
     Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = function(event) {
-            const img = document.createElement("img");
-            img.src = event.target.result;
-            img.alt = "Preview";
-            previewContainer.appendChild(img);
+            const wrapper = document.createElement("div");
+            wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
+            wrapper.innerHTML = `
+                <img src="${event.target.result}" alt="Preview" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
+                <button type="button" onclick="this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
+            `;
+            previewContainer.appendChild(wrapper);
         };
         reader.readAsDataURL(file);
     });
@@ -1857,10 +1867,13 @@ async function openEditPlaceModal(id) {
             if (existingPhotos.length > 0) {
                 photoPreview.innerHTML = "";
                 existingPhotos.forEach(pSrc => {
-                    const img = document.createElement("img");
-                    img.src = pSrc;
-                    img.alt = "Memory";
-                    photoPreview.appendChild(img);
+                    const wrapper = document.createElement("div");
+                    wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
+                    wrapper.innerHTML = `
+                        <img src="${pSrc}" alt="Memory" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
+                        <button type="button" onclick="this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
+                    `;
+                    photoPreview.appendChild(wrapper);
                 });
             } else {
                 photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
