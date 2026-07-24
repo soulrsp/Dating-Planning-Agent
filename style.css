@@ -1,2610 +1,905 @@
-/* -------------------------------------------------------------
- * AURA - Premium Lovely & Pastel Pink Glassmorphic Style System
- * Tailored for Couples & Date Planner AI Agent
- * ------------------------------------------------------------- */
-
-/* Reset & Variables */
-:root {
-    --color-bg: #FFF0F2;
-    --color-card-bg: rgba(255, 255, 255, 0.72);
-    --color-card-hover-border: rgba(255, 101, 132, 0.35);
-    --color-card-border: rgba(255, 112, 150, 0.16);
-    --color-text-high: #4A2834; /* Deep Chocolate Ruby */
-    --color-text-med: #7C5C68;  /* Rose Slate */
-    --color-text-low: #B29AA3;  /* Lavender Muted */
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA - 러블리 AI 데이트 플래너</title>
     
-    /* Lovely Accents */
-    --color-primary: #FF6584; /* Soft Cherry Pink */
-    --color-primary-rgb: 255, 101, 132;
-    --color-secondary: #B5179E; /* Lovely Violet Purple */
-    --color-secondary-rgb: 181, 23, 158;
-    --color-ai: #FF85A1; /* Warm AI Coral Pink */
-    --color-ai-rgb: 255, 133, 161;
-    --color-success: #4AD66D;
-    --color-warning: #FFB703;
-    --color-danger: #EF476F;
+    <!-- PWA & Mobile Web Meta Tags -->
+    <meta name="theme-color" content="#FF6584">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/couple3.jpg">
 
-    --font-heading: 'Outfit', 'Plus Jakarta Sans', sans-serif;
-    --font-body: 'Plus Jakarta Sans', sans-serif;
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-spring: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    --shadow-base: 0 8px 32px 0 rgba(255, 101, 132, 0.12);
-    --shadow-glow-primary: 0 0 16px rgba(255, 101, 132, 0.3);
-    --shadow-glow-ai: 0 0 16px rgba(255, 133, 161, 0.3);
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    background-color: var(--color-bg);
-    background: linear-gradient(135deg, #FFEBF0 0%, #FFF5F7 50%, #E8F0FE 100%);
-    color: var(--color-text-high);
-    font-family: var(--font-body);
-    min-height: 100vh;
-    overflow-x: hidden;
-    position: relative;
-}
-
-/* Background Glow Elements (Warm bubble pastels) */
-.bg-glow {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(120px);
-    z-index: -1;
-    pointer-events: none;
-    opacity: 0.45;
-}
-
-.bg-glow-1 {
-    width: 450px;
-    height: 450px;
-    background: radial-gradient(circle, rgba(255, 182, 193, 0.5) 0%, rgba(0,0,0,0) 75%);
-    top: -50px;
-    left: -50px;
-}
-
-.bg-glow-2 {
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, rgba(201, 138, 255, 0.35) 0%, rgba(0,0,0,0) 75%);
-    bottom: -100px;
-    right: -50px;
-}
-
-.bg-glow-3 {
-    width: 350px;
-    height: 350px;
-    background: radial-gradient(circle, rgba(255, 222, 186, 0.45) 0%, rgba(0,0,0,0) 75%);
-    top: 25%;
-    left: 35%;
-}
-
-/* App Container Layout */
-.app-container {
-    display: flex;
-    min-height: 100vh;
-    position: relative;
-    z-index: 1;
-}
-
-/* Sidebar Styling */
-.sidebar {
-    width: 280px;
-    min-width: 280px;
-    flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.65);
-    border-right: 1px solid var(--color-card-border);
-    backdrop-filter: blur(25px);
-    padding: 2.5rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-}
-
-.brand {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 2rem;
-    padding-left: 0.5rem;
-}
-
-.brand-logo {
-    width: 28px;
-    height: 28px;
-    filter: drop-shadow(0 0 6px rgba(255, 101, 132, 0.6));
-    animation: heartbeat 1.5s infinite alternate;
-}
-
-@keyframes heartbeat {
-    0% { transform: scale(1); }
-    100% { transform: scale(1.12); }
-}
-
-.brand-name {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1.6rem;
-    letter-spacing: 0.12em;
-    background: linear-gradient(135deg, var(--color-text-high) 20%, var(--color-primary) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-/* Real-Time Sync Status Banner */
-.sync-status-banner {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: rgba(255, 101, 132, 0.08);
-    border: 1px solid rgba(255, 101, 132, 0.15);
-    padding: 0.6rem 1rem;
-    border-radius: 12px;
-    margin-bottom: 2rem;
-    font-size: 0.8rem;
-    color: var(--color-text-high);
-    transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.sync-status-banner:hover {
-    background: rgba(255, 101, 132, 0.16);
-    border-color: rgba(255, 101, 132, 0.3);
-    transform: translateY(-1px);
-}
-
-.sync-pulse {
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    display: inline-block;
-    box-shadow: var(--shadow-glow-primary);
-    animation: syncPulseGlow 1.2s infinite ease-in-out;
-}
-
-@keyframes syncPulseGlow {
-    0%, 100% { transform: scale(0.8); opacity: 0.5; }
-    50% { transform: scale(1.2); opacity: 1; }
-}
-
-.nav-menu {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    flex-grow: 1;
-}
-
-.nav-item {
-    background: none;
-    border: none;
-    color: var(--color-text-med);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.9rem 1.25rem;
-    font-size: 0.95rem;
-    font-weight: 600;
-    border-radius: 16px;
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
-    transition: var(--transition-base);
-}
-
-.nav-item i {
-    width: 20px;
-    height: 20px;
-    transition: var(--transition-base);
-}
-
-.nav-item:hover {
-    color: var(--color-primary);
-    background: rgba(255, 101, 132, 0.05);
-}
-
-.nav-item.active {
-    color: white;
-    background: linear-gradient(135deg, var(--color-primary) 0%, #FF85A1 100%);
-    box-shadow: 0 4px 15px rgba(255, 101, 132, 0.25);
-}
-
-.nav-item.active i {
-    color: white;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
-}
-
-.active-date-card {
-    background: rgba(255, 255, 255, 0.45);
-    border: 1px solid var(--color-card-border);
-    border-radius: 20px;
-    padding: 1.25rem;
-    margin-top: auto;
-    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.05);
-}
-
-.active-date-card .card-title {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--color-text-low);
-    letter-spacing: 0.05em;
-    margin-bottom: 0.5rem;
-}
-
-.active-date-card .date-title {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-    margin-bottom: 0.75rem;
-    line-height: 1.4;
-}
-
-.dday-tag {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 0.85rem;
-    color: white;
-    background: var(--color-primary);
-    box-shadow: var(--shadow-glow-primary);
-}
-
-/* Main Content Area */
-.main-content {
-    flex-grow: 1;
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    max-height: 100vh;
-    overflow-y: auto;
-}
-
-.topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.75rem;
-}
-
-.page-title {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 2.1rem;
-    color: var(--color-text-high);
-}
-
-/* Tab panes logic */
-.tab-pane {
-    display: none;
-    animation: fadeIn 0.4s ease-out forwards;
-}
-
-.tab-pane.active {
-    display: block;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Buttons */
-.btn {
-    background: none;
-    border: none;
-    font-family: var(--font-body);
-    font-weight: 700;
-    font-size: 0.9rem;
-    padding: 0.75rem 1.5rem;
-    border-radius: 16px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: var(--transition-spring);
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--color-primary) 0%, #FF4D71 100%);
-    color: white;
-    box-shadow: 0 4px 15px rgba(255, 101, 132, 0.35);
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 20px rgba(255, 101, 132, 0.5);
-}
-
-.btn-outline {
-    border: 1px solid var(--color-card-border);
-    color: var(--color-text-med);
-    background: rgba(255, 255, 255, 0.5);
-}
-
-.btn-outline:hover {
-    background: rgba(255, 101, 132, 0.05);
-    color: var(--color-primary);
-    border-color: rgba(255, 101, 132, 0.25);
-}
-
-.btn-danger {
-    background: rgba(239, 71, 111, 0.1);
-    border: 1px solid rgba(239, 71, 111, 0.2);
-    color: #EF476F;
-}
-
-.btn-danger:hover {
-    background: #EF476F;
-    color: white;
-}
-
-.btn-send {
-    background: var(--color-primary);
-    border: none;
-    color: white;
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: var(--shadow-glow-primary);
-    transition: var(--transition-base);
-}
-
-.btn-send:hover {
-    transform: scale(1.05);
-}
-
-/* Glass Cards */
-.card {
-    background: var(--color-card-bg);
-    border: 1px solid var(--color-card-border);
-    backdrop-filter: blur(20px);
-    border-radius: 28px;
-    padding: 1.75rem;
-    box-shadow: var(--shadow-base);
-    transition: var(--transition-base);
-}
-
-.card:hover {
-    border-color: rgba(255, 101, 132, 0.2);
-}
-
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.25rem;
-}
-
-.card-heading {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1.25rem;
-    color: var(--color-text-high);
-}
-
-.sub-heading {
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--color-text-med);
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-}
-
-/* Stats Row */
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 0.35rem;
-}
-
-.stat-card {
-    background: rgba(255, 255, 255, 0.6);
-    border: 1px solid var(--color-card-border);
-    backdrop-filter: blur(15px);
-    border-radius: 12px;
-    padding: 0.35rem 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    box-shadow: 0 4px 20px rgba(255, 101, 132, 0.04);
-}
-
-.stat-icon {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.stat-icon i {
-    width: 15px;
-    height: 15px;
-}
-
-.bg-pink-soft {
-    background: rgba(255, 101, 132, 0.12);
-}
-
-.bg-violet-soft {
-    background: rgba(181, 23, 158, 0.12);
-}
-
-.bg-cyan-soft {
-    background: rgba(255, 133, 161, 0.12);
-}
-
-.stat-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.stat-label {
-    font-size: 0.68rem;
-    color: var(--color-text-low);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-}
-
-.stat-value {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--color-text-high);
-}
-
-/* Main Grid Layout */
-.main-grid-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-/* Map Card */
-.map-card {
-    display: flex;
-    flex-direction: column;
-    padding: 0.5rem 0.75rem;
-}
-
-.map-legend {
-    display: flex;
-    gap: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--color-text-med);
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-/* Embedded local search query in map card */
-.map-search-bar {
-    display: flex;
-    gap: 0.4rem;
-    margin-bottom: 0.35rem;
-}
-
-.map-search-bar input {
-    flex-grow: 1;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid var(--color-card-border);
-    border-radius: 10px;
-    padding: 0.35rem 0.75rem;
-    font-size: 0.78rem;
-    color: var(--color-text-high);
-    font-family: var(--font-body);
-}
-
-.map-search-bar input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-}
-
-.map-container-wrapper {
-    height: calc(100vh - 230px);
-    min-height: 420px;
-    width: 100%;
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1px solid var(--color-card-border);
-}
-
-#map {
-    height: 100%;
-    width: 100%;
-    z-index: 10;
-}
-
-/* Interactive Search Results Dropdown Panel */
-.map-search-results-panel {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 101, 132, 0.25);
-    border-radius: 16px;
-    padding: 0.85rem;
-    margin-bottom: 0.75rem;
-    box-shadow: 0 8px 24px rgba(255, 101, 132, 0.12);
-    max-height: 240px;
-    overflow-y: auto;
-    animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-.search-results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px dashed rgba(255, 101, 132, 0.2);
-}
-
-.btn-close-results {
-    background: none;
-    border: none;
-    color: var(--color-text-low);
-    font-size: 0.8rem;
-    cursor: pointer;
-    padding: 0.2rem 0.4rem;
-    border-radius: 6px;
-}
-.btn-close-results:hover {
-    color: var(--color-primary);
-    background: rgba(255, 101, 132, 0.1);
-}
-
-.search-result-card {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.35rem;
-    padding: 0.65rem 0.8rem;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(255, 101, 132, 0.18);
-    margin-bottom: 0.5rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-    transition: var(--transition-base);
-}
-.search-result-card:hover {
-    background: rgba(255, 101, 132, 0.06);
-    border-color: rgba(255, 101, 132, 0.3);
-}
-
-.search-result-title {
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-    line-height: 1.3;
-}
-.search-result-addr {
-    font-size: 0.75rem;
-    color: var(--color-text-med);
-    line-height: 1.25;
-}
-
-.search-result-actions {
-    display: flex;
-    gap: 0.35rem;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-top: 0.2rem;
-    padding-top: 0.35rem;
-    border-top: 1px dashed rgba(255, 101, 132, 0.15);
-}
-
-.search-btn-sm {
-    flex: 1 1 auto;
-    min-width: 68px;
-    padding: 0.25rem 0.45rem !important;
-    font-size: 0.72rem !important;
-    height: 28px !important;
-    justify-content: center;
-    border-radius: 8px !important;
-}
-
-.map-container-wrapper {
-    height: 300px;
-    width: 100%;
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1px solid var(--color-card-border);
-}
-
-#map {
-    height: 100%;
-    width: 100%;
-    z-index: 10;
-}
-
-/* Budget Card */
-.budget-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-}
-
-.flex-column {
-    display: flex;
-    flex-direction: column;
-}
-
-.budget-chart-container {
-    margin: 1rem 0 0.5rem;
-}
-
-.budget-progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    color: var(--color-text-med);
-    margin-bottom: 0.5rem;
-}
-
-.progress-bar-bg {
-    height: 10px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 0.75rem;
-    border: 1px solid rgba(255, 112, 150, 0.1);
-}
-
-.progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--color-secondary) 0%, var(--color-primary) 100%);
-    border-radius: 10px;
-    box-shadow: 0 0 6px rgba(255, 101, 132, 0.3);
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.budget-values {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    font-size: 0.85rem;
-    color: var(--color-text-med);
-}
-
-.divider {
-    border: none;
-    border-top: 1px solid var(--color-card-border);
-    margin: 1rem 0;
-}
-
-/* Dutch-pay Settlement Display */
-.settlement-container {
-    display: flex;
-    flex-direction: column;
-}
-
-.settlement-detail-card {
-    background: rgba(255, 101, 132, 0.04);
-    border: 1px solid rgba(255, 101, 132, 0.1);
-    border-radius: 16px;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.settlement-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    color: var(--color-text-med);
-}
-
-.settlement-result {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: white;
-    border: 1px solid rgba(255, 101, 132, 0.15);
-    border-radius: 10px;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--color-primary);
-    text-align: center;
-    box-shadow: 0 4px 12px rgba(255, 101, 132, 0.05);
-}
-
-.visited-quote-box {
-    background: rgba(255, 255, 255, 0.45);
-    border-left: 3px solid var(--color-primary);
-    padding: 0.75rem 1rem;
-    border-radius: 0 12px 12px 0;
-    font-size: 0.85rem;
-    line-height: 1.5;
-    color: var(--color-text-med);
-    font-style: italic;
-}
-
-/* Places Manager Tab */
-.places-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.filter-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1.5rem;
-}
-
-.tab-toggle {
-    display: flex;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid var(--color-card-border);
-    border-radius: 16px;
-    padding: 0.3rem;
-}
-
-.toggle-btn {
-    background: none;
-    border: none;
-    color: var(--color-text-med);
-    padding: 0.5rem 1.25rem;
-    font-size: 0.85rem;
-    font-weight: 700;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: var(--transition-base);
-}
-
-.toggle-btn.active {
-    color: white;
-    background: var(--color-primary);
-    box-shadow: 0 2px 8px rgba(255, 101, 132, 0.2);
-}
-
-.search-box {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 320px;
-}
-
-.search-box i,
-.search-box svg {
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
-    color: var(--color-primary);
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-}
-
-.search-box input {
-    width: 100%;
-    height: 42px;
-    line-height: 42px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1.5px solid rgba(255, 112, 150, 0.25);
-    border-radius: 21px;
-    padding: 0 1rem 0 2.85rem;
-    color: var(--color-text-high);
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    transition: var(--transition-base);
-    box-shadow: 0 2px 10px rgba(255, 101, 132, 0.05);
-}
-
-.search-box input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    background: #ffffff;
-    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.18);
-}
-
-.places-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
-}
-
-/* Place Card (Lovely styles) */
-.place-card {
-    background: var(--color-card-bg);
-    border: 1px solid var(--color-card-border);
-    border-radius: 24px;
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    box-shadow: var(--shadow-base);
-    transition: var(--transition-spring);
-    position: relative;
-    overflow: hidden;
-}
-
-.place-card:hover {
-    transform: translateY(-4px);
-    border-color: var(--color-card-hover-border);
-    box-shadow: 0 12px 32px rgba(255, 101, 132, 0.15);
-}
-
-.place-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.place-category-badge {
-    padding: 0.25rem 0.65rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    border-radius: 8px;
-    text-transform: uppercase;
-}
-
-.badge-cafe { background: rgba(255, 183, 3, 0.15); color: #D19100; border: 1px solid rgba(255, 183, 3, 0.2); }
-.badge-restaurant { background: rgba(6, 214, 160, 0.15); color: #00B584; border: 1px solid rgba(6, 214, 160, 0.2); }
-.badge-bar { background: rgba(181, 23, 158, 0.12); color: #B5179E; border: 1px solid rgba(181, 23, 158, 0.2); }
-.badge-park { background: rgba(72, 191, 227, 0.15); color: #009ECA; border: 1px solid rgba(72, 191, 227, 0.2); }
-.badge-museum { background: rgba(241, 91, 181, 0.15); color: #D62F8B; border: 1px solid rgba(241, 91, 181, 0.2); }
-.badge-other { background: rgba(0, 0, 0, 0.05); color: var(--color-text-med); border: 1px solid rgba(0, 0, 0, 0.08); }
-
-.place-priority-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-.priority-high { background-color: var(--color-danger); box-shadow: 0 0 6px var(--color-danger); }
-.priority-medium { background-color: var(--color-warning); }
-.priority-low { background-color: var(--color-text-low); }
-
-.place-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-}
-
-.place-notes {
-    font-size: 0.85rem;
-    color: var(--color-text-med);
-    line-height: 1.45;
-    background: rgba(255, 255, 255, 0.4);
-    padding: 0.6rem 0.8rem;
-    border-radius: 10px;
-    border-left: 3px solid var(--color-primary);
-}
-
-.place-meta-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--color-text-med);
-}
-
-.place-meta-item i {
-    width: 14px;
-    height: 14px;
-}
-
-.place-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-}
-
-.place-card-stars {
-    color: var(--color-warning);
-    display: flex;
-    gap: 0.15rem;
-}
-
-.place-card-stars i {
-    width: 16px;
-    height: 16px;
-    fill: var(--color-warning);
-}
-
-.visited-review-snippet {
-    font-style: italic;
-    font-size: 0.82rem;
-    color: var(--color-text-med);
-    line-height: 1.45;
-}
-
-.place-card-photo {
-    height: 140px;
-    width: 100%;
-    object-fit: cover;
-    border-radius: 14px;
-    border: 1px solid var(--color-card-border);
-}
-
-/* Card Top Action Buttons Container (Edit & Delete side by side: [Edit (Left)] [Delete (Right)]) */
-.place-card-top-actions {
-    position: absolute !important;
-    top: 0.85rem !important;
-    right: 0.85rem !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.4rem !important;
-    z-index: 30 !important;
-}
-
-.place-card-top-actions .edit-card-btn,
-.place-card-top-actions .delete-card-btn {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    left: auto !important;
-    bottom: auto !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 50% !important;
-    background: rgba(255, 255, 255, 0.95) !important;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(0, 0, 0, 0.12) !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
-    opacity: 1 !important;
-    padding: 0 !important;
-}
-
-.place-card-top-actions button svg,
-.place-card-top-actions button i {
-    width: 15px !important;
-    height: 15px !important;
-    pointer-events: none !important;
-}
-
-.place-card-top-actions .edit-card-btn {
-    color: var(--color-primary) !important;
-}
-.place-card-top-actions .edit-card-btn:hover {
-    color: #ffffff !important;
-    background: var(--color-primary) !important;
-    border-color: var(--color-primary) !important;
-    transform: scale(1.12) !important;
-}
-
-.place-card-top-actions .delete-card-btn {
-    color: var(--color-danger) !important;
-}
-.place-card-top-actions .delete-card-btn:hover {
-    color: #ffffff !important;
-    background: var(--color-danger) !important;
-    border-color: var(--color-danger) !important;
-    transform: scale(1.12) !important;
-}
-
-/* AI Planner Chat Screen (Lovely Pastel Blurs) */
-.ai-planner-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    height: calc(100vh - 160px);
-}
-
-.alert-banner {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.85rem 1.25rem;
-    border-radius: 16px;
-    font-size: 0.85rem;
-    border: 1px solid transparent;
-}
-
-.alert-banner.warning {
-    background: rgba(255, 101, 132, 0.08);
-    border-color: rgba(255, 101, 132, 0.2);
-    color: var(--color-text-high);
-}
-
-.alert-banner.warning i {
-    color: var(--color-primary);
-}
-
-.chat-container {
-    background: var(--color-card-bg);
-    border: 1px solid var(--color-card-border);
-    border-radius: 28px;
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-    overflow: hidden;
-    box-shadow: var(--shadow-base);
-}
-
-.chat-header {
-    padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--color-card-border);
-    background: rgba(255, 255, 255, 0.4);
-}
-
-.bot-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-.bot-avatar {
-    width: 38px;
-    height: 38px;
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    box-shadow: var(--shadow-glow-primary);
-}
-
-.bot-avatar i {
-    width: 18px;
-    height: 18px;
-}
-
-.bot-name {
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--color-text-high);
-}
-
-.bot-status {
-    font-size: 0.75rem;
-    color: var(--color-text-med);
-}
-
-.chat-messages {
-    flex-grow: 1;
-    padding: 1.5rem;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-}
-
-.message {
-    display: flex;
-    max-width: 75%;
-}
-
-.message-bot {
-    align-self: flex-start;
-}
-
-.message-user {
-    align-self: flex-end;
-}
-
-.msg-bubble {
-    padding: 0.85rem 1.25rem;
-    border-radius: 18px;
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-
-.message-bot .msg-bubble {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid var(--color-card-border);
-    color: var(--color-text-high);
-    border-bottom-left-radius: 4px;
-}
-
-.message-user .msg-bubble {
-    background: linear-gradient(135deg, var(--color-primary) 0%, #FF85A1 100%);
-    color: white;
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 4px 15px rgba(255, 101, 132, 0.2);
-}
-
-/* Chat Itinerary Card Styles */
-.itinerary-card {
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(255, 101, 132, 0.2);
-    border-radius: 20px;
-    margin-top: 0.75rem;
-    padding: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.08);
-}
-
-.itinerary-card-title {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1.05rem;
-    color: var(--color-primary);
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.itinerary-step {
-    border-left: 2px dashed rgba(255, 101, 132, 0.3);
-    padding-left: 1rem;
-    margin-left: 0.5rem;
-    position: relative;
-}
-
-.itinerary-step::before {
-    content: '';
-    position: absolute;
-    left: -5px;
-    top: 4px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    box-shadow: 0 0 6px var(--color-primary);
-}
-
-.itinerary-step-header {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-}
-
-.itinerary-step-desc {
-    font-size: 0.8rem;
-    color: var(--color-text-med);
-    margin-top: 0.25rem;
-}
-
-.itinerary-transit {
-    font-size: 0.75rem;
-    color: var(--color-text-low);
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin: 0.35rem 0 0.35rem 0.5rem;
-}
-
-.itinerary-meta {
-    font-size: 0.75rem;
-    color: var(--color-text-low);
-    display: flex;
-    gap: 1rem;
-    border-top: 1px solid var(--color-card-border);
-    padding-top: 0.5rem;
-}
-
-.suggestion-chips {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.5rem 1.5rem;
-    overflow-x: auto;
-}
-
-.suggestion-chips::-webkit-scrollbar {
-    height: 4px;
-}
-
-.chip-btn {
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid var(--color-card-border);
-    color: var(--color-text-med);
-    padding: 0.45rem 1rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: var(--transition-base);
-}
-
-.chip-btn:hover {
-    background: rgba(255, 101, 132, 0.08);
-    color: var(--color-primary);
-    border-color: rgba(255, 101, 132, 0.2);
-}
-
-.chat-input-area {
-    padding: 1.25rem 1.5rem;
-    display: flex;
-    gap: 0.75rem;
-    border-top: 1px solid var(--color-card-border);
-    background: rgba(255, 255, 255, 0.4);
-}
-
-.chat-input-area input {
-    flex-grow: 1;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid var(--color-card-border);
-    border-radius: 16px;
-    padding: 0.75rem 1.25rem;
-    color: var(--color-text-high);
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    transition: var(--transition-base);
-}
-
-.chat-input-area input:focus {
-    outline: none;
-    border-color: rgba(255, 101, 132, 0.4);
-    background: white;
-}
-
-/* Settings Form */
-.settings-card {
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-.settings-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-top: 1.5rem;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.form-group label {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--color-text-high);
-}
-
-.form-group input, 
-.form-group select,
-.form-group textarea {
-    background: rgba(255, 255, 255, 0.6);
-    border: 1px solid var(--color-card-border);
-    border-radius: 14px;
-    padding: 0.65rem 1rem;
-    color: var(--color-text-high);
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    transition: var(--transition-base);
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    background: white;
-}
-
-.form-group-row {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-}
-
-.help-text {
-    font-size: 0.75rem;
-    color: var(--color-text-low);
-    line-height: 1.4;
-}
-
-.btn-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-/* Modal Overlay & Modal Card */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(74, 40, 52, 0.4);
-    backdrop-filter: blur(8px);
-    z-index: 1000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-overlay.active {
-    display: flex;
-}
-
-.modal-card {
-    background: #FFFDFC;
-    border: 1px solid var(--color-card-border);
-    border-radius: 28px;
-    width: 100%;
-    max-width: 480px;
-    box-shadow: 0 10px 40px rgba(255, 101, 132, 0.16);
-    overflow: hidden;
-    animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-@keyframes modalPop {
-    from { transform: scale(0.9); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-
-.modal-header {
-    padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--color-card-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(255, 101, 132, 0.05);
-}
-
-.modal-header h3 {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1.2rem;
-    color: var(--color-text-high);
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    color: var(--color-text-med);
-    cursor: pointer;
-}
-
-.modal-close:hover {
-    color: var(--color-primary);
-}
-
-.modal-body {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    max-height: calc(100vh - 180px);
-    overflow-y: auto;
-}
-
-.read-only-val {
-    background: rgba(255, 101, 132, 0.04);
-    border: 1px solid var(--color-card-border);
-    border-radius: 12px;
-    padding: 0.65rem 1rem;
-    color: var(--color-text-high);
-    font-weight: 700;
-    font-size: 0.95rem;
-}
-
-.rating-input-row {
-    display: flex;
-    flex-direction: row-reverse;
-    justify-content: flex-end;
-    gap: 0.35rem;
-}
-
-.rating-input-row input {
-    display: none;
-}
-
-.rating-input-row label {
-    cursor: pointer;
-    color: var(--color-text-low);
-    transition: var(--transition-base);
-}
-
-.rating-input-row label i {
-    width: 24px;
-    height: 24px;
-}
-
-.rating-input-row input:checked ~ label,
-.rating-input-row label:hover,
-.rating-input-row label:hover ~ label {
-    color: var(--color-warning);
-}
-
-.rating-input-row input:checked ~ label i,
-.rating-input-row label:hover i,
-.rating-input-row label:hover ~ label i {
-    fill: var(--color-warning);
-}
-
-.photo-preview-box {
-    min-height: 140px;
-    height: auto;
-    border: 2px dashed rgba(255, 101, 132, 0.25);
-    border-radius: 16px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    overflow-y: auto;
-    position: relative;
-    background: rgba(255, 101, 132, 0.01);
-    cursor: pointer;
-    padding: 12px;
-    gap: 8px;
-}
-
-.photo-preview-box span {
-    font-size: 0.75rem;
-    color: var(--color-text-low);
-    font-weight: 600;
-    text-align: center;
-    width: 100%;
-}
-
-.photo-preview-box img {
-    width: 80px;
-    height: 80px;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 101, 132, 0.2);
-}
-
-.place-card-photos-grid {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 6px;
-    margin-bottom: 12px;
-    scrollbar-width: thin;
-}
-
-.place-card-photos-grid .place-card-photo {
-    width: 80px;
-    height: 80px;
-    object-fit: cover;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    flex-shrink: 0;
-    border: 1px solid var(--color-card-border);
-}
-
-.place-card-photos-grid .place-card-photo:hover {
-    transform: scale(1.06);
-}
-
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
-}
-
-.hidden {
-    display: none !important;
-}
-
-.margin-right-sm {
-    margin-right: 0.5rem;
-}
-
-.font-bold {
-    font-weight: 700;
-}
-
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
-}
-
-::-webkit-scrollbar-thumb {
-    background: rgba(255, 101, 132, 0.25);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--color-primary);
-}
-
-/* Leaflet map popup override styling (lovely bubble) */
-.leaflet-popup-content-wrapper {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1px solid rgba(255, 101, 132, 0.2) !important;
-    backdrop-filter: blur(12px) !important;
-    color: var(--color-text-high) !important;
-    border-radius: 16px !important;
-    box-shadow: 0 4px 20px rgba(255, 101, 132, 0.15) !important;
-}
-
-.leaflet-popup-tip {
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1px solid rgba(255, 101, 132, 0.2) !important;
-}
-
-.leaflet-container a {
-    color: var(--color-primary) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────
- * Couple Profile Box & Memory Gallery CSS Extension
- * ───────────────────────────────────────────────────────────── */
-.couple-profile-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.45);
-    border: 1px solid var(--color-card-border);
-    border-radius: 20px;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.05);
-}
-
-.profile-avatar-frame {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    overflow: hidden;
-    border: 3px solid white;
-    box-shadow: 0 4px 16px rgba(255, 101, 132, 0.25);
-    margin-bottom: 0.75rem;
-    transition: var(--transition-spring);
-}
-
-.profile-avatar-frame:hover {
-    transform: scale(1.08) rotate(3deg);
-    box-shadow: var(--shadow-glow-primary);
-}
-
-.profile-avatar {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.profile-names {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-heading);
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: var(--color-text-high);
-    margin-bottom: 0.25rem;
-    cursor: pointer;
-    position: relative;
-    transition: var(--transition-base);
-    padding: 0.15rem 0.4rem;
-    border-radius: 8px;
-}
-
-.profile-names:hover {
-    background: rgba(255, 101, 132, 0.08);
-}
-
-.profile-names::after {
-    content: '✏️';
-    position: absolute;
-    right: -20px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.65rem;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.profile-names:hover::after {
-    opacity: 1;
-}
-
-.heart-split {
-    width: 16px;
-    height: 16px;
-    color: var(--color-primary);
-    fill: var(--color-primary);
-    animation: heartPulse 1.2s infinite alternate ease-in-out;
-}
-
-@keyframes heartPulse {
-    0% { transform: scale(0.9); opacity: 0.8; }
-    100% { transform: scale(1.2); opacity: 1; }
-}
-
-.love-days-count {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--color-primary);
-    background: rgba(255, 101, 132, 0.08);
-    padding: 0.2rem 0.6rem;
-    border-radius: 12px;
-}
-
-/* Memory Gallery Grid */
-.memory-gallery-widget {
-    margin-top: 0.5rem;
-}
-
-.memory-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.4rem;
-    margin-top: 0.75rem;
-}
-
-.memory-item {
-    aspect-ratio: 1;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 112, 150, 0.1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    background: rgba(0,0,0,0.05);
-    transition: var(--transition-base);
-}
-
-.memory-item:hover {
-    transform: scale(1.08);
-    box-shadow: 0 4px 12px rgba(255, 101, 132, 0.2);
-    border-color: var(--color-primary);
-    z-index: 5;
-}
-
-.gallery-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    filter: saturate(1.1) contrast(1.02);
-    transition: var(--transition-base);
-}
-
-.memory-item:hover .gallery-img {
-    filter: saturate(1.15) brightness(1.05);
-}
-
-/* Lightbox Modal */
-.lightbox-card {
-    position: relative;
-    max-width: 90%;
-    max-height: 90vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 20px;
-    overflow: hidden;
-    box-shadow: 0 12px 50px rgba(0,0,0,0.5);
-    animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-.lightbox-card img {
-    max-width: 100%;
-    max-height: 85vh;
-    object-fit: contain;
-    border-radius: 20px;
-    border: 3px solid white;
-}
-
-.lightbox-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    background: rgba(255, 255, 255, 0.85);
-    border: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-high);
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    z-index: 10;
-    transition: var(--transition-base);
-}
-
-.lightbox-close:hover {
-    background: white;
-    color: var(--color-primary);
-    transform: scale(1.1);
-}
-
-/* -------------------------------------------------------------
- * Mobile Responsive & Smartphone PWA UI System
- * ------------------------------------------------------------- */
-.mobile-top-bar {
-    display: none;
-}
-
-.mobile-bottom-nav {
-    display: none;
-}
-
-@media (max-width: 768px) {
-    html, body {
-        width: 100% !important;
-        max-width: 100% !important;
-        overflow-x: hidden !important;
-        position: relative !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    /* Hide Desktop Sidebar on Mobile */
-    .sidebar {
-        display: none !important;
-    }
-
-    .topbar {
-        display: none !important;
-    }
-
-    /* Show Mobile Top Bar */
-    .mobile-top-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        height: 52px;
-        background: rgba(255, 255, 255, 0.88);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(255, 101, 132, 0.15);
-        padding: 0 1rem;
-        z-index: 1000;
-        box-shadow: 0 2px 10px rgba(255, 101, 132, 0.08);
-    }
-
-    .mobile-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-family: var(--font-heading);
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: var(--color-primary);
-    }
-
-    .mobile-couple-names {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--color-text-high);
-        background: rgba(255, 101, 132, 0.08);
-        padding: 0.25rem 0.65rem;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        gap: 0.3rem;
-    }
-
-    .mobile-sync-badge {
-        font-size: 0.72rem;
-        font-weight: 600;
-        color: var(--color-primary);
-        background: rgba(255, 101, 132, 0.1);
-        padding: 0.25rem 0.55rem;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        gap: 0.3rem;
-        cursor: pointer;
-    }
-
-    /* Show Mobile Bottom Navigation Bar */
-    .mobile-bottom-nav {
-        display: flex;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        height: 64px;
-        background: rgba(255, 255, 255, 0.92);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border-top: 1px solid rgba(255, 101, 132, 0.2);
-        z-index: 1000;
-        justify-content: space-around;
-        align-items: center;
-        padding-bottom: env(safe-area-inset-bottom, 0);
-        box-shadow: 0 -4px 20px rgba(255, 101, 132, 0.12);
-    }
-
-    .mobile-nav-item {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: none;
-        border: none;
-        color: var(--color-text-low);
-        font-size: 0.68rem;
-        font-weight: 600;
-        gap: 3px;
-        cursor: pointer;
-        padding: 0.4rem 0;
-        transition: var(--transition-base);
-        position: relative;
-    }
-
-    .mobile-nav-item i {
-        width: 20px;
-        height: 20px;
-        transition: var(--transition-base);
-    }
-
-    .mobile-nav-item.active {
-        color: var(--color-primary);
-        font-weight: 700;
-    }
-
-    .mobile-nav-item.active i {
-        transform: translateY(-2px) scale(1.15);
-        color: var(--color-primary);
-    }
-
-    .mobile-nav-item.active::after {
-        content: '';
-        position: absolute;
-        bottom: 4px;
-        width: 4px;
-        height: 4px;
-        border-radius: 50%;
-        background: var(--color-primary);
-    }
-
-    /* Layout & Containers on Mobile */
-    .app-container {
-        flex-direction: column;
-        padding-top: 52px;
-        padding-bottom: 64px;
-        min-height: 100vh;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        overflow-x: hidden !important;
-    }
-
-    .main-content {
-        padding: 0.85rem;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-        overflow-x: hidden !important;
-    }
-
-    /* Map & Dashboard Layout on Mobile */
-    .main-grid-row {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 1rem !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .dashboard-grid {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 1rem !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .stats-row {
-        grid-template-columns: 1fr 1fr !important;
-        gap: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .stat-card {
-        padding: 0.45rem 0.65rem !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.5rem !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-        border-radius: 12px !important;
-    }
-
-    .map-card {
-        padding: 0.6rem 0.75rem !important;
-        border-radius: 16px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .map-card .card-header {
-        flex-direction: row !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        gap: 0.35rem !important;
-    }
-
-    .map-container-wrapper {
-        height: calc(100vh - 190px) !important;
-        min-height: 360px !important;
-    }
-
-    #map {
-        height: 100% !important;
-        min-height: 360px !important;
-        border-radius: 12px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .budget-card {
-        padding: 0.9rem !important;
-        border-radius: 18px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .places-grid {
-        grid-template-columns: 1fr !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .place-card {
-        padding: 0.85rem;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    /* Mobile Modal Box Fit Rules (Zero Clipping, Fits Viewport) */
-    .modal-overlay {
-        padding: 0.5rem !important;
-        box-sizing: border-box !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        left: 0 !important;
-        right: 0 !important;
-        overflow-x: hidden !important;
-    }
-
-    .modal-card,
-    #modal-edit-place .modal-card,
-    .gallery-slider-card {
-        width: calc(100% - 1rem) !important;
-        max-width: calc(100% - 1rem) !important;
-        max-height: 90vh !important;
-        padding: 0.75rem 0.85rem !important;
-        box-sizing: border-box !important;
-        margin: 0 auto !important;
-    }
-        border-radius: 18px !important;
-        box-sizing: border-box !important;
-        margin: auto !important;
-    }
-
-    #modal-edit-place .modal-header {
-        margin-bottom: 0.35rem !important;
-        padding-bottom: 0.3rem !important;
-    }
-
-    #modal-edit-place .form-group {
-        margin-bottom: 0.3rem !important;
-    }
-
-    #modal-edit-place label {
-        font-size: 0.72rem !important;
-        margin-bottom: 0.15rem !important;
-    }
-
-    #modal-edit-place input[type="text"],
-    #modal-edit-place input[type="date"],
-    #modal-edit-place input[type="number"],
-    #modal-edit-place select {
-        height: 30px !important;
-        padding: 0.2rem 0.5rem !important;
-        font-size: 0.78rem !important;
-    }
-
-    #modal-edit-place .photo-preview-box {
-        max-height: 42px !important;
-        padding: 0.25rem !important;
-        font-size: 0.7rem !important;
-    }
-
-    #modal-edit-place .modal-footer {
-        margin-top: 0.35rem !important;
-        padding-top: 0.3rem !important;
-    }
-
-    /* Mobile Calendar Responsive Adjustments */
-    #tab-calendar,
-    .calendar-card {
-        padding: 0.75rem !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-    }
-
-    .calendar-days-grid {
-        grid-template-columns: repeat(7, 1fr) !important;
-        grid-auto-rows: minmax(30px, auto) !important;
-        gap: 2px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-        height: auto !important;
-        max-height: none !important;
-        overflow: visible !important;
-    }
-
-    .calendar-day-cell {
-        min-height: 30px !important;
-        height: auto !important;
-        padding: 0.1rem 0.05rem !important;
-        border-radius: 6px !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        box-sizing: border-box !important;
-        overflow: visible !important;
-    }
-
-    .cal-badges-container {
-        flex-direction: row !important;
-        justify-content: center !important;
-        flex-wrap: wrap !important;
-        gap: 3px !important;
-    }
-
-    .cal-btn-visited .badge-text,
-    .cal-btn-wishlist .badge-text {
-        display: none !important;
-    }
-
-    .cal-btn-visited {
-        padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
-        border-radius: 50% !important;
-        background: #74B9FF !important;
-        border: none !important;
-        cursor: pointer;
-        margin-top: 2px;
-    }
-
-    .cal-btn-wishlist {
-        padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
-        border-radius: 50% !important;
-        background: #FF6584 !important;
-        border: none !important;
-        cursor: pointer;
-        margin-top: 2px;
-    }
-
-    .gallery-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
-        gap: 0.75rem !important;
-    }
-
-    .gallery-img-wrapper {
-        height: 140px !important;
-    }
-
-    /* Modals on Mobile */
-    .modal-card {
-        width: 94% !important;
-        max-width: 94% !important;
-        margin: 0 auto;
-        max-height: 88vh;
-        overflow-y: auto;
-        padding: 1.1rem;
-        border-radius: 20px;
-    }
-
-    .form-group-row {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0.5rem !important;
-    }
-}
-
-/* ==========================================
-   Date Calendar Styles
-   ========================================== */
-.calendar-day-cell {
-    min-height: 48px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid var(--color-card-border);
-    border-radius: 10px;
-    padding: 0.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    cursor: pointer;
-    transition: var(--transition-base);
-}
-
-.calendar-day-cell:hover {
-    border-color: var(--color-primary);
-    background: rgba(255, 240, 243, 0.8);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 101, 132, 0.12);
-}
-
-.calendar-day-cell.other-month {
-    opacity: 0.55;
-    background: rgba(248, 249, 250, 0.5) !important;
-    border: 1px dashed rgba(200, 200, 200, 0.3) !important;
-}
-
-.calendar-day-cell.other-month .day-number {
-    color: #A0A5B5 !important;
-    font-weight: 500 !important;
-}
-
-.calendar-day-cell.today {
-    border: 2px solid var(--color-primary);
-    background: rgba(255, 101, 132, 0.08);
-}
-
-.calendar-day-cell.selected {
-    border: 2px solid var(--color-secondary);
-    box-shadow: 0 0 0 3px rgba(255, 112, 150, 0.25);
-}
-
-.day-number-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.day-number {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--color-text-dark);
-}
-
-.calendar-day-cell.today .day-number {
-    color: var(--color-primary);
-}
-
-.calendar-badges-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    overflow: hidden;
-}
-
-.cal-badge {
-    font-size: 0.68rem;
-    padding: 0.15rem 0.35rem;
-    border-radius: 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-weight: 600;
-}
-
-.cal-badge.visited {
-    background: rgba(255, 101, 132, 0.15);
-    color: var(--color-primary);
-    border: 1px solid rgba(255, 101, 132, 0.3);
-}
-
-.cal-badge.wishlist {
-    background: rgba(162, 155, 254, 0.15);
-    color: #6C5CE7;
-    border: 1px solid rgba(162, 155, 254, 0.3);
-}
-
-/* ==========================================
-   Memory Gallery Styles
-   ========================================== */
-.gallery-card {
-    background: #ffffff;
-    border: 1px solid var(--color-card-border);
-    border-radius: 18px;
-    overflow: hidden;
-    box-shadow: var(--shadow-base);
-    transition: var(--transition-spring);
-    display: flex;
-    flex-direction: column;
-}
-
-.gallery-card:hover {
-    transform: translateY(-5px) scale(1.02);
-    box-shadow: 0 12px 28px rgba(255, 101, 132, 0.2);
-    border-color: var(--color-primary);
-}
-
-.gallery-img-wrapper {
-    position: relative;
-    width: 100%;
-    height: 180px;
-    overflow: hidden;
-    cursor: pointer;
-    background: rgba(255, 101, 132, 0.05);
-}
-
-.gallery-img-wrapper img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.4s ease;
-}
-
-.gallery-card:hover .gallery-img-wrapper img {
-    transform: scale(1.08);
-}
-
-.gallery-img-overlay {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.35);
-    opacity: 0;
-    transition: opacity 0.25s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    pointer-events: none;
-}
-
-.gallery-img-wrapper:hover .gallery-img-overlay {
-    opacity: 1;
-}
-
-.gallery-card-body {
-    padding: 0.85rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    flex-grow: 1;
-}
-
-.gallery-place-title {
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: var(--color-text-dark);
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.gallery-place-meta {
-    font-size: 0.73rem;
-    color: var(--color-text-med);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.gallery-comments-snippet {
-    font-size: 0.75rem;
-    color: var(--color-primary);
-    background: rgba(255, 101, 132, 0.06);
-    padding: 0.3rem 0.5rem;
-    border-radius: 8px;
-    border-left: 3px solid var(--color-primary);
-    margin-top: 0.2rem;
-}
-
-/* -------------------------------------------------------------
- * Scroll-Free Edit Modal & Multi-Photo Gallery Slider Styles
- * ------------------------------------------------------------- */
-#modal-edit-place .modal-card {
-    max-height: 92vh !important;
-    width: 580px !important;
-    max-width: calc(100% - 1rem) !important;
-    padding: 1rem 1.3rem !important;
-    overflow-y: auto;
-}
-
-#modal-edit-place .form-group {
-    margin-bottom: 0.38rem !important;
-}
-
-#modal-edit-place .form-group label {
-    font-size: 0.76rem !important;
-    margin-bottom: 0.2rem !important;
-}
-
-#modal-edit-place input[type="text"],
-#modal-edit-place input[type="date"],
-#modal-edit-place input[type="number"],
-#modal-edit-place select {
-    height: 32px !important;
-    padding: 0.3rem 0.6rem !important;
-    font-size: 0.8rem !important;
-}
-
-#modal-edit-place .photo-preview-box {
-    min-height: 40px !important;
-    max-height: 48px !important;
-    padding: 0.3rem 0.5rem !important;
-    font-size: 0.73rem !important;
-}
-
-#modal-edit-place .photo-preview-box img {
-    width: 38px !important;
-    height: 38px !important;
-    border-radius: 6px !important;
-}
-
-#modal-edit-place .modal-footer {
-    margin-top: 0.5rem !important;
-    padding-top: 0.5rem !important;
-}
-
-/* Multi-Photo Lightbox Slider Modal */
-.gallery-slider-card {
-    position: relative;
-    width: calc(100% - 1rem);
-    max-width: 860px;
-    max-height: 92vh;
-    border-radius: 20px;
-    padding: 1.2rem;
-    background: rgba(18, 18, 24, 0.96);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    color: #ffffff;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    border: 1px solid rgba(255, 101, 132, 0.35);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-    margin: 0 auto;
-}
-
-.gallery-slider-card .modal-close {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-}
-
-.gallery-slider-main {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 52vh;
-    min-height: 260px;
-    max-height: 500px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 14px;
-    overflow: hidden;
-}
-
-.slider-img-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 6px;
-}
-
-#gallery-slider-main-img,
-#memory-lightbox-main-img,
-#lightbox-img {
-    max-width: 100% !important;
-    max-height: 100% !important;
-    object-fit: contain !important;
-    border-radius: 8px !important;
-    transition: transform 0.25s ease !important;
-    margin: 0 auto !important;
-}
-
-.slider-arrow-btn {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(0, 0, 0, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    color: #ffffff;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: var(--transition-base);
-    z-index: 10;
-}
-
-.slider-arrow-btn:hover {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    transform: translateY(-50%) scale(1.1);
-}
-
-.slider-arrow-btn.prev {
-    left: 12px;
-}
-
-.slider-arrow-btn.next {
-    right: 12px;
-}
-
-.gallery-slider-info {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-#gallery-slider-place-name {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0;
-}
-
-.gallery-slider-meta {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.gallery-slider-comments {
-    font-size: 0.82rem;
-    color: #FF85A1;
-    background: rgba(255, 101, 132, 0.12);
-    padding: 0.4rem 0.8rem;
-    border-radius: 10px;
-    margin-top: 2px;
-    max-width: 90%;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.gallery-slider-thumbs {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    overflow-x: auto;
-    padding: 4px 0;
-}
-
-.gallery-slider-thumb {
-    width: 54px;
-    height: 54px;
-    border-radius: 10px;
-    object-fit: cover;
-    cursor: pointer;
-    opacity: 0.45;
-    border: 2px solid transparent;
-    transition: var(--transition-base);
-}
-
-.gallery-slider-thumb:hover {
-    opacity: 0.8;
-}
-
-.gallery-slider-thumb.active {
-    opacity: 1;
-    border-color: var(--color-primary);
-    transform: scale(1.08);
-}
-
-/* Mobile Calendar & Navigation Controls Aesthetics */
-#tab-calendar,
-.calendar-container,
-.calendar-card {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-#calendar-days-grid {
-    display: grid !important;
-    grid-template-columns: repeat(7, 1fr) !important;
-    grid-auto-rows: minmax(50px, auto) !important;
-    gap: 4px !important;
-    width: 100% !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    box-sizing: border-box !important;
-}
-
-.calendar-day-cell {
-    min-height: 50px !important;
-    height: auto !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-}
-
-.calendar-nav-controls #btn-cal-prev:hover,
-.calendar-nav-controls #btn-cal-next:hover {
-    background: var(--color-primary) !important;
-    color: #ffffff !important;
-    transform: scale(1.08) !important;
-}
-.cal-badges-container {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 2px;
-}
-@media (max-width: 768px) {
-    .cal-btn-visited, .cal-btn-wishlist {
-        color: transparent !important;
-        text-indent: 100% !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
-        min-width: 10px !important;
-        border-radius: 50% !important;
-        border: none !important;
-    }
-    .cal-btn-visited {
-        background: #74B9FF !important;
-    }
-    .cal-btn-wishlist {
-        background: #FF6584 !important;
-    }
-}
+    <!-- Leaflet CSS for Map Fallback -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Style CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Dexie.js for IndexedDB -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    
+    <!-- Leaflet JS for Map Fallback -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- JSZip for Downloading All Photos -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="lovely-theme">
+    <!-- Background glow elements (Soft lovely pink & peaches) -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <div class="app-container">
+        <!-- Mobile Top Header Bar (Sleek & Minimalist) -->
+        <div class="mobile-top-bar">
+            <div class="mobile-brand">
+                <i data-lucide="heart" class="brand-logo text-primary"></i>
+                <span class="brand-name">AURA</span>
+                <span class="mobile-couple-names" id="mobile-couple-names" style="font-size:0.75rem; font-weight:700; color:var(--color-primary); margin-left:6px; background:rgba(255,101,132,0.12); padding:2px 8px; border-radius:12px; border:1px solid rgba(255,101,132,0.25);">SH ♥ SA</span>
+            </div>
+            <div class="mobile-sync-badge" onclick="document.getElementById('sync-status-banner').click()" title="실시간 동기화 상태">
+                <span class="sync-pulse" id="mobile-sync-pulse"></span>
+            </div>
+        </div>
+
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <!-- Couple Profile Box -->
+            <div class="couple-profile-box">
+                <div class="profile-avatar-frame">
+                    <img src="images/couple3.jpg" alt="Couple" class="profile-avatar" id="sidebar-profile-img">
+                </div>
+                <div class="profile-names" id="couple-names-editable" title="클릭하여 이름 수정 ✏️">
+                    <span class="partner-name-a" id="profile-name-a">SH</span>
+                    <i data-lucide="heart" class="heart-split"></i>
+                    <span class="partner-name-b" id="profile-name-b">SA</span>
+                </div>
+                <div class="love-days-count" id="love-days-text">행복한 연애 중 💕</div>
+            </div>
+
+            <!-- Real-Time Sync Status Banner -->
+            <div class="sync-status-banner" id="sync-status-banner" style="cursor: pointer;">
+                <span class="sync-pulse" id="sync-status-pulse"></span>
+                <span id="sync-status-text">실시간 동기화 연결하기 🔗</span>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>대시보드</span>
+                </button>
+                <button class="nav-item" data-tab="wishlist">
+                    <i data-lucide="heart-handshake"></i>
+                    <span>데이트 위시리스트</span>
+                </button>
+                <button class="nav-item" data-tab="visited">
+                    <i data-lucide="smile"></i>
+                    <span>함께 다녀온 곳</span>
+                </button>
+                <button class="nav-item" data-tab="gallery">
+                    <i data-lucide="camera"></i>
+                    <span>추억 갤러리</span>
+                </button>
+                <button class="nav-item" data-tab="ai-planner">
+                    <i data-lucide="sparkles" class="text-ai"></i>
+                    <span>AI 코스 플래너</span>
+                </button>
+                <button class="nav-item" data-tab="settings">
+                    <i data-lucide="settings"></i>
+                    <span>에이전트 설정</span>
+                </button>
+            </nav>
+            
+            <div class="active-date-card" id="sidebar-dday-card">
+                <div class="card-title">다음 사랑 예정일</div>
+                <div class="date-title" id="next-date-title">아직 약속이 없어요 😢</div>
+                <div class="dday-tag" id="next-date-dday">D-Day</div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Topbar Header -->
+            <header class="topbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h1 class="page-title" id="page-title-text">러블리 대시보드</h1>
+                <button type="button" class="btn btn-outline" onclick="openShareRoomModal()" style="font-size:0.8rem; padding:0.32rem 0.75rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); gap:6px;">
+                    <i data-lucide="smartphone"></i> 스마트폰 연동 📱
+                </button>
+            </header>
+
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-pane active">
+                <div class="dashboard-grid">
+                    <!-- Stats Section (Ultra Mini 28px Height Banner) -->
+                    <div class="stats-row" style="display:flex; gap:0.5rem; margin-bottom:0.4rem;">
+                        <div class="stat-card-mini" style="flex:1; display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.75); border:1px solid rgba(255,101,132,0.25); border-radius:10px; padding:0.2rem 0.65rem; height:28px; box-shadow:0 2px 8px rgba(255,101,132,0.06);">
+                            <span style="font-size:0.72rem; font-weight:700; color:var(--color-primary); display:inline-flex; align-items:center; gap:4px;">💖 위시리스트</span>
+                            <span id="stat-wishlist-count" style="font-size:0.85rem; font-weight:800; color:var(--color-primary);">0</span>
+                        </div>
+                        <div class="stat-card-mini" style="flex:1; display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.75); border:1px solid rgba(181,23,158,0.25); border-radius:10px; padding:0.2rem 0.65rem; height:28px; box-shadow:0 2px 8px rgba(181,23,158,0.06);">
+                            <span style="font-size:0.72rem; font-weight:700; color:var(--color-secondary); display:inline-flex; align-items:center; gap:4px;">📸 함께 다녀온 장소</span>
+                            <span id="stat-visited-count" style="font-size:0.85rem; font-weight:800; color:var(--color-secondary);">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Map and Budget/Settlement -->
+                    <div class="main-grid-row" style="display:flex; flex-direction:column;">
+                        <!-- Interactive Map Card -->
+                        <div class="card map-card flex-grow">
+                            <div class="card-header">
+                                <h3 class="card-heading">러브 맵</h3>
+                                <div class="map-legend" style="display: flex; gap: 10px;">
+                                    <span class="badge-wish" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">📍 위시리스트</span>
+                                    <span class="badge-visited" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; font-weight:700;">📍 다녀온 곳</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Embedded Local Search Inside Map -->
+                            <div class="map-search-bar" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
+                                <div style="display:flex; gap:0.4rem; width:100%;">
+                                    <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query" style="flex-grow:1;">
+                                    <button class="btn btn-primary" id="btn-map-search" onclick="handleInAppMapSearch()" style="white-space:nowrap;">
+                                        <i data-lucide="search"></i> 검색
+                                    </button>
+                                </div>
+                                
+                            </div>
+                            
+                            <div class="map-container-wrapper">
+                                <!-- Naver Map / Leaflet Map Container -->
+                                <div id="map"></div>
+                            </div>
+                        </div>
+
+                        <!-- Calendar Container (Moved from tab-calendar) -->
+                        <div class="calendar-container card" id="dashboard-calendar-container" style="flex: 1 1 auto; overflow: visible !important; min-height: 280px; padding: 0.85rem 1rem;">
+                            <div class="calendar-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap; gap:6px;">
+                                <div>
+                                    <h3 class="card-heading" style="margin-bottom:0;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
+                                </div>
+                                <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:3px 8px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08);">
+                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-left" style="width:16px; height:16px;"></i></button>
+                                    <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:0.95rem; min-width:105px; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
+                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:16px; height:16px;"></i></button>
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.15rem 0.55rem; border-radius:20px; font-size:0.72rem; margin-left:2px;">오늘 🌸</button>
+                                </div>
+                            </div>
+
+                            <div class="calendar-weekdays-row" style="display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; font-weight:700; font-size:0.78rem; padding:0.35rem 0; background:rgba(255,101,132,0.06); border-radius:10px; margin-bottom:0.4rem;">
+                                <div class="weekday sun" style="color:#E63946;">일</div>
+                                <div class="weekday">월</div>
+                                <div class="weekday">화</div>
+                                <div class="weekday">수</div>
+                                <div class="weekday">목</div>
+                                <div class="weekday">금</div>
+                                <div class="weekday sat" style="color:#457B9D;">토</div>
+                            </div>
+
+                            <div class="calendar-days-grid" id="calendar-days-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); grid-auto-rows:minmax(42px, auto); gap:4px; width:100%; min-height:220px; overflow:visible;">
+                                <!-- Dynamic day cells rendered by app.js -->
+                            </div>
+                        </div>
+
+                        <!-- Selected Date Details Panel -->
+                        <div class="card selected-date-panel" id="selected-date-panel" style="margin-top:0;">
+                            <div class="selected-date-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,101,132,0.15); padding-bottom:0.6rem; margin-bottom:0.8rem;">
+                                <h4 style="margin:0; font-size:1.02rem; color:var(--color-text-dark); display:flex; align-items:center; gap:6px;">
+                                    <i data-lucide="heart" class="text-primary"></i>
+                                    <span id="selected-date-title">선택한 날짜의 데이트 기록</span>
+                                </h4>
+                            </div>
+                            <div class="selected-date-items" id="selected-date-items">
+                                <!-- Selected date items rendered by app.js -->
+                            </div>
+                        </div>
+
+                        <!-- Latest Visited Review Card -->
+                        <div class="card flex-column">
+                            <div class="upcoming-details">
+                                <h4 class="sub-heading">마지막 다녀온 곳의 추억</h4>
+                                <div class="visited-quote-box" id="latest-visited-review">
+                                    "아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Couple Memory Gallery Widget -->
+                        <div class="card flex-column memory-gallery-widget">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:6px;">
+                                <h4 class="sub-heading" style="margin:0;"><i data-lucide="camera" class="margin-right-sm"></i>우리의 러블리 메모리</h4>
+                                <div style="display:flex; gap:6px;">
+                                    <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06);" onclick="downloadAllMemoryGalleryPhotos()">
+                                        📥 전체 다운로드
+                                    </button>
+                                    <button class="btn btn-outline" style="font-size:0.72rem; padding:0.25rem 0.55rem; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="document.getElementById('memory-gallery-files').click()">
+                                        📸 추가
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="memory-grid" id="dashboard-memory-grid">
+                                <div class="memory-item"><img src="images/couple1.jpg" alt="Luge Date" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple2.jpg" alt="Sunny Day" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple3.jpg" alt="Night Street" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple4.jpg" alt="Cute Pinch" class="gallery-img"></div>
+                                <div class="memory-item"><img src="images/couple5.jpg" alt="Punch Fight" class="gallery-img"></div>
+                            </div>
+                        </div>
+
+                        <!-- Budget & Dutch-pay Settlement Card -->
+                        <div class="card budget-card flex-column">
+                            <div>
+                                <div class="card-header">
+                                    <h3 class="card-heading">예산 대비 지출 현황</h3>
+                                </div>
+                                <div class="budget-chart-container">
+                                    <div class="budget-progress-label">
+                                        <span>현재 데이트 실지출</span>
+                                        <span id="budget-ratio-text">0%</span>
+                                    </div>
+                                    <div class="progress-bar-bg">
+                                        <div class="progress-bar-fill" id="budget-progress-fill" style="width: 0%;"></div>
+                                    </div>
+                                    <div class="budget-values">
+                                        <div>데이트 한도 예산: <span id="budget-limit-text">500,000원</span></div>
+                                        <div>우리가 쓴 총액: <span id="budget-spent-text" class="text-primary font-bold">0원</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="divider">
+
+                            <!-- Dutch-pay Calculator details -->
+                            <div class="settlement-container">
+                                <h4 class="sub-heading"><i data-lucide="calculator" class="margin-right-sm"></i>커플 정산 결과</h4>
+                                <div class="settlement-detail-card" id="dutchpay-settlement-card">
+                                    <div class="settlement-row">
+                                        <span><span id="settle-label-a">SH</span>(A)가 결제한 총액:</span>
+                                        <span id="dutchpay-paid-a">0원</span>
+                                    </div>
+                                    <div class="settlement-row">
+                                        <span><span id="settle-label-b">SA</span>(B)가 결제한 총액:</span>
+                                        <span id="dutchpay-paid-b">0원</span>
+                                    </div>
+                                    <div class="settlement-result" id="dutchpay-result-text">
+                                        정산할 내역이 없습니다 💖
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Wishlist -->
+            <section id="tab-wishlist" class="tab-pane">
+                <div class="places-container">
+                    <div class="filter-bar">
+                        <div class="search-box">
+                            <i data-lucide="search"></i>
+                            <input type="text" placeholder="장소 검색" id="wishlist-search-input">
+                        </div>
+                    </div>
+                    <div class="places-grid" id="wishlist-list-container">
+                        <!-- Dynamic list rendered by app.js -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Visited -->
+            <section id="tab-visited" class="tab-pane">
+                <div class="places-container">
+                    <div class="filter-bar">
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <div class="search-box">
+                                <i data-lucide="search"></i>
+                                <input type="text" placeholder="장소 검색" id="visited-search-input">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="places-grid" id="visited-list-container">
+                        <!-- Dynamic list rendered by app.js -->
+                    </div>
+                </div>
+            </section>
+
+
+
+            <!-- Tab: Memory Gallery -->
+            <section id="tab-gallery" class="tab-pane">
+                <div class="gallery-container">
+                    <div class="gallery-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:10px; padding: 1rem 1.5rem 0 1.5rem;">
+                        <div>
+                            <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="camera" class="margin-right-sm text-primary"></i>추억 포토 갤러리 📸</h3>
+                            <span class="sub-text" id="gallery-photo-count" style="font-size:0.8rem; color:var(--color-text-med);">함께 다녀온 곳에 등록된 모든 커플 사진들</span>
+                        </div>
+                    </div>
+
+                    <div class="gallery-grid" id="gallery-photos-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1.25rem; padding: 0 1.5rem 1.5rem 1.5rem;">
+                        <!-- Dynamic photo cards rendered by app.js -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: AI Course Planner -->
+            <section id="tab-ai-planner" class="tab-pane">
+                <div class="ai-planner-layout">
+                    <!-- Sidebar settings alert if key is missing -->
+                    <div class="alert-banner warning hidden" id="api-key-warning">
+                        <i data-lucide="alert-triangle"></i>
+                        <span>AI 플래너를 사용하려면 설정 탭에서 <strong>Gemini API Key</strong>를 입력해 주세요 🌸</span>
+                    </div>
+
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <div class="bot-info">
+                                <div class="bot-avatar"><i data-lucide="sparkles"></i></div>
+                                <div>
+                                    <div class="bot-name">AURA 러블리 AI 플래너</div>
+                                    <div class="bot-status">가고 싶은 동네나 원하는 테마를 쏙쏙 추천해 드려요!</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Message Area -->
+                        <div class="chat-messages" id="chat-messages-box">
+                            <div class="message message-bot">
+                                <div class="msg-bubble">
+                                    안녕하세요, 공주님 왕자님! 💖 오늘 데이트는 어디로 떠나고 싶으신가요?<br>
+                                    예: "홍대 예쁜 카페랑 아기자기한 밥집 코스 짜줘", "익선동 한옥 뷰 추천해줘" 등 마음껏 말씀하세요!
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick suggestion chips -->
+                        <div class="suggestion-chips">
+                            <button class="chip-btn" data-prompt="연남동 핑크빛 감성의 아기자기한 카페 & 식당 코스 짜줘">🌸 핑크빛 연남동</button>
+                            <button class="chip-btn" data-prompt="혜화역 근처 연극보고 가기 좋은 데이트 코스 제안해줘">🎭 대학로 문화 데이트</button>
+                            <button class="chip-btn" data-prompt="비 오는 날 가기 좋은 예쁜 실내 식물원/미술관 코스 짜줘">☔ 촉촉한 실내 코스</button>
+                            <button class="chip-btn" data-prompt="커플이 1박 2일로 가기 좋은 가평 힐링 스팟 추천해줘">🚗 힐링 여행 코스</button>
+                        </div>
+
+                        <!-- Message Input Form -->
+                        <form class="chat-input-area" id="chat-input-form">
+                            <input type="text" placeholder="메시지를 입력하세요 (예: 삼청동 조용하고 분위기 넘치는 산책 코스)" id="chat-user-input" required>
+                            <button type="submit" class="btn-send"><i data-lucide="send"></i></button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Settings -->
+            <section id="tab-settings" class="tab-pane">
+                <div class="card settings-card">
+                    <h3 class="card-heading"><i data-lucide="sliders" class="margin-right-sm text-primary"></i>AURA 환경 설정</h3>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <label for="settings-gemini-key" style="margin:0;">Gemini API Key</label>
+                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('gemini')">
+                                    ❓ 가이드 / 발급방법
+                                </button>
+                            </div>
+                            <input type="password" id="settings-gemini-key" placeholder="Gemini API Key를 입력하세요">
+                        </div>
+
+                        <div class="form-group">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <label for="settings-naver-client-id" style="margin:0;">네이버 지도 Client ID</label>
+                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('naver')">
+                                    ❓ 가이드 / 발급방법
+                                </button>
+                            </div>
+                            <input type="text" id="settings-naver-client-id" placeholder="네이버 클라우드 플랫폼 Maps Client ID를 입력하세요">
+                            <span class="help-text">등록 시 전용 네이버 지도로 로드되며, 미입력 시 Leaflet 지도로 작동합니다.</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="settings-budget-limit">데이트 예산 한도 (원)</label>
+                            <input type="number" id="settings-budget-limit" placeholder="예: 500000" value="500000">
+                        </div>
+
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="settings-partner-a-name">파트너 A 이름 (SH)</label>
+                                <input type="text" id="settings-partner-a-name" placeholder="기본값: SH" value="SH">
+                            </div>
+                            <div class="form-group">
+                                <label for="settings-partner-b-name">파트너 B 이름 (SA)</label>
+                                <input type="text" id="settings-partner-b-name" placeholder="기본값: SA" value="SA">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settings-sync-room-id">실시간 동기화 룸 이름 (방 이름)</label>
+                            <input type="text" id="settings-sync-room-id" placeholder="예: lovestory (비워둘 시 동기화 미사용)">
+                            <span class="help-text">주소창에 <code>?room=방이름</code>을 붙이거나 여기에 입력하면 5초마다 자동 동기화 룸이 실행됩니다.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="settings-firebase-url">Firebase Database URL (격리용 선택)</label>
+                            <input type="text" id="settings-firebase-url" placeholder="예: https://your-db.firebasedatabase.app">
+                            <span class="help-text">비워두면 AURA 기본 분리 경로(aura-rooms/)를 사용하며, 입력하면 본인의 전용 Firebase DB로 완벽히 격리됩니다.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label>데이터 수동 관리</label>
+                            <div class="btn-row">
+                                <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 데이터 내보내기</button>
+                                <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 데이터 가져오기</button>
+                                <input type="file" id="file-import-data" class="hidden" accept=".json">
+                            </div>
+                        </div>
+
+                        <div class="form-group-row">
+                            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Place Registration (Quick Add) -->
+    <div class="modal-overlay" id="modal-place-add">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>💖 가고 싶은 장소 추가</h3>
+                <button class="modal-close" id="btn-close-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-place-add">
+                <div class="form-group">
+                    <label for="add-place-name">장소 이름 *</label>
+                    <input type="text" id="add-place-name" placeholder="예: 페이브 베이커리 연남" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="add-place-category">장소 종류</label>
+                    <select id="add-place-category" onchange="toggleCustomCategoryInput('add')">
+                        <option value="Cafe">카페 (Cafe)</option>
+                        <option value="Restaurant">맛집 (Restaurant)</option>
+                        <option value="Bar">술집/바 (Bar)</option>
+                        <option value="Park">공원/산책 (Park)</option>
+                        <option value="Museum">문화/미술관 (Museum)</option>
+                        <option value="Other">기타 (Other)</option>
+                        <option value="custom">✏️ 직접 입력</option>
+                    </select>
+                    <input type="text" id="add-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
+                </div>
+
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label for="add-place-date" style="margin:0;">방문 예정 날짜</label>
+                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700;">
+                            <input type="checkbox" id="add-place-undated" onchange="toggleUndatedDate('add')"> 📅 날짜 미정
+                        </label>
+                    </div>
+                    <input type="date" id="add-place-date">
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-url">지도 링크 입력 (구글/네이버 공유 URL)</label>
+                    <input type="url" id="add-place-url" placeholder="지도 링크를 붙여넣으세요">
+                    <span class="help-text">공유용 긴 URL인 경우 위도/경도를 자동 파싱합니다.</span>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="add-place-lat">위도 (Latitude)</label>
+                        <input type="number" id="add-place-lat" step="any" placeholder="예: 37.5612">
+                    </div>
+                    <div class="form-group">
+                        <label for="add-place-lng">경도 (Longitude)</label>
+                        <input type="number" id="add-place-lng" step="any" placeholder="예: 126.9248">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-notes">추천 사유 / 시키고 싶은 메뉴</label>
+                    <textarea id="add-place-notes" rows="3" placeholder="예: 시그니처 멜팅 초콜릿 케이크 필수!"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="add-place-priority">가고 싶은 열정 정도</label>
+                    <select id="add-place-priority">
+                        <option value="medium">꼭 가봐요 (Medium)</option>
+                        <option value="high">당장 가요!! 🔥 (High)</option>
+                        <option value="low">천천히 가요 (Low)</option>
+                    </select>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">보관함에 쏙</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Visit Log & Review (Wishlist -> Visited) -->
+    <div class="modal-overlay" id="modal-visit-log">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>🎀 방문 완료 기록 작성</h3>
+                <button class="modal-close" id="btn-close-visit-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-visit-log">
+                <input type="hidden" id="visit-place-id">
+                
+                <div class="form-group">
+                    <label>방문한 장소</label>
+                    <div class="read-only-val" id="visit-place-name">장소명</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-rating">평점 *</label>
+                    <div class="rating-input-row">
+                        <input type="radio" name="rating" id="star5" value="5" required><label for="star5" title="5점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star4" value="4"><label for="star4" title="4점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star3" value="3"><label for="star3" title="3점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star2" value="2"><label for="star2" title="2점"><i data-lucide="star"></i></label>
+                        <input type="radio" name="rating" id="star1" value="1"><label for="star1" title="1점"><i data-lucide="star"></i></label>
+                    </div>
+                </div>
+
+                <div class="form-group-row" style="margin-top:0.4rem;">
+                    <div class="form-group">
+                        <label for="visit-comment-a">💬 <span id="visit-lbl-comment-a">초코</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-a" placeholder="예: 맛있는 음식 먹어서 너무 행복했어! 💕">
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-comment-b">💬 <span id="visit-lbl-comment-b">딸기</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-b" placeholder="예: 다음에 꼭 또 오고 싶어! ✨">
+                    </div>
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="visit-expense">결제한 비용 (원)</label>
+                        <input type="number" id="visit-expense" placeholder="금액" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-payer">누가 결제했나요? *</label>
+                        <select id="visit-payer">
+                            <option value="A" id="opt-partner-a">SH(A)</option>
+                            <option value="B" id="opt-partner-b">SA(B)</option>
+                            <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-photo">커플 추억 사진 (선택, 여러 장 가능)</label>
+                    <input type="file" id="visit-photo" accept="image/*" multiple style="display: none;">
+                    <div class="photo-preview-box" id="visit-photo-preview">
+                        <span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-visit-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">기록 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Place Details (Visited & Wishlist) -->
+    <div class="modal-overlay" id="modal-edit-place">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>✏️ 장소 및 데이트 기록 수정</h3>
+                <button class="modal-close" id="btn-close-edit-modal" onclick="closeEditPlaceModal()"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-edit-place">
+                <input type="hidden" id="edit-place-id">
+                
+                <div class="form-group">
+                    <label for="edit-place-name">장소명 *</label>
+                    <input type="text" id="edit-place-name" required placeholder="장소 이름">
+                </div>
+
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="edit-place-category">카테고리 *</label>
+                        <select id="edit-place-category" onchange="toggleCustomCategoryInput('edit')">
+                            <option value="Restaurant">음식점 (Restaurant)</option>
+                            <option value="Cafe">카페 (Cafe)</option>
+                            <option value="Bar">주류 (Bar)</option>
+                            <option value="Park">공원/산책 (Park)</option>
+                            <option value="Museum">전시/문화 (Museum)</option>
+                            <option value="Other">기타 (Other)</option>
+                            <option value="custom">✏️ 직접 입력</option>
+                        </select>
+                        <input type="text" id="edit-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
+                    </div>
+                    <div class="form-group">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <label for="edit-place-date" style="margin:0;">방문/등록 날짜 *</label>
+                            <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700;">
+                                <input type="checkbox" id="edit-place-undated" onchange="toggleUndatedDate('edit')"> 📅 날짜 미정
+                            </label>
+                        </div>
+                        <input type="date" id="edit-place-date" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-place-address">주소 (또는 메모)</label>
+                    <input type="text" id="edit-place-address" placeholder="주소를 입력하세요 (예: 대전 유성구 봉산로36번길 34)">
+                </div>
+
+                <!-- Partner Comments (Wishlist & Visited) -->
+                <div class="form-group-row" style="margin-top:0.4rem;">
+                    <div class="form-group">
+                        <label for="edit-place-comment-a">💬 <span id="edit-lbl-comment-a">초코</span>의 한줄 코멘트</label>
+                        <input type="text" id="edit-place-comment-a" placeholder="예: 꼭 같이 가보고 싶은 핫플! 💕">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-place-comment-b">💬 <span id="edit-lbl-comment-b">딸기</span>의 한줄 코멘트</label>
+                        <input type="text" id="edit-place-comment-b" placeholder="예: 기대되는 데이트 코스! ✨">
+                    </div>
+                </div>
+
+                <div id="edit-visited-fields">
+                    <div class="form-group">
+                        <label>평점 *</label>
+                        <div class="rating-input-row">
+                            <input type="radio" name="edit-rating" id="edit-star5" value="5"><label for="edit-star5" title="5점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star4" value="4"><label for="edit-star4" title="4점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star3" value="3"><label for="edit-star3" title="3점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star2" value="2"><label for="edit-star2" title="2점"><i data-lucide="star"></i></label>
+                            <input type="radio" name="edit-rating" id="edit-star1" value="1"><label for="edit-star1" title="1점"><i data-lucide="star"></i></label>
+                        </div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="edit-place-expense">결제한 비용 (원)</label>
+                            <input type="number" id="edit-place-expense" placeholder="금액" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-place-payer">누가 결제했나요?</label>
+                            <select id="edit-place-payer">
+                                <option value="A" id="edit-opt-partner-a">SH(A)</option>
+                                <option value="B" id="edit-opt-partner-b">SA(B)</option>
+                                <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-place-photo">커플 추억 사진 추가/수정 (선택, 여러 장 가능)</label>
+                        <input type="file" id="edit-place-photo" accept="image/*" multiple style="display: none;">
+                        <div class="photo-preview-box" id="edit-place-photo-preview">
+                            <span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:0.5rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-outline" style="border-color:#EF476F; color:#EF476F; background:rgba(239,71,111,0.06); font-size:0.75rem; padding:0.35rem 0.65rem;" onclick="deletePlaceFromEditModal()">장소 전체 삭제 🗑️</button>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()">취소</button>
+                        <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Mobile Smartphone Pair & QR Share -->
+    <div class="modal-overlay" id="modal-share-room">
+        <div class="modal-card" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3>📱 스마트폰 모바일 연동</h3>
+                <button class="modal-close" onclick="closeShareRoomModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <div style="font-size:0.85rem; color:var(--color-text-med); margin-bottom:1rem; line-height:1.4;">
+                    스마트폰 카메라로 아래 <strong>QR 코드</strong>를 스캔하거나,<br>공유 링크를 카카오톡/문자로 전달하세요 💌
+                </div>
+
+                <div style="background: white; padding: 1rem; border-radius: 16px; display: inline-block; box-shadow: 0 4px 16px rgba(255,101,132,0.15); border: 1px solid rgba(255,101,132,0.2); margin-bottom: 1rem;">
+                    <img id="qr-code-img" src="" alt="Smartphone Sync QR Code" style="width: 180px; height: 180px; display: block; border-radius: 8px;">
+                </div>
+
+                <div class="form-group" style="text-align: left;">
+                    <label>스마트폰 직접 접속 URL</label>
+                    <div style="display: flex; gap: 6px;">
+                        <input type="text" id="share-room-url" readonly style="font-size: 0.8rem; background: rgba(255,101,132,0.04);">
+                        <button class="btn btn-primary" onclick="copyShareRoomUrl()" style="white-space: nowrap; font-size: 0.78rem; padding: 0.4rem 0.75rem;">
+                            📋 복사
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.2rem; padding: 0.75rem; background: rgba(255, 101, 132, 0.08); border-radius: 12px; border: 1px dashed rgba(255, 101, 132, 0.3); font-size: 0.78rem; color: var(--color-primary); text-align: left;">
+                    <strong>📱 스마트폰 앱처럼 사용하는 꿀팁!</strong><br>
+                    스마트폰 브라우저(사파리/크롬)로 접속 후 <strong>[공유] ➔ "홈 화면에 추가"</strong>를 누르시면 앱 아이콘이 생겨 스마트폰 앱으로 간편하게 구동하실 수 있습니다! ✨
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" style="width:100%; justify-content:center;" onclick="closeShareRoomModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Gallery Multi-Photo Lightbox Slider -->
+    <div class="modal-overlay" id="modal-gallery-slider">
+        <div class="gallery-slider-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
+                        <i data-lucide="download" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 다운로드 📥
+                    </button>
+                    <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="deleteCurrentSliderPhoto()">
+                        <i data-lucide="trash-2" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 사진 삭제 🗑️
+                    </button>
+                </div>
+                <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="gallery-slider-main" style="margin-top:20px;">
+                <button class="slider-arrow-btn prev" onclick="navigateGallerySlider(-1)"><i data-lucide="chevron-left"></i></button>
+                <div class="slider-img-container">
+                    <img id="gallery-slider-main-img" src="" alt="Main Memory Photo">
+                </div>
+                <button class="slider-arrow-btn next" onclick="navigateGallerySlider(1)"><i data-lucide="chevron-right"></i></button>
+            </div>
+
+            <div class="gallery-slider-info">
+                <h4 id="gallery-slider-place-name">장소명</h4>
+                <div class="gallery-slider-meta" id="gallery-slider-place-meta">방문 날짜 · 5점 ★</div>
+                <div class="gallery-slider-comments" id="gallery-slider-comments"></div>
+            </div>
+
+            <div class="gallery-slider-thumbs" id="gallery-slider-thumbs">
+                <!-- Thumbnails inserted dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Calendar Date Details Popup -->
+    <div class="modal-overlay" id="modal-date-details">
+        <div class="modal-card" style="max-width: 480px;">
+            <div class="modal-header">
+                <h3 id="modal-date-details-title">🗓️ 선택한 날짜 기록</h3>
+                <button class="modal-close" onclick="closeDateDetailsModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body" id="modal-date-details-body" style="max-height: 60vh; overflow-y: auto;">
+                <!-- Dynamically populated list of places for selected date -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" style="width:100%; justify-content:center;" onclick="closeDateDetailsModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Lovely Memory Gallery -->
+    <div class="modal-overlay" id="modal-edit-memory-gallery">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+                <h3>📸 우리의 러블리 메모리 사진 변경/추가</h3>
+                <button class="modal-close" onclick="closeEditMemoryGalleryModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size:0.8rem; color:var(--color-text-med); margin-bottom:0.8rem; line-height:1.4;">
+                    메인 대시보드에 표시할 <strong>커플 대표 추억 사진 (4~6장)</strong>을 자유롭게 업로드하세요 💖
+                </div>
+                <div class="form-group">
+                    <label>새 추억 사진 선택 (여러 장 동시 선택 가능)</label>
+                    <input type="file" id="memory-gallery-files" accept="image/*" multiple style="display:none;" onchange="saveMemoryGalleryPhotos()">
+                    <div class="photo-preview-box" id="memory-gallery-preview-box" onclick="document.getElementById('memory-gallery-files').click()" style="min-height:70px; cursor:pointer;">
+                        <span>여기를 클릭해 대시보드 메인 사진을 추가/수정하세요 📸</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeEditMemoryGalleryModal()">취소</button>
+                <button class="btn btn-primary" onclick="saveMemoryGalleryPhotos()">저장하기 💖</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Lovely Memory Lightbox Viewer with Navigation, Close & Delete -->
+    <div class="modal-overlay" id="modal-memory-lightbox">
+        <div class="gallery-slider-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
+                <button class="btn btn-outline" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px); cursor:pointer;" onclick="deleteCurrentMemoryPhoto()">
+                    <i data-lucide="trash-2" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> 사진 삭제 🗑️
+                </button>
+                <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeMemoryLightboxModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="gallery-slider-main" style="margin-top:20px;">
+                <button class="slider-arrow-btn prev" onclick="navigateMemoryLightbox(-1)"><i data-lucide="chevron-left"></i></button>
+                <div class="slider-img-container">
+                    <img id="memory-lightbox-main-img" src="" alt="Lovely Memory Photo">
+                </div>
+                <button class="slider-arrow-btn next" onclick="navigateMemoryLightbox(1)"><i data-lucide="chevron-right"></i></button>
+            </div>
+
+            <div class="gallery-slider-info" style="text-align:center;">
+                <h4 style="margin:0; font-size:1rem; color:var(--color-primary);">우리의 러블리 메모리 💖</h4>
+                <div class="gallery-slider-meta" id="memory-lightbox-meta" style="margin-top:4px;">1 / 5</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: API Key & Client ID Step-by-Step Guide -->
+    <div class="modal-overlay" id="modal-api-guide">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header">
+                <h3 id="modal-api-guide-title">❓ 설정 가이드</h3>
+                <button class="modal-close" onclick="closeApiGuideModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body" id="modal-api-guide-body" style="font-size:0.85rem; line-height:1.6; max-height:65vh; overflow-y:auto;">
+                <!-- Content injected dynamically by app.js -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="closeApiGuideModal()">확인했습니다! 💖</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Photo Viewer (Lightbox) -->
+    <div class="modal-overlay" id="modal-photo-viewer">
+        <div class="lightbox-card">
+            <button class="modal-close" id="btn-close-viewer"><i data-lucide="x"></i></button>
+            <img src="" id="lightbox-img" alt="Enlarged Memory">
+        </div>
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar (Visible on smartphone screens <= 768px) -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item active" data-tab="dashboard">
+            <i data-lucide="layout-dashboard"></i>
+            <span>대시보드</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="wishlist">
+            <i data-lucide="heart-handshake"></i>
+            <span>위시리스트</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="visited">
+            <i data-lucide="smile"></i>
+            <span>다녀온곳</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="gallery">
+            <i data-lucide="camera"></i>
+            <span>갤러리</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="ai-planner">
+            <i data-lucide="sparkles"></i>
+            <span>AI플래너</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="settings">
+            <i data-lucide="settings"></i>
+            <span>설정</span>
+        </button>
+    </nav>
+
+    <!-- App Logic Script -->
+    <script src="app.js?v=20260724_v7"></script>
+
+    <!-- Service Worker Registration for PWA Mobile App Support -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>
