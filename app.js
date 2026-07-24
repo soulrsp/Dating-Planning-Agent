@@ -1707,7 +1707,7 @@ function handleEditPhotoUploadPreview(e) {
 }
 
 // 9. Photo Compressor Logic (High Quality Preserving Pipeline, max 2560px, 90% quality)
-function compressBase64Image(base64Str, maxWidth = 2560, maxHeight = 2560, quality = 0.90) {
+function compressBase64Image(base64Str, maxWidth = 1024, maxHeight = 1024, quality = 0.75) {
     return new Promise((resolve) => {
         if (!base64Str) return resolve("");
         if (!base64Str.startsWith("data:image")) return resolve(base64Str);
@@ -2661,21 +2661,33 @@ async function loadFromCloud() {
                     return;
                 }
 
-                const localCompareStr = JSON.stringify(localPlaces);
-                const fetchedCompareStr = JSON.stringify(placesToApply);
-
-                if (localCompareStr !== fetchedCompareStr) {
-                    console.log("[Sync Engine] Local DB updated from cloud.");
-                    await db.places.clear();
-                    if (placesToApply.length > 0) {
-                        await db.places.bulkAdd(placesToApply);
+                // Smart Upsert Engine: Upsert places to Dexie DB safely without clearing DB
+                let hasChanges = false;
+                for (const fp of placesToApply) {
+                    const cleanFpName = (fp.name || "").trim().toLowerCase();
+                    const existing = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === cleanFpName);
+                    
+                    if (existing) {
+                        const updatePayload = { ...fp };
+                        delete updatePayload.id;
+                        if (!updatePayload.photo && existing.photo) updatePayload.photo = existing.photo;
+                        if ((!updatePayload.photos || updatePayload.photos.length === 0) && existing.photos) updatePayload.photos = existing.photos;
+                        
+                        await db.places.update(existing.id, updatePayload);
+                        hasChanges = true;
+                    } else {
+                        const newData = { ...fp };
+                        delete newData.id;
+                        await db.places.add(newData);
+                        hasChanges = true;
                     }
+                }
 
+                if (hasChanges || localPlaces.length === 0) {
+                    console.log("[Sync Engine] Local DB updated from cloud.");
                     await updateDashboardStats();
                     await renderPlacesList();
                     updateMapMarkers();
-
-                    // Immediately restore photos from cloud after data merge
                     await loadPhotosFromCloud();
                 }
             }
