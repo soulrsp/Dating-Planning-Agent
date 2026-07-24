@@ -2141,14 +2141,14 @@ body {
    Date Calendar Styles
    ========================================== */
 .calendar-day-cell {
-    min-height: 90px;
+    min-height: 48px;
     background: rgba(255, 255, 255, 0.7);
     border: 1px solid var(--color-card-border);
-    border-radius: 14px;
-    padding: 0.4rem;
+    border-radius: 10px;
+    padding: 0.25rem;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     cursor: pointer;
     transition: var(--transition-base);
 }
