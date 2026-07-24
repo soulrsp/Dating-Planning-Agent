@@ -2318,28 +2318,6 @@ async function deletePlace(id, name) {
     }
 }
 
-window.deletePlace = deletePlace;
-
-window.deletePlaceFromEditModal = async function(e) {
-    if (e) {
-        if (e.preventDefault) e.preventDefault();
-        if (e.stopPropagation) e.stopPropagation();
-    }
-    const idEl = document.getElementById("edit-place-id");
-    const nameEl = document.getElementById("edit-place-name");
-    
-    if (!idEl || !idEl.value) {
-        showToast("삭제할 장소 정보를 찾을 수 없습니다.", "warning");
-        return;
-    }
-    
-    const id = parseInt(idEl.value, 10);
-    const name = nameEl ? nameEl.value.trim() : "해당 장소";
-    
-    closeEditPlaceModal();
-    await deletePlace(id, name);
-};
-
 // 11. Dashboard Analytics & Dutch-Pay Settlement Engine
 async function updateDashboardStats() {
     const places = await db.places.toArray();
@@ -2421,6 +2399,7 @@ async function updateDashboardStats() {
     }
 
     // Visited quote box
+    const visitedLogs = places.filter(p => p.isVisited === 1).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     const latestReviewEl = document.getElementById("latest-visited-review");
     if (latestReviewEl) {
         if (visitedLogs.length > 0) {
@@ -2432,23 +2411,6 @@ async function updateDashboardStats() {
             latestReviewEl.textContent = `"아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"`;
         }
     }
-}
-
-function isPlaceChanged(existing, updatePayload) {
-    if (!existing) return true;
-    if ((existing.name || "").trim() !== (updatePayload.name || "").trim()) return true;
-    if (existing.category !== updatePayload.category) return true;
-    if (String(existing.isVisited) !== String(updatePayload.isVisited)) return true;
-    if (existing.rating !== updatePayload.rating) return true;
-    if (existing.review !== updatePayload.review) return true;
-    if (existing.notes !== updatePayload.notes) return true;
-    if (existing.expense !== updatePayload.expense) return true;
-    if (existing.payer !== updatePayload.payer) return true;
-    if (existing.commentA !== updatePayload.commentA) return true;
-    if (existing.commentB !== updatePayload.commentB) return true;
-    if (existing.isDeleted !== updatePayload.isDeleted) return true;
-    if (JSON.stringify(existing.photos || []) !== JSON.stringify(updatePayload.photos || [])) return true;
-    return false;
 }
 
 // 12. Real-Time Couple Sync Engine (Firebase REST Polling)
@@ -2679,7 +2641,7 @@ async function loadFromCloud() {
                     return;
                 }
 
-                // Smart Diff Engine: Only update Dexie DB and set hasChanges if data is truly different
+                // Smart Upsert Engine: Upsert places to Dexie DB safely without clearing DB
                 let hasChanges = false;
                 for (const fp of placesToApply) {
                     const cleanFpName = (fp.name || "").trim().toLowerCase();
@@ -2691,10 +2653,8 @@ async function loadFromCloud() {
                         if (!updatePayload.photo && existing.photo) updatePayload.photo = existing.photo;
                         if ((!updatePayload.photos || updatePayload.photos.length === 0) && existing.photos) updatePayload.photos = existing.photos;
                         
-                        if (isPlaceChanged(existing, updatePayload)) {
-                            await db.places.update(existing.id, updatePayload);
-                            hasChanges = true;
-                        }
+                        await db.places.update(existing.id, updatePayload);
+                        hasChanges = true;
                     } else {
                         const newData = { ...fp };
                         delete newData.id;
