@@ -125,7 +125,7 @@
             <!-- Tab: Dashboard -->
             <section id="tab-dashboard" class="tab-pane active">
                 <div class="dashboard-grid">
-                    <!-- Stats Section (Slim 2-Card Layout) -->
+                    <!-- Stats Section -->
                     <div class="stats-row">
                         <div class="stat-card">
                             <div class="stat-icon bg-pink-soft"><i data-lucide="heart" class="text-primary"></i></div>
@@ -141,6 +141,13 @@
                                 <div class="stat-value" id="stat-visited-count">0</div>
                             </div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-cyan-soft"><i data-lucide="coins" class="text-ai"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">총 데이트 지출</div>
+                                <div class="stat-value" id="stat-expense-sum">0원</div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Map and Budget/Settlement -->
@@ -149,10 +156,9 @@
                         <div class="card map-card flex-grow">
                             <div class="card-header">
                                 <h3 class="card-heading">러브 맵</h3>
-                                <div class="map-legend" style="display: flex; gap: 8px; align-items: center;">
-                                    <span class="badge-wish" style="font-size:0.75rem; padding:0.2rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">📍 위시리스트</span>
-                                    <span class="badge-visited" style="font-size:0.75rem; padding:0.2rem 0.55rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; font-weight:700;">📍 다녀온 곳</span>
-                                    <button type="button" class="btn btn-outline" onclick="resetMapZoom()" style="font-size:0.7rem; padding:0.15rem 0.5rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);">🗺️ 전체보기</button>
+                                <div class="map-legend" style="display: flex; gap: 10px;">
+                                    <span class="badge-wish" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">📍 위시리스트</span>
+                                    <span class="badge-visited" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; font-weight:700;">📍 다녀온 곳</span>
                                 </div>
                             </div>
                             
