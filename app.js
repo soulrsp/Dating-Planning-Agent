@@ -2486,8 +2486,6 @@ async function saveToCloud() {
         const cleanPlaces = [];
         places.forEach(p => {
             const copy = { ...p };
-            delete copy.photo;
-            delete copy.photos;
             sanitizePlaceObject(copy);
             const cleanName = (copy.name || "").trim();
             if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
@@ -2641,8 +2639,8 @@ async function loadFromCloud() {
                     return;
                 }
 
-                const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
-                const fetchedCompareStr = JSON.stringify(placesToApply.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
+                const localCompareStr = JSON.stringify(localPlaces);
+                const fetchedCompareStr = JSON.stringify(placesToApply);
 
                 if (localCompareStr !== fetchedCompareStr) {
                     console.log("[Sync Engine] Local DB updated from cloud.");
@@ -2709,20 +2707,31 @@ async function loadPhotosFromCloud() {
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos.json?t=${Date.now()}`;
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) return;
-        const photos = await response.json();
-        if (!photos) return;
+        const photosRaw = await response.json();
+        if (!photosRaw || typeof photosRaw !== 'object') return;
         
+        const photoMap = {};
+        Object.keys(photosRaw).forEach(k => {
+            photoMap[k] = photosRaw[k];
+            try {
+                photoMap[decodeURIComponent(k)] = photosRaw[k];
+            } catch(e) {}
+        });
+
         const places = await db.places.toArray();
         let changed = false;
 
         for (const place of places) {
-            const nameKey = (place.name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
-            const entry = photos[nameKey] || photos[place.id];
+            const cleanName = (place.name || "").trim().toLowerCase();
+            const nameKey = cleanName.replace(/[/\\?%*:|"<>. ]/g, "_");
+            const encodedKey = encodeURIComponent(nameKey);
+            
+            const entry = photoMap[nameKey] || photoMap[encodedKey] || photoMap[cleanName] || photoMap[place.id];
             if (entry) {
                 const serverImgList = entry.imgList || (entry.img ? [entry.img] : []);
                 const localImgList = place.photos || (place.photo ? [place.photo] : []);
                 
-                if (JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
+                if (serverImgList.length > 0 && JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
                     await db.places.update(place.id, {
                         photo: serverImgList[0] || "",
                         photos: serverImgList
