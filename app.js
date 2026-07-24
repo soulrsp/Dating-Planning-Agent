@@ -2314,9 +2314,12 @@ async function updateDashboardStats() {
     const visitedCount = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).length;
     const expenseSum = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).reduce((acc, curr) => acc + (curr.expense || 0), 0);
     
-    document.getElementById("stat-wishlist-count").textContent = wishlistCount;
-    document.getElementById("stat-visited-count").textContent = visitedCount;
-    document.getElementById("stat-expense-sum").textContent = formatCurrency(expenseSum);
+    const wishlistEl = document.getElementById("stat-wishlist-count");
+    if (wishlistEl) wishlistEl.textContent = wishlistCount;
+    const visitedEl = document.getElementById("stat-visited-count");
+    if (visitedEl) visitedEl.textContent = visitedCount;
+    const expenseEl = document.getElementById("stat-expense-sum");
+    if (expenseEl) expenseEl.textContent = formatCurrency(expenseSum);
     
     // D-Day update
     const upcoming = places.filter(p => p.isVisited === 0).sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
