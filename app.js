@@ -2473,6 +2473,7 @@ function startCloudSyncLoop() {
 
     // Run immediately on start
     loadFromCloud();
+    loadPhotosFromCloud();
 }
 
 async function saveToCloud() {
@@ -2641,7 +2642,7 @@ async function loadFromCloud() {
                 }
 
                 const localCompareStr = JSON.stringify(localPlaces.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
-                const fetchedCompareStr = JSON.stringify(placesToApply);
+                const fetchedCompareStr = JSON.stringify(placesToApply.map(p => { const c = {...p}; delete c.photo; delete c.photos; return c; }));
 
                 if (localCompareStr !== fetchedCompareStr) {
                     console.log("[Sync Engine] Local DB updated from cloud.");
@@ -2653,6 +2654,9 @@ async function loadFromCloud() {
                     await updateDashboardStats();
                     await renderPlacesList();
                     updateMapMarkers();
+
+                    // Immediately restore photos from cloud after data merge
+                    await loadPhotosFromCloud();
                 }
             }
         }
