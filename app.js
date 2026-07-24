@@ -583,32 +583,6 @@ async function updateMapMarkers() {
         if (places.length > 0) {
             map.fitBounds(bounds);
         }
-        
-        // Background Auto Coordinate Repair Engine (Corrects any off-target mountain/river coordinates to Naver Official Building Roofs)
-        if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
-            places.forEach(place => {
-                const rawAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-                if (rawAddr && rawAddr.length > 5) {
-                    naver.maps.Service.geocode({ query: rawAddr }, (status, response) => {
-                        if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
-                            const officialAddr = response.v2.addresses[0];
-                            const exactLat = parseFloat(officialAddr.y);
-                            const exactLng = parseFloat(officialAddr.x);
-                            
-                            // If coordinates differ significantly (> 100 meters), update DB seamlessly
-                            if (exactLat > 30 && exactLat < 45 && exactLng > 120 && exactLng < 135) {
-                                if (Math.abs(place.lat - exactLat) > 0.0008 || Math.abs(place.lng - exactLng) > 0.0008) {
-                                    console.log(`[Auto Coordinate Repair] Corrected ${place.name} from (${place.lat}, ${place.lng}) to Naver Official Building Roof (${exactLat}, ${exactLng})`);
-                                    place.lat = exactLat;
-                                    place.lng = exactLng;
-                                    db.places.update(place.id, { lat: exactLat, lng: exactLng }).catch(() => {});
-                                }
-                            }
-                        }
-                    });
-                }
-            });
-        }
     } else {
         // Leaflet Map Markers Rendering
         if (!leafletMarkersGroup) return;
@@ -1918,38 +1892,6 @@ window.quickEditComment = async function(id, partnerKey) {
     }
 };
 
-window.fixEditModalCoordinates = async function() {
-    const address = document.getElementById("edit-place-address").value.trim();
-    if (!address) {
-        showToast("보정할 주소를 입력해 주세요! 📍", "warning");
-        return;
-    }
-    
-    showToast("네이버 공식 지적도 건물 좌표를 조회 중입니다... 🎯", "success");
-    
-    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode) {
-        naver.maps.Service.geocode({ query: address }, (status, response) => {
-            if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
-                const addrItem = response.v2.addresses[0];
-                const lat = parseFloat(addrItem.y);
-                const lng = parseFloat(addrItem.x);
-                
-                const id = parseInt(document.getElementById("edit-place-id").value);
-                if (id) {
-                    db.places.update(id, { lat: lat, lng: lng }).then(() => {
-                        showToast(`네이버 공식 건물 좌표(${lat.toFixed(5)}, ${lng.toFixed(5)})로 100% 정밀 보정되었습니다! 🎯`, "success");
-                        updateMapMarkers();
-                    });
-                }
-            } else {
-                showToast("해당 주소의 지적도 좌표를 찾지 못했습니다. 도로명 주소를 확인해 주세요 📍", "warning");
-            }
-        });
-    } else {
-        showToast("네이버 지도 지적도 서비스가 준비 중입니다.", "warning");
-    }
-};
-
 async function handleEditPlaceSubmit(e) {
     e.preventDefault();
     const id = parseInt(document.getElementById("edit-place-id").value);
@@ -1978,20 +1920,6 @@ async function handleEditPlaceSubmit(e) {
         commentA: commentAEl ? commentAEl.value.trim() : (place.commentA || ""),
         commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
     };
-
-    // Auto-resolve coordinates from address via Naver official Geocoder
-    if (window.naver && window.naver.maps && window.naver.maps.Service && window.naver.maps.Service.geocode && addressVal.length > 4) {
-        await new Promise((resolve) => {
-            naver.maps.Service.geocode({ query: addressVal }, (status, response) => {
-                if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
-                    const addrItem = response.v2.addresses[0];
-                    updatePayload.lat = parseFloat(addrItem.y);
-                    updatePayload.lng = parseFloat(addrItem.x);
-                }
-                resolve();
-            });
-        });
-    }
 
     if (place.isVisited === 1) {
         const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
