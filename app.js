@@ -2066,6 +2066,10 @@ function renderCommentsBlock(place) {
 
 // 10. Places Render List
 async function renderPlacesList() {
+    const mainContent = document.querySelector(".main-content");
+    const savedScrollTop = mainContent ? mainContent.scrollTop : 0;
+    const savedWindowY = window.scrollY || document.documentElement.scrollTop;
+
     // 1. Render Wishlist Tab
     const wishlistContainer = document.getElementById("wishlist-list-container");
     if (wishlistContainer) {
@@ -2264,6 +2268,14 @@ async function renderPlacesList() {
     }
     
     lucide.createIcons();
+
+    // Preserve scroll position
+    if (mainContent && savedScrollTop > 0) {
+        mainContent.scrollTop = savedScrollTop;
+    }
+    if (savedWindowY > 0) {
+        window.scrollTo(0, savedWindowY);
+    }
 
     // Auto-update active tab if calendar or gallery
     if (document.getElementById("tab-calendar") && document.getElementById("tab-calendar").classList.contains("active")) {
@@ -3440,13 +3452,6 @@ async function renderCalendar() {
         let badgesHtml = "";
         if (visitedPlaces.length > 0 || wishlistPlaces.length > 0) {
             badgesHtml += `<div class="cal-badges-container" style="display:flex; flex-direction:column; gap:2px; margin-top:2px; align-items:center;">`;
-            if (visitedPlaces.length > 0) {
-                badgesHtml += `
-                    <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
-                        🌸 <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>
-                    </button>
-                `;
-            }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
                     <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); border-radius:6px; font-size:0.65rem; padding:1px 4px; font-weight:700; cursor:pointer;">
@@ -3564,13 +3569,11 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
     });
 }
 
-let currentGallerySliderData = {
-    places: [],
-    placeIndex: 0,
-    photoIndex: 0
-};
-
 async function renderGallery() {
+    const mainContent = document.querySelector(".main-content");
+    const savedScrollTop = mainContent ? mainContent.scrollTop : 0;
+    const savedWindowY = window.scrollY || document.documentElement.scrollTop;
+
     const container = document.getElementById("gallery-photos-grid");
     const countEl = document.getElementById("gallery-photo-count");
     if (!container) return;
@@ -3646,12 +3649,149 @@ async function renderGallery() {
     });
 
     lucide.createIcons();
+
+    // Preserve scroll position
+    if (mainContent && savedScrollTop > 0) {
+        mainContent.scrollTop = savedScrollTop;
+    }
+    if (savedWindowY > 0) {
+        window.scrollTo(0, savedWindowY);
+    }
 }
 
 // Multi-Photo Gallery Lightbox Slider Engine
 let activeGalleryPhotos = [];
 let activePhotoIndex = 0;
 let activePlaceInfo = {};
+
+window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
+    let place = null;
+    if (typeof placeId === 'number') {
+        place = await db.places.get(placeId);
+    }
+    if (!place) {
+        const visitedPlaces = await db.places.where("isVisited").equals(1).toArray();
+        place = visitedPlaces.find(p => p.id == placeId || p.id === placeId);
+    }
+    if (!place) return;
+
+    activeGalleryPhotos = place.photos || (place.photo ? [place.photo] : []);
+    if (activeGalleryPhotos.length === 0) return;
+
+    activePhotoIndex = Math.max(0, Math.min(initialIdx, activeGalleryPhotos.length - 1));
+    
+    const dateObj = new Date(place.createdAt);
+    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+    
+    activePlaceInfo = {
+        id: place.id,
+        name: place.name,
+        meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
+        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
+    };
+
+    updateGallerySliderUI();
+
+    const modal = document.getElementById("modal-gallery-slider");
+    if (modal) {
+        modal.classList.add("active");
+        setTimeout(() => lucide.createIcons(), 50);
+    }
+};
+
+function updateGallerySliderUI() {
+    const mainImg = document.getElementById("gallery-slider-main-img");
+    const nameEl = document.getElementById("gallery-slider-place-name");
+    const metaEl = document.getElementById("gallery-slider-place-meta");
+    const commEl = document.getElementById("gallery-slider-comments");
+    const thumbsContainer = document.getElementById("gallery-slider-thumbs");
+
+    if (mainImg) mainImg.src = activeGalleryPhotos[activePhotoIndex];
+    if (nameEl) nameEl.textContent = activePlaceInfo.name;
+    if (metaEl) metaEl.textContent = `${activePlaceInfo.meta} [${activePhotoIndex + 1} / ${activeGalleryPhotos.length}]`;
+    if (commEl) {
+        if (activePlaceInfo.comments) {
+            commEl.style.display = "block";
+            commEl.textContent = activePlaceInfo.comments;
+        } else {
+            commEl.style.display = "none";
+        }
+    }
+
+    if (thumbsContainer) {
+        thumbsContainer.innerHTML = "";
+        if (activeGalleryPhotos.length > 1) {
+            thumbsContainer.style.display = "flex";
+            activeGalleryPhotos.forEach((imgSrc, idx) => {
+                const thumb = document.createElement("img");
+                thumb.src = imgSrc;
+                thumb.className = `gallery-slider-thumb ${idx === activePhotoIndex ? 'active' : ''}`;
+                thumb.onclick = () => selectGallerySliderImage(idx);
+                thumbsContainer.appendChild(thumb);
+            });
+        } else {
+            thumbsContainer.style.display = "none";
+        }
+    }
+}
+
+window.navigateGallerySlider = function(direction) {
+    if (activeGalleryPhotos.length <= 1) return;
+    activePhotoIndex = (activePhotoIndex + direction + activeGalleryPhotos.length) % activeGalleryPhotos.length;
+    updateGallerySliderUI();
+};
+
+window.selectGallerySliderImage = function(idx) {
+    if (idx >= 0 && idx < activeGalleryPhotos.length) {
+        activePhotoIndex = idx;
+        updateGallerySliderUI();
+    }
+};
+
+window.closeGallerySliderModal = function() {
+    const modal = document.getElementById("modal-gallery-slider");
+    if (modal) modal.classList.remove("active");
+};
+
+// 1-by-1 Photo Delete Engine in Gallery Lightbox
+window.deleteCurrentSliderPhoto = async function() {
+    if (!activeGalleryPhotos || activeGalleryPhotos.length === 0 || !activePlaceInfo || !activePlaceInfo.id) return;
+    if (!confirm(`'${activePlaceInfo.name}'의 이 추억 사진을 1장 삭제하시겠습니까?`)) return;
+
+    const place = await db.places.get(activePlaceInfo.id);
+    if (!place) return;
+
+    let updatedPhotos = [...(place.photos || (place.photo ? [place.photo] : []))];
+    if (activePhotoIndex >= 0 && activePhotoIndex < updatedPhotos.length) {
+        updatedPhotos.splice(activePhotoIndex, 1);
+    }
+
+    const updatePayload = {
+        photos: updatedPhotos,
+        photo: updatedPhotos.length > 0 ? updatedPhotos[0] : ""
+    };
+
+    await db.places.update(place.id, updatePayload);
+    if (syncRoomId) {
+        await uploadPhotoToCloud(place.id, updatedPhotos);
+    }
+    triggerSyncUpload();
+
+    showToast("추억 사진 1장이 삭제되었습니다! 🗑️", "success");
+
+    if (updatedPhotos.length === 0) {
+        closeGallerySliderModal();
+    } else {
+        if (activePhotoIndex >= updatedPhotos.length) {
+            activePhotoIndex = updatedPhotos.length - 1;
+        }
+        activeGalleryPhotos = updatedPhotos;
+        updateGallerySliderUI();
+    }
+
+    await renderPlacesList();
+    renderGallery();
+};
 
 window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     let place = null;
