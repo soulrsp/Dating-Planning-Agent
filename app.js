@@ -2220,11 +2220,6 @@ async function renderPlacesList() {
                     </div>
                 `;
 
-                let stars = '';
-                for(let i=1; i<=5; i++) {
-                    stars += `<i data-lucide="star" style="${i <= (place.rating || 5) ? '' : 'fill:none; color:var(--color-text-low);'}"></i>`;
-                }
-                
                 let payerName = partnerAName;
                 if (place.payer === "B") payerName = partnerBName;
                 else if (place.payer === "DUTCH") payerName = "반반 더치페이 🤝";
@@ -2232,10 +2227,7 @@ async function renderPlacesList() {
                 cardContent += renderCommentsBlock(place);
 
                 cardContent += `
-                    <div class="place-card-stars" style="margin-top:0.4rem;">
-                        ${stars}
-                    </div>
-                    ${place.review ? `<p class="visited-review-snippet" style="margin-top:0.3rem; margin-bottom:0.5rem;">"${escapeHtml(place.review)}"</p>` : ''}
+
                     <div class="place-meta-item" style="font-size:0.78rem;">
                         <i data-lucide="coins"></i>
                         <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
@@ -2395,20 +2387,6 @@ async function updateDashboardStats() {
             resultTextEl.innerHTML = `<strong>${partnerAName}</strong> ➔ <strong>${partnerBName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> 송금해 주세요! 💌`;
         } else {
             resultTextEl.textContent = "완벽하게 1/N 정산 완료! 💖";
-        }
-    }
-
-    // Visited quote box
-    const visitedLogs = places.filter(p => p.isVisited === 1).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const latestReviewEl = document.getElementById("latest-visited-review");
-    if (latestReviewEl) {
-        if (visitedLogs.length > 0) {
-            latestReviewEl.innerHTML = `
-                <strong>${visitedLogs[0].name}</strong>: 
-                "${visitedLogs[0].review || '소감 없음'}" <span style="display:block; font-size:0.75rem; margin-top:4px; color:var(--color-text-low);">${visitedLogs[0].rating || 5}점 ★</span>
-            `;
-        } else {
-            latestReviewEl.textContent = `"아직 등록된 다녀온 곳 로그가 없습니다. 데이트 장소를 다녀온 후 소감을 남겨보세요!"`;
         }
     }
 }
@@ -3556,8 +3534,8 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
             ? `<span class="badge-visited" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; border:1px solid rgba(116,185,255,0.3); font-weight:700; width:fit-content;">📍 다녀온 곳</span>` 
             : `<span class="badge-wish" style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); font-weight:700; width:fit-content;">📍 위시리스트</span>`;
 
-        const rawComment = p.commentA || p.commentB || p.notes || "";
-        const commentStr = rawComment.replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+        const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+        const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
         const div = document.createElement("div");
         div.style.cssText = `
@@ -3572,6 +3550,21 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
             gap: 4px;
             width: 100%;
         `;
+
+        let commentsHtml = '';
+        if (commentA) {
+            commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                <span>${escapeHtml(commentA)}</span>
+            </div>`;
+        }
+        if (commentB) {
+            commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                <span>${escapeHtml(commentB)}</span>
+            </div>`;
+        }
+
         div.innerHTML = `
             <div style="display:flex; align-items:center; gap:6px;">
                 ${statusBadge}
@@ -3580,7 +3573,8 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
                 <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
                 <span style="font-size:0.75rem; color:var(--color-primary); background:rgba(255,101,132,0.08); padding:1px 6px; border-radius:4px;">${escapeHtml(p.category)}</span>
             </div>
-            ${commentStr ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px;">💬 ${escapeHtml(commentStr)}</div>` : ''}
+            ${commentsHtml}
+
         `;
         itemsEl.appendChild(div);
     });
@@ -3649,8 +3643,8 @@ async function renderGallery() {
                 <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
-                    <span style="color:var(--color-primary); font-weight:700;">${p.rating || 5}점 ★</span>
                 </div>
+
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
                 <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
@@ -3703,7 +3697,7 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     activePlaceInfo = {
         id: place.id,
         name: place.name,
-        meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
+        meta: `${dateStr} · (${place.category})`,
         comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
     };
 
@@ -3831,7 +3825,7 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     
     activePlaceInfo = {
         name: place.name,
-        meta: `${dateStr} · ${place.rating || 5}점 ★ · (${place.category})`,
+        meta: `${dateStr} · (${place.category})`,
         comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
     };
 
