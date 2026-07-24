@@ -2521,6 +2521,7 @@ async function saveToCloud() {
         const now = Date.now();
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
+            memoryPhotos: JSON.stringify(customMemoryPhotos),
             partnerAName: partnerAName,
             partnerBName: partnerBName,
             naverClientId: naverClientId,
@@ -2607,6 +2608,19 @@ async function loadFromCloud() {
                 localStorage.setItem("aura_gemini_key", geminiApiKey);
                 const el = document.getElementById("settings-gemini-key");
                 if (el) el.value = geminiApiKey;
+            }
+
+            if (resData.memoryPhotos) {
+                try {
+                    const cloudMemories = JSON.parse(resData.memoryPhotos);
+                    if (Array.isArray(cloudMemories) && cloudMemories.length > 0) {
+                        if (JSON.stringify(customMemoryPhotos) !== JSON.stringify(cloudMemories)) {
+                            customMemoryPhotos = cloudMemories;
+                            localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+                            renderLovelyMemoryGallery();
+                        }
+                    }
+                } catch(e) {}
             }
         }
 
@@ -3873,18 +3887,47 @@ function getStoredMemoryPhotos() {
 }
 
 let customMemoryPhotos = getStoredMemoryPhotos();
+let activeMemoryPhotosList = [];
 let activeMemoryPhotoIndex = 0;
 
-function renderLovelyMemoryGallery() {
+async function renderLovelyMemoryGallery() {
     const grid = document.getElementById("dashboard-memory-grid");
     if (!grid) return;
 
-    if (!customMemoryPhotos || customMemoryPhotos.length === 0) {
-        customMemoryPhotos = [...DEFAULT_MEMORY_PHOTOS];
+    // 1. Gather all photos attached to visited places in Dexie DB
+    const places = await db.places.toArray();
+    const placePhotos = [];
+    places.forEach(p => {
+        if (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1") {
+            const list = p.photos || (p.photo ? [p.photo] : []);
+            list.forEach(src => {
+                if (src && !placePhotos.includes(src)) {
+                    placePhotos.push(src);
+                }
+            });
+        }
+    });
+
+    // 2. Combine custom memory photos and place photos
+    const combinedPhotos = [];
+    if (Array.isArray(customMemoryPhotos)) {
+        customMemoryPhotos.forEach(src => {
+            if (src && !combinedPhotos.includes(src)) {
+                combinedPhotos.push(src);
+            }
+        });
     }
+    placePhotos.forEach(src => {
+        if (src && !combinedPhotos.includes(src)) {
+            combinedPhotos.push(src);
+        }
+    });
+
+    const displayPhotos = combinedPhotos.length > 0 ? combinedPhotos : DEFAULT_MEMORY_PHOTOS;
+    activeMemoryPhotosList = displayPhotos;
 
     grid.innerHTML = "";
-    customMemoryPhotos.forEach((imgSrc, idx) => {
+    displayPhotos.forEach((imgSrc, idx) => {
         const item = document.createElement("div");
         item.className = "memory-item";
         item.innerHTML = `<img src="${imgSrc}" alt="Lovely Memory ${idx + 1}" class="gallery-img" onclick="openMemoryLightboxModal(${idx})">`;
@@ -3893,8 +3936,8 @@ function renderLovelyMemoryGallery() {
 }
 
 window.openMemoryLightboxModal = function(idx) {
-    if (!customMemoryPhotos || customMemoryPhotos.length === 0) return;
-    activeMemoryPhotoIndex = Math.max(0, Math.min(idx, customMemoryPhotos.length - 1));
+    if (!activeMemoryPhotosList || activeMemoryPhotosList.length === 0) return;
+    activeMemoryPhotoIndex = Math.max(0, Math.min(idx, activeMemoryPhotosList.length - 1));
     updateMemoryLightboxUI();
     const modal = document.getElementById("modal-memory-lightbox");
     if (modal) {
@@ -3906,17 +3949,17 @@ window.openMemoryLightboxModal = function(idx) {
 function updateMemoryLightboxUI() {
     const mainImg = document.getElementById("memory-lightbox-main-img");
     const metaEl = document.getElementById("memory-lightbox-meta");
-    if (mainImg && customMemoryPhotos[activeMemoryPhotoIndex]) {
-        mainImg.src = customMemoryPhotos[activeMemoryPhotoIndex];
+    if (mainImg && activeMemoryPhotosList[activeMemoryPhotoIndex]) {
+        mainImg.src = activeMemoryPhotosList[activeMemoryPhotoIndex];
     }
     if (metaEl) {
-        metaEl.textContent = `${activeMemoryPhotoIndex + 1} / ${customMemoryPhotos.length}`;
+        metaEl.textContent = `${activeMemoryPhotoIndex + 1} / ${activeMemoryPhotosList.length}`;
     }
 }
 
 window.navigateMemoryLightbox = function(dir) {
-    if (!customMemoryPhotos || customMemoryPhotos.length <= 1) return;
-    activeMemoryPhotoIndex = (activeMemoryPhotoIndex + dir + customMemoryPhotos.length) % customMemoryPhotos.length;
+    if (!activeMemoryPhotosList || activeMemoryPhotosList.length <= 1) return;
+    activeMemoryPhotoIndex = (activeMemoryPhotoIndex + dir + activeMemoryPhotosList.length) % activeMemoryPhotosList.length;
     updateMemoryLightboxUI();
 };
 
@@ -3926,25 +3969,19 @@ window.closeMemoryLightboxModal = function() {
 };
 
 window.deleteCurrentMemoryPhoto = function() {
-    if (!customMemoryPhotos || customMemoryPhotos.length === 0) return;
+    if (!activeMemoryPhotosList || activeMemoryPhotosList.length === 0) return;
     if (!confirm("이 추억 사진을 러블리 메모리에서 삭제하시겠습니까?")) return;
 
-    customMemoryPhotos.splice(activeMemoryPhotoIndex, 1);
-    localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+    const photoToDelete = activeMemoryPhotosList[activeMemoryPhotoIndex];
+    const customIdx = customMemoryPhotos.indexOf(photoToDelete);
+    if (customIdx !== -1) {
+        customMemoryPhotos.splice(customIdx, 1);
+        localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+        triggerSyncUpload();
+    }
     renderLovelyMemoryGallery();
     showToast("추억 사진이 삭제되었습니다.", "success");
-
-    if (customMemoryPhotos.length === 0) {
-        customMemoryPhotos = [...DEFAULT_MEMORY_PHOTOS];
-        localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
-        renderLovelyMemoryGallery();
-        closeMemoryLightboxModal();
-    } else {
-        if (activeMemoryPhotoIndex >= customMemoryPhotos.length) {
-            activeMemoryPhotoIndex = customMemoryPhotos.length - 1;
-        }
-        updateMemoryLightboxUI();
-    }
+    closeMemoryLightboxModal();
 };
 
 window.openEditMemoryGalleryModal = function() {
@@ -3982,13 +4019,14 @@ window.saveMemoryGalleryPhotos = async function() {
                 reader.onload = (e) => res(e.target.result);
                 reader.readAsDataURL(files[i]);
             });
-            const compressed = await compressBase64Image(base64, 1920, 1920, 0.85);
+            const compressed = await compressBase64Image(base64, 1024, 1024, 0.75);
             if (compressed) newPhotos.push(compressed);
         }
         if (newPhotos.length > 0) {
             customMemoryPhotos = [...customMemoryPhotos, ...newPhotos];
             localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
-            renderLovelyMemoryGallery();
+            await renderLovelyMemoryGallery();
+            triggerSyncUpload();
             showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
             closeEditMemoryGalleryModal();
             return;
