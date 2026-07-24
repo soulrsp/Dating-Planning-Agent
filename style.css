@@ -633,7 +633,7 @@ body {
 }
 
 .map-container-wrapper {
-    height: 300px;
+    height: 210px;
     width: 100%;
     border-radius: 16px;
     overflow: hidden;
@@ -1969,8 +1969,8 @@ body {
     }
 
     .map-container-wrapper {
-        height: calc(100vh - 190px) !important;
-        min-height: 360px !important;
+        height: calc(100vh - 280px) !important;
+        min-height: 200px !important;
     }
 
     #map {
