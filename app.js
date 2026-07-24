@@ -27,7 +27,7 @@ let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
-let syncRoomId = localStorage.getItem("aura_sync_room_id") || "";
+let syncRoomId = localStorage.getItem("aura_sync_room_id") || "77";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
 // Cloud Sync Engine variables
@@ -1059,7 +1059,7 @@ async function handleInAppMapSearch() {
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
     } else {
-        showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장 이름을 정확히 입력해 보세요 📍`, "warning");
+        showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장/아파트 이름을 정확히 입력해 보세요 📍`, "warning");
     }
 }
 window.handleInAppMapSearch = handleInAppMapSearch;
@@ -1090,7 +1090,7 @@ async function searchNominatimFree(query) {
     return null;
 }
 
-// Naver Native Geocoder Promise Wrapper
+// Naver Native Geocoder Promise Wrapper (Supports address, building & apartment complex lookup)
 function searchNaverGeocoder(query) {
     return new Promise((resolve) => {
         if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
@@ -1099,39 +1099,57 @@ function searchNaverGeocoder(query) {
             return;
         }
         
-        naver.maps.Service.geocode({ query: query }, (status, response) => {
-            if (status !== naver.maps.Service.Status.OK) {
-                console.warn("[Naver Map] Geocode API status:", status);
-                resolve(null);
-                return;
+        const cleanQ = query.trim();
+        const queriesToTry = [
+            cleanQ,
+            `서울 ${cleanQ}`,
+            `경기 ${cleanQ}`,
+            `부산 ${cleanQ}`
+        ];
+
+        let combined = [];
+        let completed = 0;
+        let isResolved = false;
+
+        const finish = () => {
+            if (!isResolved) {
+                isResolved = true;
+                resolve(combined.length > 0 ? combined : null);
             }
-            if (!response.v2 || !response.v2.addresses || response.v2.addresses.length === 0) {
-                console.info("[Naver Map] Geocode found no address match for:", query);
-                resolve(null);
-                return;
-            }
-            
-            const results = response.v2.addresses.map((addr) => {
-                let buildingName = "";
-                if (addr.addressElements) {
-                    const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK")));
-                    if (el && el.longName) {
-                        buildingName = el.longName;
-                    }
+        };
+
+        const timer = setTimeout(finish, 2200);
+
+        queriesToTry.forEach((qStr) => {
+            naver.maps.Service.geocode({ query: qStr }, (status, response) => {
+                completed++;
+                if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
+                    response.v2.addresses.forEach((addr) => {
+                        let buildingName = "";
+                        if (addr.addressElements) {
+                            const el = addr.addressElements.find(e => e.types && (e.types.includes("BUILDING_NAME") || e.types.includes("LANDMARK") || e.types.includes("APARTMENT")));
+                            if (el && el.longName) {
+                                buildingName = el.longName;
+                            }
+                        }
+                        const shortAddr = addr.roadAddress || addr.jibunAddress || "";
+                        const displayTitle = buildingName ? `${cleanQ} (${buildingName})` : (shortAddr ? `${cleanQ} (${shortAddr})` : cleanQ);
+                        
+                        combined.push({
+                            name: displayTitle,
+                            address: shortAddr || "네이버 지도 주소",
+                            lat: parseFloat(addr.y),
+                            lng: parseFloat(addr.x),
+                            category: "Other"
+                        });
+                    });
                 }
-                
-                const shortAddr = addr.roadAddress || addr.jibunAddress || "";
-                const displayTitle = buildingName ? `${query} (${buildingName})` : (shortAddr ? `${query}` : query);
-                
-                return {
-                    name: displayTitle,
-                    address: shortAddr || "네이버 지도 주소",
-                    lat: parseFloat(addr.y),
-                    lng: parseFloat(addr.x),
-                    category: "Other"
-                };
+
+                if (completed === queriesToTry.length) {
+                    clearTimeout(timer);
+                    finish();
+                }
             });
-            resolve(results);
         });
     });
 }
@@ -1200,20 +1218,20 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
     throw lastError || new Error("모든 Gemini 모델 호출에 실패했습니다.");
 }
 
-// Dedicated Gemini API call for map geocoding & multi-branch search
+// Dedicated Gemini API call for map geocoding & multi-branch / apartment search
 async function callGeminiSearchAPI(query) {
-    const searchPrompt = `You are a Local Geocoding & Business Search utility for South Korea.
+    const searchPrompt = `You are a Local Geocoding & Business/Apartment Search utility for South Korea.
 The user searched for: "${query}"
-Find 4-8 REAL, SPECIFIC, EXISTING company branches, stores, offices, venues, or locations matching "${query}" in South Korea.
-For example, if the query is a company or brand name (such as "민테크", "스타벅스", "CGV"), list 4-8 of their REAL distinct branches/offices/locations across South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
+Find 4-8 REAL, SPECIFIC, EXISTING apartment complexes (아파트 단지), residential buildings, company branches, stores, offices, venues, or locations matching "${query}" in South Korea.
+If the search query is an apartment or building name (such as "래미안", "은마아파트", "자이", "푸르지오", "아크로리버파크"), list 4-8 REAL existing apartment complexes matching that name in South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
 
 Return STRICTLY a JSON array of objects with this format (no markdown, no preamble):
 [
   {
-    "name": "Exact Branch or Location Name in Korean (e.g., 민테크 대전본사, 민테크 서울사무소)",
+    "name": "Exact Name in Korean (e.g., 은마아파트, 래미안 대치하이스턴)",
     "address": "Detailed Real Korean Address",
-    "lat": 37.xxxx or 36.xxxx (latitude in South Korea),
-    "lng": 127.xxxx or 128.xxxx (longitude in South Korea),
+    "lat": 37.xxxx or 35.xxxx (latitude in South Korea),
+    "lng": 127.xxxx or 129.xxxx (longitude in South Korea),
     "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other"
   }
 ]`;
@@ -2590,8 +2608,10 @@ async function loadFromCloud() {
             }
         }
 
-        if (resData.timestamp && resData.timestamp > lastSyncedTimestamp) {
-            lastSyncedTimestamp = resData.timestamp;
+        if (resData.placesData) {
+            if (resData.timestamp) {
+                lastSyncedTimestamp = resData.timestamp;
+            }
 
             let fetchedPlaces = [];
             try {
