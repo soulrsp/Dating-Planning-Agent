@@ -2122,7 +2122,8 @@ async function renderPlacesList() {
         const searchInput = document.getElementById("wishlist-search-input");
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
-        const wishlistPlaces = await db.places.where("isVisited").equals(0).toArray();
+        const allPlaces = await db.places.toArray();
+        const wishlistPlaces = allPlaces.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1);
         // Strict Descending Sort by creation date with ID tie-breaker
         wishlistPlaces.sort((a, b) => {
             const timeA = parseAnyDate(a.createdAt || a.date);
@@ -2204,7 +2205,8 @@ async function renderPlacesList() {
         const searchInput = document.getElementById("visited-search-input");
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
-        const visitedPlaces = await db.places.where("isVisited").equals(1).toArray();
+        const allVisitedPlaces = await db.places.toArray();
+        const visitedPlaces = allVisitedPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
         // Strict Descending Sort by visit date (createdAt/date) with ID tie-breaker for 1st, 2nd, 3rd ... Nth
         visitedPlaces.sort((a, b) => {
             const timeA = parseAnyDate(a.createdAt || a.date);
@@ -2357,9 +2359,9 @@ async function deletePlace(id, name) {
 async function updateDashboardStats() {
     const places = await db.places.toArray();
     
-    const wishlistCount = places.filter(p => p.isVisited === 0).length;
-    const visitedCount = places.filter(p => p.isVisited === 1).length;
-    const expenseSum = places.filter(p => p.isVisited === 1).reduce((acc, curr) => acc + (curr.expense || 0), 0);
+    const wishlistCount = places.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1).length;
+    const visitedCount = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).length;
+    const expenseSum = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).reduce((acc, curr) => acc + (curr.expense || 0), 0);
     
     document.getElementById("stat-wishlist-count").textContent = wishlistCount;
     document.getElementById("stat-visited-count").textContent = visitedCount;
@@ -3594,7 +3596,8 @@ async function renderGallery() {
     if (!container) return;
 
     container.innerHTML = "";
-    const places = await db.places.where("isVisited").equals(1).toArray();
+    const allPlaces = await db.places.toArray();
+    const places = allPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
     
     // Filter places with photos
     const galleryPlaces = places.filter(p => {
