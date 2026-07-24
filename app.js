@@ -1883,6 +1883,32 @@ function closeEditPlaceModal() {
 }
 window.closeEditPlaceModal = closeEditPlaceModal;
 
+window.deletePlaceFromEditModal = async function() {
+    const idEl = document.getElementById("edit-place-id");
+    if (!idEl || !idEl.value) {
+        showToast("삭제할 장소를 찾을 수 없습니다.", "warning");
+        return;
+    }
+    const placeId = parseInt(idEl.value);
+    const place = await db.places.get(placeId);
+    if (!place) {
+        showToast("장소 데이터를 찾을 수 없습니다.", "warning");
+        return;
+    }
+
+    if (!confirm(`'${place.name}' 장소 전체를 삭제하시겠습니까?\n\n이 장소의 모든 사진과 기록이 함께 삭제됩니다.`)) return;
+
+    await db.places.update(placeId, { isDeleted: 1 });
+    closeEditPlaceModal();
+    showToast(`'${place.name}' 장소가 삭제되었습니다! 🗑️`, "success");
+
+    await renderPlacesList();
+    await renderGallery();
+    await updateDashboardStats();
+    await renderCalendar();
+    if (typeof saveToCloud === "function") saveToCloud();
+};
+
 window.quickEditComment = async function(id, partnerKey) {
     const place = await db.places.get(id);
     if (!place) return;
@@ -2226,13 +2252,6 @@ async function renderPlacesList() {
                 
                 cardContent += renderCommentsBlock(place);
 
-                cardContent += `
-
-                    <div class="place-meta-item" style="font-size:0.78rem;">
-                        <i data-lucide="coins"></i>
-                        <span>결제자: <strong>${payerName}</strong> (${formatCurrency(place.expense || 0)})</span>
-                    </div>
-                `;
 
                 const photoList = place.photos || (place.photo ? [place.photo] : []);
                 if (photoList.length > 0) {
@@ -3648,7 +3667,7 @@ async function renderGallery() {
                 ${p.commentA || p.commentB ? `<div class="gallery-comments-snippet">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
                 <div class="gallery-action-bar" style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
-                        ✏️ 사진 수정 / 추가
+                        ✏️ 수정/추가
                     </button>
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-secondary); color:var(--color-secondary); background:rgba(255,112,150,0.06); justify-content:center;" onclick="downloadPlacePhotosZip(${p.id})">
                         📥 전체 사진 다운로드
