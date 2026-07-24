@@ -1013,12 +1013,22 @@ async function handleInAppMapSearch() {
         }
     }
     
-    // 5. AI Business Directory & Local Place Search (Finds restaurants, stores & apartment complexes)
+    // 5. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
     if (geminiApiKey && combinedResults.length < 4) {
         try {
             const responseText = await callGeminiSearchAPI(query);
             const searchResults = cleanAndParseJSON(responseText);
             if (Array.isArray(searchResults) && searchResults.length > 0) {
+                // Refine each AI store address via Naver Official Geocoder for 100% exact building roof precision
+                for (const item of searchResults) {
+                    if (item.address && isNaverMapActive) {
+                        const refined = await refineCoordinatesViaNaverGeocoder(item.address);
+                        if (refined) {
+                            item.lat = refined.lat;
+                            item.lng = refined.lng;
+                        }
+                    }
+                }
                 combinedResults.push(...searchResults);
             }
         } catch (err) {
@@ -1136,7 +1146,11 @@ function searchNaverGeocoder(query) {
             `유성구 ${cleanQ}`
         ];
 
-        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 6) {
+        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 8) {
+            queriesToTry.push(`${cleanQ} 식당`);
+            queriesToTry.push(`${cleanQ} 카페`);
+            queriesToTry.push(`${cleanQ} 맛집`);
+            queriesToTry.push(`${cleanQ} 본점`);
             queriesToTry.push(`${cleanQ} 아파트`);
             queriesToTry.push(`${cleanQ} 빌딩`);
         }
@@ -1288,16 +1302,16 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
 
 // Dedicated Gemini API call for map geocoding & multi-branch / apartment search
 async function callGeminiSearchAPI(query) {
-    const searchPrompt = `You are a Local Geocoding & Business/Apartment Search utility for South Korea.
+    const searchPrompt = `You are a Local Geocoding & Business/Store/Apartment Search utility for South Korea.
 The user searched for: "${query}"
-Find 4-8 REAL, SPECIFIC, EXISTING apartment complexes (아파트 단지), residential buildings, company branches, stores, offices, venues, or locations matching "${query}" in South Korea.
-If the search query is an apartment or building name (such as "래미안", "은마아파트", "자이", "푸르지오", "아크로리버파크"), list 4-8 REAL existing apartment complexes matching that name in South Korea with exact real Korean addresses and precise lat/lng coordinates in South Korea.
+Find 4-8 REAL, SPECIFIC, EXISTING stores, shops, local restaurants, cafes, bakeries, eateries, apartment complexes (아파트 단지), residential buildings, company branches, offices, or venues matching "${query}" anywhere in South Korea.
+For local restaurants, cafes, or stores (e.g., "소문난성수감자탕", "우래옥", "하카타분코", "몽탄", "해목", "카멜커피"), locate the exact real store branch and provide its official detailed Korean road-name address (도로명 주소) and precise latitude/longitude coordinates in South Korea.
 
 Return STRICTLY a JSON array of objects with this format (no markdown, no preamble):
 [
   {
-    "name": "Exact Name in Korean (e.g., 은마아파트, 래미안 대치하이스턴)",
-    "address": "Detailed Real Korean Address",
+    "name": "Exact Name in Korean (e.g., 소문난성수감자탕, 은마아파트)",
+    "address": "Detailed Real Korean Road Address (e.g., 서울특별시 성동구 연무장길 45)",
     "lat": 37.xxxx or 35.xxxx (latitude in South Korea),
     "lng": 127.xxxx or 129.xxxx (longitude in South Korea),
     "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other"
