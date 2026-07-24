@@ -95,6 +95,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Refresh UI Data
     await updateDashboardStats();
     await renderPlacesList();
+    await renderCalendar();
     renderLovelyMemoryGallery();
     checkApiKeyAlert();
     startCloudSyncLoop();
@@ -3779,57 +3780,9 @@ function downloadBase64Image(base64Str, filename) {
 // 13. Calendar Date Details Modal Engine
 // ==========================================
 window.openDateDetailsModal = async function(dateStr, type = 'all') {
-    const places = await db.places.toArray();
-    const datePlaces = places.filter(p => {
-        if (p.isDeleted === 1 || p.isVisited === -1) return false;
-        const pDate = p.createdAt || p.date;
-        const ms = parseAnyDate(pDate);
-        if (ms <= 0) return false;
-        return new Date(ms).toISOString().split("T")[0] === dateStr;
-    });
-
-    const filtered = datePlaces.filter(p => {
-        if (type === 'visited') return p.isVisited === 1;
-        if (type === 'wishlist') return p.isVisited === 0;
-        return true;
-    });
-
-    const titleEl = document.getElementById("modal-date-details-title");
-    const bodyEl = document.getElementById("modal-date-details-body");
-    
-    if (titleEl) {
-        const dObj = new Date(dateStr);
-        const typeLabel = type === 'visited' ? '🌸 함께 다녀온 장소' : (type === 'wishlist' ? '💌 데이트 위시리스트' : '기록');
-        titleEl.textContent = `${dObj.getFullYear()}년 ${dObj.getMonth() + 1}월 ${dObj.getDate()}일 ${typeLabel} (${filtered.length}건)`;
-    }
-
-    if (bodyEl) {
-        if (filtered.length === 0) {
-            bodyEl.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--color-text-med);">해당 날짜에 등록된 내역이 없습니다.</div>`;
-        } else {
-            let html = "";
-            filtered.forEach(p => {
-                const isVis = p.isVisited === 1;
-                const badge = isVis ? `<span style="background:rgba(255,101,132,0.15); color:var(--color-primary); font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">🌸 다녀온 곳</span>` : `<span style="background:rgba(162,155,254,0.15); color:#6C5CE7; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:6px;">💌 위시리스트</span>`;
-                html += `
-                    <div style="background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.15); border-radius:12px; padding:0.75rem; margin-bottom:0.6rem;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
-                            <div>${badge} <strong style="margin-left:4px; font-size:0.9rem; color:var(--color-text-high);">${escapeHtml(p.name)}</strong></div>
-                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem; font-size:0.72rem; height:26px; border-color:var(--color-primary); color:var(--color-primary);" onclick="closeDateDetailsModal(); openEditPlaceModal(${p.id});">✏️ 수정</button>
-                        </div>
-                        ${p.notes ? `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:0.2rem;">📍 ${escapeHtml(p.notes)}</div>` : ''}
-                        ${p.commentA || p.commentB ? `<div style="font-size:0.75rem; color:var(--color-primary); margin-top:0.35rem; background:rgba(255,255,255,0.7); padding:0.25rem 0.45rem; border-radius:6px; border-left:3px solid var(--color-primary);">💬 "${escapeHtml(p.commentA || p.commentB)}"</div>` : ''}
-                    </div>
-                `;
-            });
-            bodyEl.innerHTML = html;
-        }
-    }
-
-    const modal = document.getElementById("modal-date-details");
-    if (modal) {
-        modal.classList.add("active");
-        setTimeout(() => lucide.createIcons(), 50);
+    closeDateDetailsModal();
+    if (window.selectCalendarDateAndRender) {
+        selectCalendarDateAndRender(dateStr, type);
     }
 };
 
