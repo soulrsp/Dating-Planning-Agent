@@ -528,9 +528,10 @@ body {
 }
 
 .map-container-wrapper {
-    height: 185px;
+    height: calc(100vh - 230px);
+    min-height: 420px;
     width: 100%;
-    border-radius: 12px;
+    border-radius: 16px;
     overflow: hidden;
     border: 1px solid var(--color-card-border);
 }
@@ -1968,13 +1969,13 @@ body {
     }
 
     .map-container-wrapper {
-        height: 160px !important;
-        min-height: 130px !important;
+        height: calc(100vh - 190px) !important;
+        min-height: 360px !important;
     }
 
     #map {
-        height: 160px !important;
-        min-height: 130px !important;
+        height: 100% !important;
+        min-height: 360px !important;
         border-radius: 12px !important;
         width: 100% !important;
         box-sizing: border-box !important;
