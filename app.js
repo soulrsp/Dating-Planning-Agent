@@ -1293,35 +1293,93 @@ async function handleInAppMapSearch() {
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
     } else {
-        showToast(`'${query}' 검색 결과를 찾지 못했습니다. 도로명 주소나 매장/아파트 이름을 정확히 입력해 보세요 📍`, "warning");
+        showToast(`'${query}' 자동 탐색 중입니다. 지도의 원하는 건물/위치를 바로 클릭하여 핀을 꽂으실 수 있습니다 📍`, "info");
+        enableManualMapPinMode(query);
     }
 }
 window.handleInAppMapSearch = handleInAppMapSearch;
 
-// OpenStreetMap Nominatim Free Search Helper (Leaflet mode fallback)
+// OpenStreetMap Nominatim Free Search Helper (CORS-free, Key-free POI search)
 async function searchNominatimFree(query) {
     try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kr&limit=5`;
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-            return data.map(item => {
-                const parts = (item.display_name || "").split(',');
-                const cleanTitle = parts[0].trim();
-                return {
-                    name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
-                    address: item.display_name,
-                    lat: parseFloat(item.lat),
-                    lng: parseFloat(item.lon),
-                    category: "Other"
-                };
-            });
+        const queriesToTry = [
+            query,
+            `${query} 대한민국`,
+            `대전 ${query}`,
+            `서울 ${query}`,
+            `세종 ${query}`
+        ];
+
+        for (const qStr of queriesToTry) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&countrycodes=kr&limit=5`;
+                const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
+                if (!res.ok) continue;
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    return data.map(item => {
+                        const parts = (item.display_name || "").split(',');
+                        const cleanTitle = parts[0].trim();
+                        return {
+                            name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
+                            address: item.display_name,
+                            lat: parseFloat(item.lat),
+                            lng: parseFloat(item.lon),
+                            category: "Restaurant"
+                        };
+                    });
+                }
+            } catch(e) {}
         }
     } catch (e) {
         console.warn("[Map Search] Nominatim fetch error:", e);
     }
     return null;
+}
+
+// Enable Manual Map Pin Placement Mode when auto-search returns 0 items
+window.enableManualMapPinMode = function(placeName) {
+    showToast(`지도의 원하는 건물/위치를 직접 클릭하면 '${placeName}' 마커가 생성됩니다 📍`, "info");
+    
+    if (isNaverMapActive && map) {
+        const listener = naver.maps.Event.addListener(map, "click", async (e) => {
+            naver.maps.Event.removeListener(listener);
+            const lat = e.coord.lat();
+            const lng = e.coord.lng();
+            
+            let addrStr = "사용자 선택 지도 위치";
+            try {
+                if (naver.maps.Service && naver.maps.Service.reverseGeocode) {
+                    naver.maps.Service.reverseGeocode({
+                        coords: e.coord,
+                        orders: [
+                            naver.maps.Service.OrderType.ADDR,
+                            naver.maps.Service.OrderType.ROAD_ADDR
+                        ].join(',')
+                    }, (status, response) => {
+                        if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.address) {
+                            addrStr = response.v2.address.roadAddress || response.v2.address.jibunAddress || addrStr;
+                        }
+                        createManualPin(placeName, addrStr, lat, lng);
+                    });
+                    return;
+                }
+            } catch(err) {}
+            createManualPin(placeName, addrStr, lat, lng);
+        });
+    }
+};
+
+function createManualPin(placeName, address, lat, lng) {
+    const manualResult = [{
+        name: placeName,
+        address: address,
+        lat: lat,
+        lng: lng,
+        category: "Restaurant"
+    }];
+    renderMapSearchResults(manualResult);
+    showToast(`'${placeName}' 장소 마커를 지도 위치에 직접 설정했습니다! 📍✨`, "success");
 }
 
 // Naver Native Geocoder Promise Wrapper (Supports address, building, apartment complex, store & restaurant lookup)
