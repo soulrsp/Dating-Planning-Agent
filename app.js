@@ -919,8 +919,16 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}`
         ];
         
-        const currentSearchId = naverSearchId || "xaxinl85gc";
-        const currentSearchSecret = naverSearchSecret || "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB";
+        // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
+        const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim()) 
+            || localStorage.getItem("aura_naver_search_id") 
+            || naverSearchId 
+            || localStorage.getItem("aura_naver_client_id") 
+            || naverClientId;
+
+        const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim()) 
+            || localStorage.getItem("aura_naver_search_secret") 
+            || naverSearchSecret;
 
         // Support both Ncloud API Gateway and Naver Open API Header Specifications
         const headerOptions = [
