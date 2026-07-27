@@ -24,6 +24,8 @@ let currentPlacesFilter = "wishlist";
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
+let naverSearchId = localStorage.getItem("aura_naver_search_id") || "";
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
@@ -53,6 +55,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
     document.getElementById("settings-naver-client-id").value = naverClientId;
+    const nSearchIdEl = document.getElementById("settings-naver-search-id");
+    if (nSearchIdEl) nSearchIdEl.value = naverSearchId;
+    const nSearchSecEl = document.getElementById("settings-naver-search-secret");
+    if (nSearchSecEl) nSearchSecEl.value = naverSearchSecret;
     const kakaoInput = document.getElementById("settings-kakao-api-key");
     if (kakaoInput) kakaoInput.value = kakaoApiKey;
     document.getElementById("settings-budget-limit").value = budgetLimit;
@@ -898,6 +904,81 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     return null;
 }
 
+// 2-Step Hybrid Pipeline: Naver Open Local Search API + Naver Geocoding (Blog Ref: ljhyunstory.tistory.com/459)
+async function searchNaverLocalSearchAPI(query, userLat, userLng) {
+    try {
+        const targetUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
+        const proxyGenerators = [
+            (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+            (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+            (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+        ];
+
+        for (const makeProxy of proxyGenerators) {
+            try {
+                const proxyUrl = makeProxy(targetUrl);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+                
+                const response = await fetch(proxyUrl, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) continue;
+                const data = await response.json();
+                
+                if (data && Array.isArray(data.items) && data.items.length > 0) {
+                    const results = [];
+                    for (const item of data.items) {
+                        const cleanTitle = (item.title || "").replace(/<[^>]*>/g, "").trim();
+                        const roadAddr = item.roadAddress || item.address || "";
+                        
+                        let lat = null;
+                        let lng = null;
+
+                        // 1. Refine coordinates via Naver Official Geocoder first for 100% building roof precision
+                        if (roadAddr && isNaverMapActive) {
+                            const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
+                            if (refined) {
+                                lat = refined.lat;
+                                lng = refined.lng;
+                            }
+                        }
+
+                        // 2. Direct conversion from mapx/mapy (10^7 scale WGS84 format)
+                        if (!lat || !lng) {
+                            const mx = parseFloat(item.mapx);
+                            const my = parseFloat(item.mapy);
+                            if (mx > 100000000 && my > 30000000) {
+                                lng = mx / 10000000.0;
+                                lat = my / 10000000.0;
+                            } else if (mx > 10000000 && my > 3000000) {
+                                lng = mx / 1000000.0;
+                                lat = my / 1000000.0;
+                            }
+                        }
+
+                        if (lat && lng) {
+                            results.push({
+                                name: cleanTitle,
+                                address: roadAddr || "네이버 지도 검색 장소",
+                                lat: lat,
+                                lng: lng,
+                                category: item.category ? (item.category.includes("카페") ? "Cafe" : "Restaurant") : "Restaurant"
+                            });
+                        }
+                    }
+                    if (results.length > 0) return results;
+                }
+            } catch (err) {
+                // Try next proxy candidate
+            }
+        }
+    } catch (err) {
+        console.warn("[Naver Local Search API Error]", err);
+    }
+    return null;
+}
+
 // Reset & Re-Geocode All Saved Place Pins to Official Building Roof Coordinates
 window.resetAllPlaceMapPins = async function() {
     showToast("저장된 장소의 지도 핀 위치를 네이버 공식 건물 좌표로 리셋 중입니다... 🔄", "info");
@@ -988,32 +1069,12 @@ async function handleInAppMapSearch() {
         combinedResults.push(...kbResults);
     }
 
-    // 2. Detect user's current GPS location (max 1s timeout)
+    // 1. Detect user's current GPS location (max 1s timeout)
     const userLoc = await getUserCurrentLocation();
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
 
-    // 2.5. Kakao Places Keyword Search API (Instant 100% store/business/brand POI lookup in South Korea)
-    try {
-        const kakaoPlaces = await searchKakaoPlaces(query, userLat, userLng);
-        if (Array.isArray(kakaoPlaces) && kakaoPlaces.length > 0) {
-            combinedResults.push(...kakaoPlaces);
-        }
-    } catch (err) {
-        console.warn("[Kakao Places Search Error]", err);
-    }
-
-    // 3. Real-time Naver Maps Dynamic POI/Business Search API
-    try {
-        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
-        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
-            combinedResults.push(...dynamicNaverPlaces);
-        }
-    } catch (err) {
-        console.warn("[Naver Dynamic Search]", err);
-    }
-
-    // 4. Naver Address Geocoder (Exact address lookup — best for road-name addresses)
+    // 2. Naver Geocoder Engine (Instant & 100% General Region-Expanded POI & Building Search)
     if (isNaverMapActive) {
         try {
             const naverResults = await searchNaverGeocoder(query);
@@ -1023,6 +1084,36 @@ async function handleInAppMapSearch() {
         } catch (err) {
             console.warn("[Naver Map Search Error]", err);
         }
+    }
+
+    // 2.5. Naver Open Local Search API + Geocoding 2-Step Hybrid Pipeline
+    try {
+        const localSearchPlaces = await searchNaverLocalSearchAPI(query, userLat, userLng);
+        if (Array.isArray(localSearchPlaces) && localSearchPlaces.length > 0) {
+            combinedResults.push(...localSearchPlaces);
+        }
+    } catch (err) {
+        console.warn("[Naver Local Search API Pipeline Error]", err);
+    }
+
+    // 3. Kakao Places Keyword Search API (Instant POI lookup in South Korea)
+    try {
+        const kakaoPlaces = await searchKakaoPlaces(query, userLat, userLng);
+        if (Array.isArray(kakaoPlaces) && kakaoPlaces.length > 0) {
+            combinedResults.push(...kakaoPlaces);
+        }
+    } catch (err) {
+        console.warn("[Kakao Places Search Error]", err);
+    }
+
+    // 4. Real-time Naver Maps Dynamic Search API
+    try {
+        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
+        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
+            combinedResults.push(...dynamicNaverPlaces);
+        }
+    } catch (err) {
+        console.warn("[Naver Dynamic Search]", err);
     }
     
     // 5. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
@@ -1216,18 +1307,21 @@ function searchNaverGeocoder(query) {
         const cityPrefixed = [
             `서울 ${cleanQ}`, `경기 ${cleanQ}`, `인천 ${cleanQ}`, `부산 ${cleanQ}`,
             `대구 ${cleanQ}`, `대전 ${cleanQ}`, `광주 ${cleanQ}`, `울산 ${cleanQ}`,
-            `세종 ${cleanQ}`, `강남구 ${cleanQ}`, `서초구 ${cleanQ}`, `송파구 ${cleanQ}`,
-            `마포구 ${cleanQ}`, `성동구 ${cleanQ}`, `영등포구 ${cleanQ}`, `용산구 ${cleanQ}`,
-            `분당 ${cleanQ}`, `일산 ${cleanQ}`, `수원 ${cleanQ}`, `유성구 ${cleanQ}`
+            `세종 ${cleanQ}`, `수원 ${cleanQ}`, `천안 ${cleanQ}`, `청주 ${cleanQ}`,
+            `전주 ${cleanQ}`, `창원 ${cleanQ}`, `포항 ${cleanQ}`, `강남구 ${cleanQ}`,
+            `서초구 ${cleanQ}`, `송파구 ${cleanQ}`, `마포구 ${cleanQ}`, `성동구 ${cleanQ}`,
+            `영등포구 ${cleanQ}`, `용산구 ${cleanQ}`, `유성구 ${cleanQ}`, `종로구 ${cleanQ}`,
+            `중구 ${cleanQ}`, `분당 ${cleanQ}`, `일산 ${cleanQ}`, `판교 ${cleanQ}`,
+            `성수 ${cleanQ}`, `홍대 ${cleanQ}`
         ];
         cityPrefixed.forEach(c => {
             if (!queriesToTry.includes(c)) queriesToTry.push(c);
         });
 
-        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 8) {
+        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 10) {
+            queriesToTry.push(`${cleanQ} 맛집`);
             queriesToTry.push(`${cleanQ} 식당`);
             queriesToTry.push(`${cleanQ} 카페`);
-            queriesToTry.push(`${cleanQ} 맛집`);
             queriesToTry.push(`${cleanQ} 본점`);
             queriesToTry.push(`${cleanQ} 아파트`);
             queriesToTry.push(`${cleanQ} 빌딩`);
@@ -3191,6 +3285,10 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
 async function saveSettings() {
     const apiKeyVal = document.getElementById("settings-gemini-key").value.trim();
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
+    const nSearchIdInput = document.getElementById("settings-naver-search-id");
+    const naverSearchIdVal = nSearchIdInput ? nSearchIdInput.value.trim() : naverSearchId;
+    const nSearchSecInput = document.getElementById("settings-naver-search-secret");
+    const naverSearchSecVal = nSearchSecInput ? nSearchSecInput.value.trim() : naverSearchSecret;
     const kakaoInputEl = document.getElementById("settings-kakao-api-key");
     const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
     const limitVal = parseInt(document.getElementById("settings-budget-limit").value) || 500000;
@@ -3201,6 +3299,8 @@ async function saveSettings() {
     
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
+    localStorage.setItem("aura_naver_search_id", naverSearchIdVal);
+    localStorage.setItem("aura_naver_search_secret", naverSearchSecVal);
     localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
     localStorage.setItem("aura_budget_limit", limitVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
@@ -3210,6 +3310,8 @@ async function saveSettings() {
     
     geminiApiKey = apiKeyVal;
     naverClientId = naverClientIdVal;
+    naverSearchId = naverSearchIdVal;
+    naverSearchSecret = naverSearchSecVal;
     kakaoApiKey = kakaoApiKeyVal;
     budgetLimit = limitVal;
     partnerAName = partnerAVal;
