@@ -2683,6 +2683,64 @@ async function updateDashboardStats() {
     }
 }
 
+// Open & Close API Guide Modal (Gemini, Naver Maps, Naver Search)
+window.openApiGuideModal = function(type) {
+    const titleEl = document.getElementById("modal-api-guide-title");
+    const bodyEl = document.getElementById("modal-api-guide-body");
+    const modal = document.getElementById("modal-api-guide");
+    if (!modal || !bodyEl || !titleEl) return;
+
+    if (type === 'gemini') {
+        titleEl.innerHTML = `🔑 Gemini API Key 발급 가이드`;
+        bodyEl.innerHTML = `
+            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
+                <li style="margin-bottom:0.6rem;"><strong>Google AI Studio 접속</strong><br>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--color-primary); text-decoration:underline;">aistudio.google.com/app/apikey</a>에 접속하여 구글 계정으로 로그인합니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>[Create API Key] 클릭</strong><br>
+                화면 중앙의 Create API Key 버튼을 누르고 새 프로젝트 생성을 선택합니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>API Key 복사 및 저장</strong><br>
+                생성된 API 키를 복사하여 AURA의 'Gemini API Key' 란에 붙여넣고 저장하세요.</li>
+            </ol>
+            <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
+                💡 무료 티어로 일 수천 건 이상 사용 가능하며 무제한 데이트 코스를 추천받을 수 있습니다.
+            </div>`;
+    } else if (type === 'naver-search') {
+        titleEl.innerHTML = `🔑 네이버 검색 API Key 발급 가이드`;
+        bodyEl.innerHTML = `
+            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
+                <li style="margin-bottom:0.6rem;"><strong>네이버 개발자 센터 접속</strong><br>
+                <a href="https://developers.naver.com" target="_blank" style="color:var(--color-primary); text-decoration:underline;">developers.naver.com</a> 접속 후 네이버 아이디로 로그인합니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>애플리케이션 등록</strong><br>
+                [Application] ➔ [애플리케이션 등록] 클릭 ➔ 앱 이름 입력 (예: AURA) ➔ 사용 API에서 <strong>"검색" (지역)</strong> 체크</li>
+                <li style="margin-bottom:0.6rem;"><strong>WEB 환경 설정</strong><br>
+                서비스 환경으로 'WEB' 선택 후 URL에 <code>http://localhost</code> 또는 본인의 접속 주소 입력</li>
+                <li style="margin-bottom:0.6rem;"><strong>Client ID & Secret 복사</strong><br>
+                [내 애플리케이션]에서 생성된 <strong>Client ID</strong>와 <strong>Client Secret</strong>을 복사하여 아래 입력란에 각각 붙여넣기 하세요!</li>
+            </ol>
+            <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
+                💡 네이버 공식 상권 DB 검색 연동으로 전국의 매장/가게/카페 이름 검색 정확도가 100% 극대화됩니다!
+            </div>`;
+    } else {
+        titleEl.innerHTML = `🔑 네이버 지도 Client ID 발급 가이드`;
+        bodyEl.innerHTML = `
+            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
+                <li style="margin-bottom:0.6rem;"><strong>네이버 클라우드 플랫폼 접속</strong><br>
+                <a href="https://www.ncloud.com" target="_blank" style="color:var(--color-primary); text-decoration:underline;">ncloud.com</a> 로그인 후 콘솔로 이동합니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>Maps 서비스 신청</strong><br>
+                [Services] ➔ [AI·NAVER API] ➔ [Maps] ➔ [Application 등록] ➔ <strong>Web Dynamic Map</strong> 및 <strong>Geocoding</strong> 체크</li>
+                <li style="margin-bottom:0.6rem;"><strong>Client ID 복사</strong><br>
+                인증 정보(Client ID)를 복사하여 아래 '네이버 지도 Client ID' 란에 붙여넣으세요!</li>
+            </ol>`;
+    }
+
+    modal.classList.add("active");
+};
+
+window.closeApiGuideModal = function() {
+    const modal = document.getElementById("modal-api-guide");
+    if (modal) modal.classList.remove("active");
+};
+
 // 12. Real-Time Couple Sync Engine (Firebase REST Polling)
 function startCloudSyncLoop() {
     if (syncIntervalId) clearInterval(syncIntervalId);
@@ -2761,6 +2819,9 @@ async function saveToCloud() {
             partnerAName: partnerAName,
             partnerBName: partnerBName,
             naverClientId: naverClientId,
+            naverSearchId: naverSearchId,
+            naverSearchSecret: naverSearchSecret,
+            kakaoApiKey: kakaoApiKey,
             geminiApiKey: geminiApiKey,
             timestamp: now
         };
@@ -2837,6 +2898,27 @@ async function loadFromCloud() {
                 if (naverClientId) {
                     loadNaverMapScript(naverClientId);
                 }
+            }
+
+            if (resData.naverSearchId && resData.naverSearchId !== naverSearchId) {
+                naverSearchId = resData.naverSearchId;
+                localStorage.setItem("aura_naver_search_id", naverSearchId);
+                const el = document.getElementById("settings-naver-search-id");
+                if (el) el.value = naverSearchId;
+            }
+
+            if (resData.naverSearchSecret && resData.naverSearchSecret !== naverSearchSecret) {
+                naverSearchSecret = resData.naverSearchSecret;
+                localStorage.setItem("aura_naver_search_secret", naverSearchSecret);
+                const el = document.getElementById("settings-naver-search-secret");
+                if (el) el.value = naverSearchSecret;
+            }
+
+            if (resData.kakaoApiKey && resData.kakaoApiKey !== kakaoApiKey) {
+                kakaoApiKey = resData.kakaoApiKey;
+                localStorage.setItem("aura_kakao_key", kakaoApiKey);
+                const el = document.getElementById("settings-kakao-api-key");
+                if (el) el.value = kakaoApiKey;
             }
 
             if (resData.geminiApiKey && resData.geminiApiKey !== geminiApiKey) {
