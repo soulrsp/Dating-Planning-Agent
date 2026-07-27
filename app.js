@@ -911,6 +911,8 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
 
     try {
         const targetUrls = [
+            `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(query)}`,
+            `https://naverapihub.apigw.ntruss.com/search/v1/local.json?query=${encodeURIComponent(query)}`,
             `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(query)}`,
             `https://naverapihub.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}`,
             `https://naverapihub.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
