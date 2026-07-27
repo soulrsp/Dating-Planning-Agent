@@ -23,9 +23,9 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
-let naverClientId = localStorage.getItem("aura_naver_client_id") || "stouz9nm0e";
-let naverSearchId = localStorage.getItem("aura_naver_search_id") || "jqjtqg1ttn";
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
+let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
+let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
@@ -910,17 +910,24 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     if (!naverSearchId) return null;
 
     try {
-        const targetUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
+        const targetUrls = [
+            `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
+            `https://naverapihub.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
+            `https://naverapihub.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
+            `https://naveropenapi.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
+            `https://naveropenapi.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
+            `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`
+        ];
         
         // Support both Ncloud API Gateway and Naver Open API Header Specifications
         const headerOptions = [
             {
-                'X-Naver-Client-Id': naverSearchId,
-                'X-Naver-Client-Secret': naverSearchSecret || naverClientId
-            },
-            {
                 'X-NCP-APIGW-API-KEY-ID': naverSearchId,
                 'X-NCP-APIGW-API-KEY': naverSearchSecret || naverClientId
+            },
+            {
+                'X-Naver-Client-Id': naverSearchId,
+                'X-Naver-Client-Secret': naverSearchSecret || naverClientId
             }
         ];
 
@@ -930,10 +937,11 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             (target) => `https://thingproxy.freeboard.io/fetch/${target}`
         ];
 
-        for (const reqHeaders of headerOptions) {
-            for (const makeProxy of proxyGenerators) {
-                try {
-                    const proxyUrl = makeProxy(targetUrl);
+        for (const targetUrl of targetUrls) {
+            for (const reqHeaders of headerOptions) {
+                for (const makeProxy of proxyGenerators) {
+                    try {
+                        const proxyUrl = makeProxy(targetUrl);
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 2500);
                     
@@ -993,6 +1001,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                     }
                 } catch (err) {
                     // Try next proxy
+                }
                 }
             }
         }
