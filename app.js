@@ -640,6 +640,22 @@ async function updateMapMarkers() {
     if (!map) return;
     const places = await db.places.toArray();
 
+    // Auto-resolve missing coordinates for places that were saved without lat/lng
+    for (const place of places) {
+        if (place.isDeleted === 1 || place.isVisited === -1) continue;
+        if (!place.lat || !place.lng) {
+            const searchAddr = place.notes || place.address || place.name || "";
+            if (searchAddr && isNaverMapActive) {
+                const refined = await refineCoordinatesViaNaverGeocoder(searchAddr);
+                if (refined) {
+                    place.lat = refined.lat;
+                    place.lng = refined.lng;
+                    await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
+                }
+            }
+        }
+    }
+
     if (isNaverMapActive) {
         // Naver Map Markers Rendering
         naverMarkers.forEach(m => m.setMap(null));
@@ -650,6 +666,7 @@ async function updateMapMarkers() {
         const bounds = new naver.maps.LatLngBounds();
         
         places.forEach(place => {
+            if (place.isDeleted === 1 || place.isVisited === -1) return;
             if (!place.lat || !place.lng) return;
             
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
@@ -1062,38 +1079,85 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     return null;
 }
 
-// Reset & Re-Geocode All Saved Place Pins to Official Building Roof Coordinates
+// Reset & Re-Fetch All Saved Wishlist & Visited Place Pins via Naver API Hub
 window.resetAllPlaceMapPins = async function() {
-    showToast("저장된 장소의 지도 핀 위치를 네이버 공식 건물 좌표로 리셋 중입니다... 🔄", "info");
+    showToast("위시리스트 및 다녀온 곳 장소 핀을 네이버 API Hub에서 다시 수진하여 최신화 중입니다... 🔄", "info");
     const places = await db.places.toArray();
     let updatedCount = 0;
     
     for (const place of places) {
-        if (place.notes || place.address || place.name) {
-            const cleanAddr = (place.address || place.notes || place.name || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-            if (cleanAddr.length >= 2) {
-                const refined = await refineCoordinatesViaNaverGeocoder(cleanAddr);
-                if (refined) {
-                    await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
-                    updatedCount++;
+        if (place.isDeleted === 1 || place.isVisited === -1) continue;
+        const placeQuery = (place.name || "").trim();
+        const addressQuery = (place.address || place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+        
+        let newLat = null;
+        let newLng = null;
+        let newAddr = null;
+
+        // 1. Try Ncloud NAVER API Hub Local Search API for the place name
+        if (placeQuery) {
+            try {
+                const apiResults = await searchNaverLocalSearchAPI(placeQuery);
+                if (Array.isArray(apiResults) && apiResults.length > 0) {
+                    newLat = apiResults[0].lat;
+                    newLng = apiResults[0].lng;
+                    newAddr = apiResults[0].address;
                 }
+            } catch (e) {}
+        }
+
+        // 2. Fallback to Ncloud Geocoder for address string if API Hub search didn't return coordinates
+        if ((!newLat || !newLng) && addressQuery) {
+            const refined = await refineCoordinatesViaNaverGeocoder(addressQuery);
+            if (refined) {
+                newLat = refined.lat;
+                newLng = refined.lng;
             }
+        }
+
+        // Update IndexedDB record with new precise coordinates
+        if (newLat && newLng) {
+            const payload = { lat: newLat, lng: newLng };
+            if (newAddr && !place.address) payload.address = newAddr;
+            await db.places.update(place.id, payload);
+            updatedCount++;
         }
     }
 
     await updateDashboardStats();
     await renderPlacesList();
     updateMapMarkers();
-    showToast(`저장된 다녀온 곳 & 장소 핀 ${updatedCount}개를 네이버 공식 건물 위치로 리셋 및 재설정 완료했습니다! 📍✨`, "success");
+    showToast(`저장된 위시리스트 & 다녀온 곳 핀 ${updatedCount}개를 네이버 API Hub 최신 위치로 100% 업데이트 완료했습니다! 📍✨`, "success");
 };
 
-// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 800ms safety timeout)
+// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 3s safety timeout)
 function refineCoordinatesViaNaverGeocoder(address) {
     return new Promise((resolve) => {
+        if (!address || typeof address !== 'string') {
+            resolve(null);
+            return;
+        }
         if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
             resolve(null);
             return;
         }
+
+        // Clean parenthetical notes like "(대전 유성구 문지동~~~)", floor numbers, and AURA suffix
+        let cleanQuery = address.replace(/\(.*?\)/g, " ")
+                               .replace(/~+/g, " ")
+                               .replace(/\s*\d+층/g, "")
+                               .replace(/\s*[B|b]?\d+호/g, "")
+                               .replace(/\s*지하\d+층?/g, "")
+                               .replace(/\s*-\s*AURA.*$/, "")
+                               .replace(/^💡\s*메모:\s*/, "")
+                               .trim();
+
+        // Extract road address or dong/ri address if present inside long strings
+        const roadMatch = cleanQuery.match(/([가-힣A-Za-z0-9\s]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+        if (roadMatch) {
+            cleanQuery = roadMatch[1].trim();
+        }
+
         let done = false;
         const timer = setTimeout(() => {
             if (!done) {
@@ -1103,7 +1167,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
         }, 3000);
 
         try {
-            naver.maps.Service.geocode({ query: address }, (status, response) => {
+            naver.maps.Service.geocode({ query: cleanQuery }, (status, response) => {
                 if (!done) {
                     done = true;
                     clearTimeout(timer);
@@ -1116,7 +1180,19 @@ function refineCoordinatesViaNaverGeocoder(address) {
                             return;
                         }
                     }
-                    resolve(null);
+                    // Fallback to raw address query
+                    if (cleanQuery !== address) {
+                        naver.maps.Service.geocode({ query: address }, (status2, response2) => {
+                            if (status2 === naver.maps.Service.Status.OK && response2.v2 && response2.v2.addresses && response2.v2.addresses.length > 0) {
+                                const addr2 = response2.v2.addresses[0];
+                                resolve({ lat: parseFloat(addr2.y), lng: parseFloat(addr2.x) });
+                            } else {
+                                resolve(null);
+                            }
+                        });
+                    } else {
+                        resolve(null);
+                    }
                 }
             });
         } catch (e) {
