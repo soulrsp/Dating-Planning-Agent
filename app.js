@@ -23,14 +23,10 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
-let naverClientId = localStorage.getItem("aura_naver_client_id") || "stouz9nm0e";
-let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
-if (localStorage.getItem("aura_naver_search_secret") === "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB" || !localStorage.getItem("aura_naver_search_secret")) {
-    localStorage.setItem("aura_naver_search_secret", "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB");
-    naverSearchSecret = "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
-}
-let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
+let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
+let naverSearchId = localStorage.getItem("aura_naver_search_id") || "";
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
+let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
@@ -1018,13 +1014,13 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
         const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim()) 
             || localStorage.getItem("aura_naver_search_id") 
-            || naverSearchId 
-            || "xaxinl85gc";
+            || naverSearchId;
 
         const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim()) 
             || localStorage.getItem("aura_naver_search_secret") 
-            || naverSearchSecret 
-            || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
+            || naverSearchSecret;
+
+        if (!currentSearchId || !currentSearchSecret) return null;
 
         // Support both Ncloud API Gateway and Naver Open API Header Specifications
         const headerOptions = [
