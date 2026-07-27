@@ -1815,7 +1815,9 @@ Return STRICTLY a JSON array of objects with this format (no markdown, no preamb
 }
 
 function clearSearchMarkers() {
-    // Remove search results panel if exists
+    // Remove search results panel from container
+    const container = document.getElementById("map-search-results-container");
+    if (container) container.innerHTML = "";
     const panel = document.getElementById("map-search-results-panel");
     if (panel) panel.remove();
 
@@ -1841,6 +1843,7 @@ window.focusMapSearchResult = function(index, lat, lng) {
 };
 
 function renderMapSearchResults(results) {
+    console.log(`[Search UI] Rendering ${results ? results.length : 0} search results panel`);
     clearSearchMarkers();
 
     if (!results || results.length === 0) return;
@@ -1850,43 +1853,37 @@ function renderMapSearchResults(results) {
         switchTab("map");
     }
 
-    // Create interactive search results panel below search bar
-    const searchBar = document.querySelector(".map-search-bar");
-    if (searchBar) {
-        const panel = document.createElement("div");
-        panel.id = "map-search-results-panel";
-        panel.className = "map-search-results-panel";
+    let cardsHtml = "";
+    results.forEach((res, idx) => {
+        const encodedData = encodeURIComponent(JSON.stringify(res));
+        const distBadge = (res.distanceKm && res.distanceKm !== Infinity) 
+            ? `<span style="font-size:0.68rem; color:var(--color-primary); background:rgba(255,101,132,0.1); border:1px solid rgba(255,101,132,0.25); padding:1px 6px; border-radius:8px; margin-left:6px; font-weight:normal; display:inline-block;">📍 내 위치에서 ${formatDistanceStr(res.distanceKm)}</span>` 
+            : '';
 
-        let cardsHtml = "";
-        results.forEach((res, idx) => {
-            const encodedData = encodeURIComponent(JSON.stringify(res));
-            const distBadge = (res.distanceKm && res.distanceKm !== Infinity) 
-                ? `<span style="font-size:0.68rem; color:var(--color-primary); background:rgba(255,101,132,0.1); border:1px solid rgba(255,101,132,0.25); padding:1px 6px; border-radius:8px; margin-left:6px; font-weight:normal; display:inline-block;">📍 내 위치에서 ${formatDistanceStr(res.distanceKm)}</span>` 
-                : '';
-
-            cardsHtml += `
-                <div class="search-result-card" id="search-res-item-${idx}">
-                    <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
-                    <div class="search-result-addr">${res.address}</div>
-                    <div class="search-result-actions">
-                        <button class="btn btn-outline search-btn-sm" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
-                            🎯 위치보기
-                        </button>
-                        <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult('${encodedData}')">
-                            💖 위시리스트
-                        </button>
-                        <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
-                            📸 다녀온 곳
-                        </button>
-                        <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl('${encodedData}')">
-                            📋 URL 복사
-                        </button>
-                    </div>
+        cardsHtml += `
+            <div class="search-result-card" id="search-res-item-${idx}">
+                <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
+                <div class="search-result-addr">${res.address}</div>
+                <div class="search-result-actions">
+                    <button class="btn btn-outline search-btn-sm" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
+                        🎯 위치보기
+                    </button>
+                    <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult('${encodedData}')">
+                        💖 위시리스트
+                    </button>
+                    <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                        📸 다녀온 곳
+                    </button>
+                    <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl('${encodedData}')">
+                        📋 URL 복사
+                    </button>
                 </div>
-            `;
-        });
+            </div>
+        `;
+    });
 
-        panel.innerHTML = `
+    const panelHtml = `
+        <div id="map-search-results-panel" class="map-search-results-panel" style="margin-top:0.5rem;">
             <div class="search-results-header">
                 <span>📍 네이버 지도 검색 결과 (${results.length}건)</span>
                 <button class="btn-close-results" onclick="clearSearchMarkers()">닫기 ✖</button>
@@ -1894,8 +1891,18 @@ function renderMapSearchResults(results) {
             <div class="search-results-list">
                 ${cardsHtml}
             </div>
-        `;
-        searchBar.parentElement.insertBefore(panel, searchBar.nextSibling);
+        </div>
+    `;
+
+    const resContainer = document.getElementById("map-search-results-container");
+    if (resContainer) {
+        resContainer.innerHTML = panelHtml;
+        resContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+        const searchBar = document.querySelector(".map-search-bar");
+        if (searchBar) {
+            searchBar.insertAdjacentHTML("afterend", panelHtml);
+        }
     }
 
     if (isNaverMapActive) {
