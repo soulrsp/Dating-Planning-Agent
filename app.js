@@ -25,7 +25,7 @@ let currentPlacesFilter = "wishlist";
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
 let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB";
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
@@ -970,10 +970,11 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                     if (!response.ok) continue;
                     
                     const data = await response.json();
-                    if (data && Array.isArray(data.items) && data.items.length > 0) {
+                    const itemsList = (data && (data.items || data.places)) ? (data.items || data.places) : null;
+                    if (itemsList && Array.isArray(itemsList) && itemsList.length > 0) {
                         const results = [];
-                        for (const item of data.items) {
-                            const cleanTitle = (item.title || "").replace(/<[^>]*>/g, "").trim();
+                        for (const item of itemsList) {
+                            const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
                             const roadAddr = item.roadAddress || item.address || "";
                             
                             let lat = null;
@@ -988,17 +989,29 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                                 }
                             }
 
-                            // 10^7 KATECH scale fallback WGS84 conversion
+                            // 10^6 integer scale fallback WGS84 conversion (e.g. mapx: 127394120 -> 127.394120, mapy: 36389530 -> 36.389530)
                             if (!lat || !lng) {
                                 const mx = parseFloat(item.mapx);
                                 const my = parseFloat(item.mapy);
-                                if (mx > 100000000 && my > 30000000) {
-                                    lng = mx / 10000000.0;
-                                    lat = my / 10000000.0;
-                                } else if (mx > 10000000 && my > 3000000) {
+                                if (mx > 100000000 && my > 10000000) {
                                     lng = mx / 1000000.0;
                                     lat = my / 1000000.0;
+                                } else if (mx > 10000000 && my > 1000000) {
+                                    lng = mx / 100000.0;
+                                    lat = my / 100000.0;
                                 }
+                            }
+
+                            let categoryType = "Restaurant";
+                            const rawCategory = item.category || "";
+                            if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) {
+                                categoryType = "Cafe";
+                            } else if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) {
+                                categoryType = "Hotel";
+                            } else if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) {
+                                categoryType = "Bar";
+                            } else if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) {
+                                categoryType = "Activity";
                             }
 
                             if (lat && lng) {
@@ -1007,7 +1020,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                                     address: roadAddr || "네이버 공식 장소",
                                     lat: lat,
                                     lng: lng,
-                                    category: item.category ? (item.category.includes("카페") ? "Cafe" : "Restaurant") : "Restaurant"
+                                    category: categoryType
                                 });
                             }
                         }
