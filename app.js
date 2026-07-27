@@ -607,48 +607,45 @@ async function initNaverMap() {
     const container = document.getElementById("map");
     if (!container) return;
     
-    // Destroy previous Naver map instance to prevent overlapping map DOM elements!
-    if (map) {
-        try {
-            if (typeof map.destroy === 'function') map.destroy();
-        } catch(e) {}
-        map = null;
-    }
-    container.innerHTML = ""; // Complete DOM reset
+    // Instantiate Naver Map singleton instance safely without destroying internal event bindings
+    if (!map || !(window.naver && window.naver.maps && map instanceof naver.maps.Map)) {
+        container.innerHTML = ""; // Clean DOM only when initializing brand new map
+        
+        let startCenter = new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]);
+        map = new naver.maps.Map('map', {
+            center: startCenter,
+            zoom: 14,
+            zoomControl: true,
+            zoomControlOptions: {
+                position: naver.maps.Position.RIGHT_CENTER
+            }
+        });
 
-    // 1. Detect user's current GPS location first for intelligent initial centering
-    const userLoc = await getUserCurrentLocation();
-    let startCenter = new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]);
-    if (userLoc && userLoc.lat && userLoc.lng) {
-        startCenter = new naver.maps.LatLng(userLoc.lat, userLoc.lng);
-        console.log(`[Naver Map Init] Starting directly at user GPS: (${userLoc.lat}, ${userLoc.lng})`);
+        // Close any open popup when clicking empty space on Naver Map
+        naver.maps.Event.addListener(map, "click", () => {
+            if (activeInfoWindow) {
+                activeInfoWindow.close();
+                activeInfoWindow = null;
+            }
+        });
     }
 
-    map = new naver.maps.Map('map', {
-        center: startCenter,
-        zoom: 14,
-        zoomControl: true,
-        zoomControlOptions: {
-            position: naver.maps.Position.RIGHT_CENTER
+    // Centering on user current GPS position asynchronously
+    getUserCurrentLocation().then(userLoc => {
+        if (userLoc && userLoc.lat && userLoc.lng && map) {
+            map.setCenter(new naver.maps.LatLng(userLoc.lat, userLoc.lng));
+            map.setZoom(14);
         }
     });
 
-    // Force map tile recalculation to prevent blank/gray tile rendering
+    // Force map tile recalculation to guarantee background tile tiles render cleanly
     setTimeout(() => {
-        if (map && isNaverMapActive) {
+        if (map && isNaverMapActive && window.naver && window.naver.maps) {
             naver.maps.Event.trigger(map, 'resize');
         }
-    }, 150);
+    }, 200);
 
-    // Close any open popup when clicking empty space on Naver Map
-    naver.maps.Event.addListener(map, "click", () => {
-        if (activeInfoWindow) {
-            activeInfoWindow.close();
-            activeInfoWindow = null;
-        }
-    });
-
-    // 2. Render all saved place markers and auto-resolve missing coordinates
+    // Render all saved place markers
     await updateMapMarkers();
 }
 
@@ -743,7 +740,14 @@ async function updateMapMarkers() {
                 map.setCenter(new naver.maps.LatLng(validPlaces[0].lat, validPlaces[0].lng));
                 map.setZoom(15);
             } else {
-                map.fitBounds(bounds);
+                try {
+                    map.fitBounds(bounds, {
+                        top: 40, right: 40, bottom: 40, left: 40
+                    });
+                } catch(e) {
+                    map.setCenter(bounds.getCenter());
+                    map.setZoom(14);
+                }
             }
             isInitialMapFit = false;
         }
