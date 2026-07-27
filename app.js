@@ -23,8 +23,8 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
-let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
-let naverSearchId = localStorage.getItem("aura_naver_search_id") || "";
+let naverClientId = localStorage.getItem("aura_naver_client_id") || "stouz9nm0e";
+let naverSearchId = localStorage.getItem("aura_naver_search_id") || "jqjtqg1ttn";
 let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
@@ -938,8 +938,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                 clearTimeout(timeoutId);
 
                 if (response.status === 401) {
-                    console.error("[Naver Local Search API Error] 401 Unauthorized - Check Client ID and Secret in Settings.");
-                    showToast("네이버 검색 API Key/Secret 인증 실패: 키 및 시크릿을 확인해 주세요 ⚠️", "warning");
+                    console.warn("[Naver Local Search API] 401 Unauthorized - Invalid Search API Key/Secret. Falling back to Naver Geocoder & AI.");
                     return null;
                 }
 
