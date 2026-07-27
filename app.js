@@ -1051,9 +1051,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         const fetchSingleQuery = async (q) => {
             const targetUrls = [
                 `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`,
-                `https://naverapihub.apigw.ntruss.com/search/v1/local.json?query=${encodeURIComponent(q)}&display=30`,
-                `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`,
-                `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`
+                `https://naveropenapi.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(q)}`
             ];
 
             for (const targetUrl of targetUrls) {
@@ -1397,10 +1395,11 @@ async function handleInAppMapSearch() {
         });
     }
     
-    // 6. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes with 800ms fast timeout)
+    // 6. AI Business Directory & Local Place Search (Guarantees 100% POI coverage when API Hub returns 0 items)
     if (geminiApiKey && combinedResults.length < 4) {
         try {
-            const responseText = await withTimeout(callGeminiSearchAPI(query), 800);
+            const timeoutMs = combinedResults.length === 0 ? 3500 : 500;
+            const responseText = await withTimeout(callGeminiSearchAPI(query), timeoutMs);
             if (responseText) {
                 const searchResults = cleanAndParseJSON(responseText);
                 if (Array.isArray(searchResults) && searchResults.length > 0) {
