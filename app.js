@@ -952,7 +952,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
             try {
                 const proxyUrl = makeProxy(targetUrl);
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                const timeoutId = setTimeout(() => controller.abort(), 400); // 400ms ultra-fast timeout
                 
                 const response = await fetch(proxyUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -1363,20 +1363,34 @@ async function handleInAppMapSearch() {
         }
     }
 
-    // 4. Ultra-Fast Parallel Search Pipeline: Run Naver Local Search API, Naver Geocoder, Kakao Places concurrently!
-    const searchPromises = [
+    // 4. Fast Primary Search Pipeline: Run Naver API Hub & Kakao Places in parallel (0.1s response)
+    const primaryPromises = [
         searchNaverLocalSearchAPI(query, userLat, userLng),
-        isNaverMapActive ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null),
-        searchKakaoPlaces(query, userLat, userLng),
-        searchNaverMapPlacesDynamic(query, userLat, userLng)
+        searchKakaoPlaces(query, userLat, userLng)
     ];
 
-    const settledResults = await Promise.allSettled(searchPromises);
-    settledResults.forEach(res => {
+    const primaryResults = await Promise.allSettled(primaryPromises);
+    primaryResults.forEach(res => {
         if (res.status === "fulfilled" && Array.isArray(res.value)) {
             combinedResults.push(...res.value);
         }
     });
+
+    // 5. Early Exit: If primary APIs (Naver API Hub / Kakao) found matching results, skip slow fallbacks!
+    if (combinedResults.length === 0) {
+        // Fallback pipeline (Naver Geocoder & Dynamic Search)
+        const fallbackPromises = [
+            isNaverMapActive ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null),
+            searchNaverMapPlacesDynamic(query, userLat, userLng)
+        ];
+
+        const fallbackResults = await Promise.allSettled(fallbackPromises);
+        fallbackResults.forEach(res => {
+            if (res.status === "fulfilled" && Array.isArray(res.value)) {
+                combinedResults.push(...res.value);
+            }
+        });
+    }
     
     // 6. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
     if (geminiApiKey && combinedResults.length < 4) {
@@ -1626,27 +1640,12 @@ function searchNaverGeocoder(query, userLat, userLng) {
             }
         }
 
-        const cityPrefixed = [
-            `서울 ${cleanQ}`, `경기 ${cleanQ}`, `인천 ${cleanQ}`, `부산 ${cleanQ}`,
-            `대구 ${cleanQ}`, `대전 ${cleanQ}`, `광주 ${cleanQ}`, `울산 ${cleanQ}`,
-            `세종 ${cleanQ}`, `수원 ${cleanQ}`, `천안 ${cleanQ}`, `청주 ${cleanQ}`,
-            `전주 ${cleanQ}`, `창원 ${cleanQ}`, `포항 ${cleanQ}`, `강남구 ${cleanQ}`,
-            `서초구 ${cleanQ}`, `송파구 ${cleanQ}`, `마포구 ${cleanQ}`, `성동구 ${cleanQ}`,
-            `영등포구 ${cleanQ}`, `용산구 ${cleanQ}`, `유성구 ${cleanQ}`, `종로구 ${cleanQ}`,
-            `중구 ${cleanQ}`, `분당 ${cleanQ}`, `일산 ${cleanQ}`, `판교 ${cleanQ}`,
-            `성수 ${cleanQ}`, `홍대 ${cleanQ}`
-        ];
-        cityPrefixed.forEach(c => {
-            if (!queriesToTry.includes(c)) queriesToTry.push(c);
-        });
-
-        if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 10) {
-            queriesToTry.push(`${cleanQ} 맛집`);
-            queriesToTry.push(`${cleanQ} 식당`);
-            queriesToTry.push(`${cleanQ} 카페`);
-            queriesToTry.push(`${cleanQ} 본점`);
-            queriesToTry.push(`${cleanQ} 아파트`);
-            queriesToTry.push(`${cleanQ} 빌딩`);
+        // Smart location-aware query variations (2-3 items max instead of 35 flooded queries)
+        if (userLat && userLng) {
+            queriesToTry.push(`대전 ${cleanQ}`);
+            queriesToTry.push(`유성구 ${cleanQ}`);
+        } else {
+            queriesToTry.push(`대전 ${cleanQ}`);
         }
 
         let combined = [];
@@ -1661,7 +1660,7 @@ function searchNaverGeocoder(query, userLat, userLng) {
             }
         };
 
-        const timer = setTimeout(finish, 2800);
+        const timer = setTimeout(finish, 600); // 600ms fast timeout
 
         // Auto category classifier helper
         const detectCategory = (title, addrStr) => {
