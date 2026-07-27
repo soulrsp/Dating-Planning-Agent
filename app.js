@@ -2165,15 +2165,44 @@ function handleMapUrlInput(e) {
     }
 }
 
-// 8. Modals Management (Quick Add & Visit Logging)
-function openAddPlaceModal() {
-    document.getElementById("modal-place-add").classList.add("active");
-}
+// Helper function to generate precision branch/store Naver Map URLs (prevents opening wrong franchise branch)
+function getNaverMapUrl(place) {
+    if (!place) return "https://map.naver.com";
+    
+    // Clean address from notes or address field
+    const cleanAddress = (place.address || place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    
+    // If address is available, search with full address + place name for 100% exact store branch pinpointing
+    if (cleanAddress && !cleanAddress.startsWith("http")) {
+        const queryStr = `${cleanAddress} ${place.name}`.trim();
+        return `https://map.naver.com/v5/search/${encodeURIComponent(queryStr)}?c=${place.lat || 37.5665},${place.lng || 126.9780},17,0,0,0,dh`;
+    }
+    
+    if (place.url && place.url.startsWith("http")) {
+        return place.url;
+    }
 
-function closeAddPlaceModal() {
-    document.getElementById("modal-place-add").classList.remove("active");
-    document.getElementById("form-place-add").reset();
+    return `https://map.naver.com/v5/search/${encodeURIComponent(place.name)}?c=${place.lat || 37.5665},${place.lng || 126.9780},17,0,0,0,dh`;
 }
+window.getNaverMapUrl = getNaverMapUrl;
+
+// Toggle "Undecided Date" (날짜 미정) checkbox in Add/Edit modals
+window.toggleUndatedDate = function(type) {
+    const isEdit = type === 'edit';
+    const chk = document.getElementById(isEdit ? "edit-place-undated" : "add-place-undated");
+    const dateInput = document.getElementById(isEdit ? "edit-place-date" : "add-place-date");
+    if (!chk || !dateInput) return;
+
+    if (chk.checked) {
+        dateInput.value = "";
+        dateInput.disabled = true;
+        dateInput.removeAttribute("required");
+    } else {
+        dateInput.disabled = false;
+        if (isEdit) dateInput.setAttribute("required", "required");
+        dateInput.value = new Date().toISOString().split("T")[0];
+    }
+};
 
 async function handleAddPlaceSubmit(e) {
     e.preventDefault();
@@ -2181,22 +2210,29 @@ async function handleAddPlaceSubmit(e) {
     const catSelect = document.getElementById("add-place-category").value;
     const catCustom = document.getElementById("add-place-custom-category").value.trim();
     const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
-    const url = document.getElementById("add-place-url").value.trim();
+    const inputUrl = document.getElementById("add-place-url").value.trim();
     let lat = parseFloat(document.getElementById("add-place-lat").value);
     let lng = parseFloat(document.getElementById("add-place-lng").value);
     const notes = document.getElementById("add-place-notes").value.trim();
     const priority = document.getElementById("add-place-priority").value;
     
+    const isUndecided = document.getElementById("add-place-undated") && document.getElementById("add-place-undated").checked;
+    const dateInputVal = document.getElementById("add-place-date") ? document.getElementById("add-place-date").value : "";
+    const createdDate = (!isUndecided && dateInputVal) ? new Date(dateInputVal).toISOString() : null;
+    const isUndecidedVal = (isUndecided || !dateInputVal) ? 1 : 0;
+
     if (isNaN(lat) || isNaN(lng)) {
         lat = 37.5665 + (Math.random() - 0.5) * 0.03;
         lng = 126.9780 + (Math.random() - 0.5) * 0.03;
     }
 
+    const precisionUrl = inputUrl || getNaverMapUrl({ name, notes, lat, lng });
+
     try {
         await db.places.add({
             name,
             category,
-            url,
+            url: precisionUrl,
             lat,
             lng,
             priority,
@@ -2208,7 +2244,8 @@ async function handleAddPlaceSubmit(e) {
             payer: "A",
             peopleCount: 2,
             photo: "",
-            createdAt: new Date().toISOString()
+            createdAt: createdDate,
+            isUndecidedDate: isUndecidedVal
         });
 
         showToast(`${name} 장소가 저장되었습니다 🌸`, "success");
@@ -2411,10 +2448,27 @@ async function openEditPlaceModal(id) {
         }
     }
     
-    // Format date for <input type="date"> (YYYY-MM-DD)
-    const dateObj = new Date(place.createdAt);
-    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-    document.getElementById("edit-place-date").value = dateStr;
+    // Format date for <input type="date"> (YYYY-MM-DD) or handle Undecided Date
+    const undatedChk = document.getElementById("edit-place-undated");
+    const dateInput = document.getElementById("edit-place-date");
+    
+    if (place.isUndecidedDate === 1 || !place.createdAt) {
+        if (undatedChk) undatedChk.checked = true;
+        if (dateInput) {
+            dateInput.value = "";
+            dateInput.disabled = true;
+            dateInput.removeAttribute("required");
+        }
+    } else {
+        if (undatedChk) undatedChk.checked = false;
+        if (dateInput) {
+            dateInput.disabled = false;
+            dateInput.setAttribute("required", "required");
+            const dateObj = new Date(place.createdAt);
+            const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+            dateInput.value = dateStr;
+        }
+    }
 
     // Clean address from notes
     const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -2536,6 +2590,7 @@ async function handleEditPlaceSubmit(e) {
     const catCustom = document.getElementById("edit-place-custom-category").value.trim();
     const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
 
+    const isUndecided = document.getElementById("edit-place-undated") && document.getElementById("edit-place-undated").checked;
     const dateVal = document.getElementById("edit-place-date").value;
     const addressVal = document.getElementById("edit-place-address").value.trim();
     
@@ -2545,13 +2600,25 @@ async function handleEditPlaceSubmit(e) {
     const place = await db.places.get(id);
     if (!place) return;
 
-    const updatedDate = dateVal ? new Date(dateVal).toISOString() : place.createdAt;
+    let updatedDate = null;
+    let isUndecidedVal = 0;
+    if (isUndecided || !dateVal) {
+        updatedDate = null;
+        isUndecidedVal = 1;
+    } else {
+        updatedDate = new Date(dateVal).toISOString();
+        isUndecidedVal = 0;
+    }
+
+    const precisionUrl = getNaverMapUrl({ name, notes: addressVal, lat: place.lat, lng: place.lng, address: addressVal });
 
     let updatePayload = {
         name: name,
         category: category,
         notes: addressVal,
         createdAt: updatedDate,
+        isUndecidedDate: isUndecidedVal,
+        url: precisionUrl,
         commentA: commentAEl ? commentAEl.value.trim() : (place.commentA || ""),
         commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
     };
@@ -2704,8 +2771,14 @@ async function renderPlacesList() {
         
         const allPlaces = await db.places.toArray();
         const wishlistPlaces = allPlaces.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1);
-        // Strict Descending Sort by creation date with ID tie-breaker
+        // Priority Sort: Undecided Date places ("날짜 미정") at the VERY TOP (1st priority), then descending by date
         wishlistPlaces.sort((a, b) => {
+            const isUndecidedA = a.isUndecidedDate === 1 || !a.createdAt || parseAnyDate(a.createdAt || a.date) === 0;
+            const isUndecidedB = b.isUndecidedDate === 1 || !b.createdAt || parseAnyDate(b.createdAt || b.date) === 0;
+
+            if (isUndecidedA && !isUndecidedB) return -1; // A (undecided) comes first
+            if (!isUndecidedA && isUndecidedB) return 1;  // B (undecided) comes first
+
             const timeA = parseAnyDate(a.createdAt || a.date);
             const timeB = parseAnyDate(b.createdAt || b.date);
             if (timeB !== timeA) return timeB - timeA;
@@ -2733,12 +2806,14 @@ async function renderPlacesList() {
                 card.style.position = "relative";
                 
                 // Date formatting using robust parser
+                const isUndecided = place.isUndecidedDate === 1 || !place.createdAt || parseAnyDate(place.createdAt || place.date) === 0;
                 const rawDate = place.createdAt || place.date;
                 const parsedMs = parseAnyDate(rawDate);
-                const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+                const dateStr = isUndecided ? "🗓️ 날짜 미정" : (parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "🗓️ 날짜 미정");
                 
                 // Clean address
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                const precisionNaverUrl = getNaverMapUrl(place);
 
                 let cardContent = `
                     <div class="place-card-top-actions">
@@ -2752,7 +2827,7 @@ async function renderPlacesList() {
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : ''}
+                        <div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> <span style="${isUndecided ? 'color:var(--color-primary); font-weight:700;' : ''}">${dateStr}</span></div>
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
                             <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
                             <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
@@ -2766,7 +2841,7 @@ async function renderPlacesList() {
 
                 cardContent += `
                     <div class="place-actions">
-                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
+                        <a href="${precisionNaverUrl}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>
                         <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, '${place.name}')">
                             <i data-lucide="check"></i> 방문 완료 📸
                         </button>
