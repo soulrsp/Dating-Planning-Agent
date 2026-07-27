@@ -1203,14 +1203,17 @@ function refineCoordinatesViaNaverGeocoder(address) {
 const mapSearchCache = new Map();
 
 // 6. In-App Map Real-Time Search Pipeline (Local KB → Parallel Naver & Kakao POI Engine → Fast Fallbacks)
-async function handleInAppMapSearch() {
-    const inputEl = document.getElementById("map-search-query");
-    if (!inputEl) return;
-    const query = inputEl.value.trim();
+async function handleInAppMapSearch(queryParam) {
+    let query = (typeof queryParam === "string" && queryParam.trim()) ? queryParam.trim() : "";
+    if (!query) {
+        const inputEl = document.getElementById("map-search-query");
+        if (inputEl) query = inputEl.value.trim();
+    }
     if (!query) {
         showToast("검색어를 입력해 주세요 📍", "warning");
         return;
     }
+    console.log(`[Search Pipeline] Launched search for: '${query}'`);
     
     // Clear old search markers and panel
     clearSearchMarkers();
@@ -1238,8 +1241,9 @@ async function handleInAppMapSearch() {
 
     let userLat = null;
     let userLng = null;
+    let userLoc = null;
     try {
-        const userLoc = await getUserCurrentLocation();
+        userLoc = await getUserCurrentLocation();
         if (userLoc) {
             userLat = userLoc.lat;
             userLng = userLoc.lng;
