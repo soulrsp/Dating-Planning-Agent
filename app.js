@@ -736,91 +736,11 @@ async function updateMapMarkers() {
     }
 }
 
-// Local Knowledge Base for Instant & Partial Keyword Place Matching in South Korea
-const AURA_LOCAL_PLACE_KB = [
-    // 부원냉삼집 (대전 관평동 / 배울1로 호반써밋프라자점)
-    { name: "부원냉삼집 (대전 관평동점)", address: "대전광역시 유성구 배울1로 126 호반써밋프라자 107호", lat: 36.42580, lng: 127.39420, category: "Restaurant", keywords: ["부원", "부원냉삼", "부원냉삼집", "관평동", "배울1로", "호반써밋", "용산동", "관평동맛집"] },
-
-    // 김순화 충남순대 & 충남순대 (전국 주요 8개 매장 및 본점 - Naver Map POI Building Coordinates)
-    { name: "김순화 충남순대 (대전 유성 구룡동점)", address: "대전광역시 유성구 구룡달전로 3-12", lat: 36.42582, lng: 127.35124, category: "Restaurant", keywords: ["김순화", "충남순대", "김순화충남순대", "김순화 충남순대", "구룡달전로", "유성구 구룡달전로", "대전 충남순대"] },
-    { name: "충남순대 (세종 금남본점)", address: "세종특별자치시 금남면 용포로 97-11", lat: 36.46351, lng: 127.27982, category: "Restaurant", keywords: ["충남순대", "세종충남순대", "금남면", "용포리", "세종 충남순대"] },
-    { name: "충남순대국밥 (대전 유성 봉명점)", address: "대전광역시 유성구 유성대로 694", lat: 36.35821, lng: 127.33912, category: "Restaurant", keywords: ["충남순대", "유성 충남순대", "유성대로", "대전 충남순대"] },
-    { name: "충남순대 (천안 아우내점)", address: "충청남도 천안시 동남구 병천면 아우내장터길 42", lat: 36.76214, lng: 127.29851, category: "Restaurant", keywords: ["충남순대", "병천순대", "천안 충남순대"] },
-    { name: "충남순대 (공주 신관점)", address: "충청남도 공주시 번영1로 33", lat: 36.47154, lng: 127.13521, category: "Restaurant", keywords: ["충남순대", "공주 충남순대"] },
-    { name: "충남순대 (청주 가경점)", address: "충청북도 청주시 흥덕구 풍산로 18", lat: 36.62891, lng: 127.43521, category: "Restaurant", keywords: ["충남순대", "청주 충남순대"] },
-    { name: "충남순대 (아산 온천점)", address: "충청남도 아산시 온천대로 1498", lat: 36.78452, lng: 127.00125, category: "Restaurant", keywords: ["충남순대", "아산 충남순대"] },
-    { name: "충남순대 (논산 강경점)", address: "충청남도 논산시 강경읍 계백로 125", lat: 36.15241, lng: 127.01254, category: "Restaurant", keywords: ["충남순대", "논산 충남순대"] },
-
-    // 진남포면옥 & 진남포 (부분 검색어 지원 - Naver Map POI Building Coordinates)
-    { name: "진남포면옥 (대전 유성구점)", address: "대전광역시 유성구 봉산로36번길 34", lat: 36.44025, lng: 127.38285, category: "Restaurant", keywords: ["진남포", "진남포면옥", "봉산로36번길", "대전맛집"] },
-    { name: "진남포면옥 (서울 약수본점)", address: "서울특별시 중구 다산로 108", lat: 37.55432, lng: 127.01084, category: "Restaurant", keywords: ["진남포", "진남포면옥", "약수역", "다산로"] },
-    
-    // 민테크 (전국 8개 전 지점 / 본사 / 오피스 / 연구소 / 공장)
-    { name: "민테크 대전본사", address: "대전광역시 유성구 테크노2로 187", lat: 36.4251, lng: 127.3914, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 서울사무소", address: "서울특별시 강남구 테헤란로 212", lat: 37.5028, lng: 127.0384, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 R&D 연구센터", address: "대전광역시 유성구 탑립동 844", lat: 36.4288, lng: 127.3951, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 충북 오송공장", address: "충청북도 청주시 흥덕구 오송읍 생명1로 12", lat: 36.6312, lng: 127.3205, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 경기 화성연구소", address: "경기도 화성시 동탄첨단산업1로 57", lat: 37.2014, lng: 127.0945, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 울산지사", address: "울산광역시 남구 테크노산업로 55", lat: 35.5085, lng: 129.3112, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 창원사무소", address: "경상남도 창원시 성산구 중앙대로 105", lat: 35.2215, lng: 128.6812, category: "Other", keywords: ["민테크", "mintech"] },
-    { name: "민테크 포항시험센터", address: "경상북도 포항시 남구 지곡로 80", lat: 36.0125, lng: 129.3285, category: "Other", keywords: ["민테크", "mintech"] },
-
-    // 대한민국 주요 아파트 단지 (Apartment Complexes)
-    { name: "은마아파트 (강남 대치동)", address: "서울특별시 강남구 삼성로 212", lat: 37.4984, lng: 127.0625, category: "Other", keywords: ["은마", "은마아파트", "대치동은마"] },
-    { name: "반포자이 아파트", address: "서울특별시 서초구 신반포로 270", lat: 37.5053, lng: 127.0094, category: "Other", keywords: ["반포자이", "반포자리아파트"] },
-    { name: "래미안 퍼스티지 아파트", address: "서울특별시 서초구 반포대로 275", lat: 37.5058, lng: 126.9995, category: "Other", keywords: ["래미안퍼스티지", "반포래미안"] },
-    { name: "아크로리버파크 아파트", address: "서울특별시 서초구 신반포로15길 19", lat: 37.5085, lng: 126.9958, category: "Other", keywords: ["아크로리버파크", "아크로리버"] },
-    { name: "헬리오시티 아파트 (송파)", address: "서울특별시 송파구 송파대로 345", lat: 37.4965, lng: 127.1085, category: "Other", keywords: ["헬리오시티", "송파헬리오시티"] },
-    { name: "파크리오 아파트 (잠실)", address: "서울특별시 송파구 올림픽로 435", lat: 37.5212, lng: 127.1078, category: "Other", keywords: ["파크리오", "잠실파크리오"] },
-    { name: "마포 래미안 푸르지오 (마래푸)", address: "서울특별시 마포구 아현설로 30", lat: 37.5535, lng: 126.9538, category: "Other", keywords: ["마래푸", "마포래미안푸르지오", "아현동래미안"] },
-    { name: "경희궁자이 아파트", address: "서울특별시 종로구 송월길 99", lat: 37.5685, lng: 126.9632, category: "Other", keywords: ["경희궁자이", "경희궁자리아파트"] },
-    { name: "도곡 타워팰리스", address: "서울특별시 강남구 언주로30길 56", lat: 37.4888, lng: 127.0545, category: "Other", keywords: ["타워팰리스", "도곡동타워팰리스"] },
-    { name: "올림픽선수기자촌 아파트", address: "서울특별시 송파구 양재대로 1218", lat: 37.5142, lng: 127.1365, category: "Other", keywords: ["올림픽선수촌아파트", "올림픽선수기자촌"] },
-    { name: "올림픽파크포레온 (둔촌주공)", address: "서울특별시 강동구 양재대로 1340", lat: 37.5245, lng: 127.1428, category: "Other", keywords: ["둔촌주공", "올림픽파크포레온"] },
-    { name: "성수 트리마제 아파트", address: "서울특별시 성동구 왕십리로 16", lat: 37.5385, lng: 127.0422, category: "Other", keywords: ["트리마제", "성수동트리마제"] },
-    { name: "한남 더힐", address: "서울특별시 용산구 독서당로 111", lat: 37.5348, lng: 127.0078, category: "Other", keywords: ["한남더힐", "한남동더힐"] },
-    { name: "나인원 한남", address: "서울특별시 용산구 한남대로 91", lat: 37.5352, lng: 127.0042, category: "Other", keywords: ["나인원한남", "나인원"] },
-
-    // 대한민국 주요 랜드마크 & 핫플레이스 (Major Landmarks & Places)
-    { name: "더현대 서울 (여의도)", address: "서울특별시 영등포구 여의대로 108", lat: 37.5258, lng: 126.9284, category: "Other", keywords: ["더현대", "더현대서울", "여의도더현대"] },
-    { name: "롯데월드타워 (잠실)", address: "서울특별시 송파구 올림픽로 300", lat: 37.5126, lng: 127.1025, category: "Other", keywords: ["롯데월드타워", "롯데타워", "잠실롯데타워"] },
-    { name: "코엑스 (COEX 강남)", address: "서울특별시 강남구 영동대로 513", lat: 37.5118, lng: 127.0592, category: "Other", keywords: ["코엑스", "coex", "삼성동코엑스"] },
-    { name: "N서울타워 (남산타워)", address: "서울특별시 용산구 남산공원길 105", lat: 37.5512, lng: 126.9882, category: "Other", keywords: ["남산타워", "N서울타워", "서울타워"] },
-    { name: "63빌딩 (여의도)", address: "서울특별시 영등포구 63로 50", lat: 37.5198, lng: 126.9402, category: "Other", keywords: ["63빌딩", "육삼빌딩"] },
-    { name: "동대문디자인플라자 (DDP)", address: "서울특별시 중구 을지로 281", lat: 37.5668, lng: 127.0095, category: "Museum", keywords: ["ddp", "동대문디자인플라자", "동대문ddp"] },
-    { name: "신세계백화점 강남점", address: "서울특별시 서초구 신반포로 176", lat: 37.5042, lng: 127.0038, category: "Other", keywords: ["신세계강남", "강남신세계"] },
-    { name: "예술의전당", address: "서울특별시 서초구 남부순환로 2406", lat: 37.4785, lng: 127.0118, category: "Museum", keywords: ["예술의전당", "서초예술의전당"] },
-    { name: "카멜커피 (성수본점)", address: "서울특별시 성동구 성수이로7길 7", lat: 37.5428, lng: 127.0542, category: "Cafe", keywords: ["카멜커피", "성수카멜커피", "카멜커피성수"] },
-    { name: "런던 베이글 뮤지엄 (안국점)", address: "서울특별시 종로구 북촌로4길 20", lat: 37.5792, lng: 126.9858, category: "Cafe", keywords: ["런던베이글", "런던베이글뮤지엄", "안국런던베이글"] }
-];
+// Knowledge Base completely removed per user request (relying purely on general geocoding logic)
+const AURA_LOCAL_PLACE_KB = [];
 
 function searchLocalKnowledgeBase(query) {
-    const q = query.toLowerCase().trim();
-    if (!q) return [];
-    
-    const qNoSpace = q.replace(/\s+/g, "");
-    const tokens = q.split(/\s+/).filter(t => t.length > 0);
-
-    return AURA_LOCAL_PLACE_KB.filter(place => {
-        const nameClean = place.name.toLowerCase().replace(/\s+/g, "");
-        const addrClean = place.address.toLowerCase().replace(/\s+/g, "");
-        const kwList = (place.keywords || []).map(k => k.toLowerCase().replace(/\s+/g, ""));
-        
-        // 1. Direct or spaces-removed match
-        if (nameClean.includes(qNoSpace) || addrClean.includes(qNoSpace) || kwList.some(k => k.includes(qNoSpace) || qNoSpace.includes(k))) {
-            return true;
-        }
-
-        // 2. Tokenized multi-word search (e.g. "부원냉삼집 대전 관평동점" or "김순화 충남순대")
-        if (tokens.length > 1) {
-            const tokenMatch = tokens.every(tok => 
-                nameClean.includes(tok) || addrClean.includes(tok) || kwList.some(k => k.includes(tok))
-            );
-            if (tokenMatch) return true;
-        }
-
-        return false;
-    });
+    return [];
 }
 
 // Geolocation & Distance Proximity Search Helpers
@@ -985,28 +905,9 @@ window.resetAllPlaceMapPins = async function() {
     let updatedCount = 0;
     
     for (const place of places) {
-        const pName = (place.name || "").toLowerCase();
-        const pNotes = (place.notes || "").toLowerCase();
-
-        // Match against KB exact building coordinates first
-        const kbMatch = AURA_LOCAL_PLACE_KB.find(kb => {
-            const kbName = kb.name.toLowerCase();
-            const kwList = (kb.keywords || []).map(k => k.toLowerCase());
-            return (pName.includes("김순화") && kbName.includes("김순화")) ||
-                   (pName.includes("부원") && kbName.includes("부원")) ||
-                   (pName.includes("진남포") && kbName.includes("진남포")) ||
-                   kwList.some(k => k.length > 1 && (pName.includes(k) || pNotes.includes(k)));
-        });
-
-        if (kbMatch) {
-            await db.places.update(place.id, {
-                lat: kbMatch.lat,
-                lng: kbMatch.lng
-            });
-            updatedCount++;
-        } else if (place.notes || place.address) {
-            const cleanAddr = (place.notes || place.address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-            if (cleanAddr.length > 4) {
+        if (place.notes || place.address || place.name) {
+            const cleanAddr = (place.address || place.notes || place.name || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+            if (cleanAddr.length >= 2) {
                 const refined = await refineCoordinatesViaNaverGeocoder(cleanAddr);
                 if (refined) {
                     await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
@@ -1035,7 +936,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
                 done = true;
                 resolve(null);
             }
-        }, 800);
+        }, 3000);
 
         try {
             naver.maps.Service.geocode({ query: address }, (status, response) => {
@@ -1156,21 +1057,34 @@ async function handleInAppMapSearch() {
                                  .replace(/\s*지하/g, "")
                                  .trim();
             
-            const roadMatch = noUnits.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+            const roadMatch = noUnits.match(/([가-힣A-Za-z0-9]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
             if (roadMatch) {
-                const pureRoadAddr = roadMatch[1].trim();
-                const refined = await refineCoordinatesViaNaverGeocoder(pureRoadAddr);
-                if (refined) {
-                    let titleName = noUnits.replace(roadMatch[0], "").trim();
-                    if (!titleName || titleName.length < 2) titleName = query.trim();
-                    
-                    combinedResults.push({
-                        name: titleName,
-                        address: pureRoadAddr,
-                        lat: refined.lat,
-                        lng: refined.lng,
-                        category: "Restaurant"
-                    });
+                const roadOnly = roadMatch[0].trim();
+                const noDong = noUnits.replace(/[가-힣]+동\s+/g, "").trim();
+                const fullRoadNoDongMatch = noDong.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+                
+                const candidates = [
+                    fullRoadNoDongMatch ? fullRoadNoDongMatch[1].trim() : null,
+                    roadOnly,
+                    noUnits,
+                    noDong
+                ].filter(Boolean);
+
+                for (const cand of candidates) {
+                    const refined = await refineCoordinatesViaNaverGeocoder(cand);
+                    if (refined) {
+                        let titleName = noUnits.replace(roadMatch[0], "").trim();
+                        if (!titleName || titleName.length < 2) titleName = query.trim();
+                        
+                        combinedResults.push({
+                            name: titleName,
+                            address: cand,
+                            lat: refined.lat,
+                            lng: refined.lng,
+                            category: "Restaurant"
+                        });
+                        break;
+                    }
                 }
             }
         } catch (err) {
@@ -1276,12 +1190,26 @@ function searchNaverGeocoder(query) {
             queriesToTry.push(noUnits);
         }
 
-        // Extract pure road address pattern (e.g. "엑스포로446번길 36", "대전 유성구 문지동 엑스포로446번길 36")
-        const fullRoadAddrMatch = noUnits.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+        // Remove dong names (e.g. "대전 유성구 문지동 엑스포로446번길 36" -> "대전 유성구 엑스포로446번길 36")
+        const noDong = noUnits.replace(/[가-힣]+동\s+/g, "").trim();
+        if (noDong !== noUnits && !queriesToTry.includes(noDong)) {
+            queriesToTry.push(noDong);
+        }
+
+        // Extract pure road address pattern (e.g. "엑스포로446번길 36", "대전 유성구 엑스포로446번길 36")
+        const fullRoadAddrMatch = noDong.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
         if (fullRoadAddrMatch) {
             const extractedRoad = fullRoadAddrMatch[1].trim();
             if (!queriesToTry.includes(extractedRoad)) {
                 queriesToTry.push(extractedRoad);
+            }
+        }
+
+        const roadOnlyMatch = cleanQ.match(/([가-힣A-Za-z0-9]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+        if (roadOnlyMatch) {
+            const roadOnlyStr = roadOnlyMatch[1].trim();
+            if (!queriesToTry.includes(roadOnlyStr)) {
+                queriesToTry.push(roadOnlyStr);
             }
         }
 
