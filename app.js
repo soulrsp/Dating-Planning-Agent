@@ -610,10 +610,20 @@ function initNaverMap() {
     
     map = new naver.maps.Map('map', {
         center: new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]),
-        zoom: 13,
+        zoom: 14,
         zoomControl: true,
         zoomControlOptions: {
             position: naver.maps.Position.RIGHT_CENTER
+        }
+    });
+
+    // 1. Instantly center Naver Map on user's current GPS location
+    getUserCurrentLocation().then(userLoc => {
+        if (userLoc && map) {
+            const userPos = new naver.maps.LatLng(userLoc.lat, userLoc.lng);
+            map.setCenter(userPos);
+            map.setZoom(14);
+            console.log(`[Naver Map Init] Centered on user current GPS: (${userLoc.lat}, ${userLoc.lng})`);
         }
     });
 
@@ -625,6 +635,7 @@ function initNaverMap() {
         }
     });
 
+    // 2. Render all saved place markers and auto-resolve missing coordinates
     updateMapMarkers();
 }
 
@@ -640,7 +651,7 @@ async function updateMapMarkers() {
     if (!map) return;
     const places = await db.places.toArray();
 
-    // Auto-resolve missing coordinates for places that were saved without lat/lng
+    // 1. Sequentially resolve missing coordinates for all saved wishlist & visited places BEFORE rendering markers
     for (const place of places) {
         if (place.isDeleted === 1 || place.isVisited === -1) continue;
         if (!place.lat || !place.lng) {
@@ -661,13 +672,12 @@ async function updateMapMarkers() {
         naverMarkers.forEach(m => m.setMap(null));
         naverMarkers = [];
         
-        if (places.length === 0) return;
+        const validPlaces = places.filter(p => p.lat && p.lng && p.isDeleted !== 1 && p.isVisited !== -1);
+        if (validPlaces.length === 0) return;
         
         const bounds = new naver.maps.LatLngBounds();
         
-        places.forEach(place => {
-            if (place.isDeleted === 1 || place.isVisited === -1) return;
-            if (!place.lat || !place.lng) return;
+        validPlaces.forEach(place => {
             
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
             const markerColor = isVisited ? "#74B9FF" : "#FF6584";
