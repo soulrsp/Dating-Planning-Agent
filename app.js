@@ -911,27 +911,31 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
 
     try {
         const targetUrls = [
-            `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
-            `https://naverapihub.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
+            `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(query)}`,
+            `https://naverapihub.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}`,
             `https://naverapihub.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
             `https://naveropenapi.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
-            `https://naveropenapi.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`,
-            `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`
+            `https://naveropenapi.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}`,
+            `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}`
         ];
         
+        const currentSearchId = naverSearchId || "xaxinl85gc";
+        const currentSearchSecret = naverSearchSecret || "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB";
+
         // Support both Ncloud API Gateway and Naver Open API Header Specifications
         const headerOptions = [
             {
-                'X-NCP-APIGW-API-KEY-ID': naverSearchId,
-                'X-NCP-APIGW-API-KEY': naverSearchSecret || naverClientId
+                'X-NCP-APIGW-API-KEY-ID': currentSearchId,
+                'X-NCP-APIGW-API-KEY': currentSearchSecret
             },
             {
-                'X-Naver-Client-Id': naverSearchId,
-                'X-Naver-Client-Secret': naverSearchSecret || naverClientId
+                'X-Naver-Client-Id': currentSearchId,
+                'X-Naver-Client-Secret': currentSearchSecret
             }
         ];
 
         const proxyGenerators = [
+            (target) => target, // Direct fetch first
             (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
             (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
             (target) => `https://thingproxy.freeboard.io/fetch/${target}`
@@ -941,16 +945,16 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             for (const reqHeaders of headerOptions) {
                 for (const makeProxy of proxyGenerators) {
                     try {
-                        const proxyUrl = makeProxy(targetUrl);
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 2500);
-                    
-                    const response = await fetch(proxyUrl, { 
-                        method: 'GET',
-                        headers: reqHeaders,
-                        signal: controller.signal 
-                    });
-                    clearTimeout(timeoutId);
+                        const fetchUrl = makeProxy(targetUrl);
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 2500);
+                        
+                        const response = await fetch(fetchUrl, { 
+                            method: 'GET',
+                            headers: reqHeaders,
+                            signal: controller.signal 
+                        });
+                        clearTimeout(timeoutId);
 
                     if (response.status === 401) continue;
                     if (!response.ok) continue;
