@@ -1313,12 +1313,16 @@ async function handleInAppMapSearch() {
         combinedResults.push(...kbResults);
     }
 
-    // 2. Fast Current GPS Location Resolution (max 500ms timeout)
-    const userLoc = await getUserCurrentLocation();
-    const userLat = userLoc ? userLoc.lat : null;
-    const userLng = userLoc ? userLoc.lng : null;
+    // Start primary API searches INSTANTLY at 0ms (non-blocking location resolution)
+    const primaryPromises = [
+        searchNaverLocalSearchAPI(query),
+        searchKakaoPlaces(query)
+    ];
 
-    // 3. TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
+    // Optional GPS location in parallel (non-blocking)
+    const userLocPromise = getUserCurrentLocation();
+
+    // TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
     if (isNaverMapActive) {
         try {
             const noUnits = query.replace(/\s*\d+층/g, "")
@@ -1362,12 +1366,6 @@ async function handleInAppMapSearch() {
             console.warn("[Pure Address & Store Extraction Error]", err);
         }
     }
-
-    // 4. Fast Primary Search Pipeline: Run Naver API Hub & Kakao Places in parallel (0.1s response)
-    const primaryPromises = [
-        searchNaverLocalSearchAPI(query, userLat, userLng),
-        searchKakaoPlaces(query, userLat, userLng)
-    ];
 
     const primaryResults = await Promise.allSettled(primaryPromises);
     primaryResults.forEach(res => {
@@ -2200,7 +2198,9 @@ window.toggleUndatedDate = function(type) {
     } else {
         dateInput.disabled = false;
         if (isEdit) dateInput.setAttribute("required", "required");
-        dateInput.value = new Date().toISOString().split("T")[0];
+        if (!dateInput.value) {
+            dateInput.value = new Date().toISOString().split("T")[0];
+        }
     }
 };
 
@@ -2452,7 +2452,7 @@ async function openEditPlaceModal(id) {
     const undatedChk = document.getElementById("edit-place-undated");
     const dateInput = document.getElementById("edit-place-date");
     
-    if (place.isUndecidedDate === 1 || !place.createdAt) {
+    if (place.isUndecidedDate === 1 || !place.createdAt || place.createdAt === "") {
         if (undatedChk) undatedChk.checked = true;
         if (dateInput) {
             dateInput.value = "";
@@ -2464,8 +2464,8 @@ async function openEditPlaceModal(id) {
         if (dateInput) {
             dateInput.disabled = false;
             dateInput.setAttribute("required", "required");
-            const dateObj = new Date(place.createdAt);
-            const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+            const parsed = parseAnyDate(place.createdAt);
+            const dateStr = parsed > 0 ? new Date(parsed).toISOString().split("T")[0] : "";
             dateInput.value = dateStr;
         }
     }
