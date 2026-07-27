@@ -149,12 +149,12 @@
                             <!-- Embedded Local Search Inside Map -->
                             <div class="map-search-bar" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
                                 <div style="display:flex; gap:0.4rem; width:100%;">
-                                    <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query" style="flex-grow:1;">
+                                    <input type="text" placeholder="네이버 지도로 장소 즉시 검색..." id="map-search-query" style="flex-grow:1;" onkeydown="if(event.key==='Enter') handleInAppMapSearch()">
                                     <button class="btn btn-primary" id="btn-map-search" onclick="handleInAppMapSearch()" style="white-space:nowrap;">
                                         <i data-lucide="search"></i> 검색
                                     </button>
                                 </div>
-                                
+                                <div id="map-search-results-container"></div>
                             </div>
                             
                             <div class="map-container-wrapper">
