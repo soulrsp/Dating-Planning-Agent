@@ -1152,7 +1152,7 @@ async function handleInAppMapSearch() {
     // 3. Naver Geocoder Engine (Instant & 100% General Region-Expanded POI & Building Search)
     if (isNaverMapActive) {
         try {
-            const naverResults = await searchNaverGeocoder(query);
+            const naverResults = await searchNaverGeocoder(query, userLat, userLng);
             if (Array.isArray(naverResults) && naverResults.length > 0) {
                 combinedResults.push(...naverResults);
             }
@@ -1325,7 +1325,7 @@ async function searchNominatimFree(query) {
 }
 
 // Naver Native Geocoder Promise Wrapper (Supports address, building, apartment complex, store & restaurant lookup)
-function searchNaverGeocoder(query) {
+function searchNaverGeocoder(query, userLat, userLng) {
     return new Promise((resolve) => {
         if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
             console.warn("[Naver Map] Geocoder submodule unavailable.");
@@ -1418,7 +1418,12 @@ function searchNaverGeocoder(query) {
         };
 
         queriesToTry.forEach((qStr) => {
-            naver.maps.Service.geocode({ query: qStr }, (status, response) => {
+            const geocodeOptions = { query: qStr };
+            if (userLat && userLng) {
+                geocodeOptions.coordinate = `${userLng},${userLat}`;
+            }
+
+            naver.maps.Service.geocode(geocodeOptions, (status, response) => {
                 completed++;
                 if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
                     response.v2.addresses.forEach((addr) => {
