@@ -1284,7 +1284,7 @@ async function handleInAppMapSearch() {
         const cachedResults = mapSearchCache.get(cacheKey);
         if (Array.isArray(cachedResults) && cachedResults.length > 0) {
             console.log(`[Search Cache Hit] Loaded instant results for '${query}'`);
-            displayMapSearchResults(cachedResults, query);
+            renderMapSearchResults(cachedResults);
             return;
         }
     }
@@ -1844,6 +1844,11 @@ function renderMapSearchResults(results) {
     clearSearchMarkers();
 
     if (!results || results.length === 0) return;
+
+    // Automatically switch to Map Tab so user can visually see search results & markers
+    if (typeof switchTab === "function" && currentActiveTab !== "map") {
+        switchTab("map");
+    }
 
     // Create interactive search results panel below search bar
     const searchBar = document.querySelector(".map-search-bar");
