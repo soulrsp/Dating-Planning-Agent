@@ -1147,6 +1147,37 @@ async function handleInAppMapSearch() {
         }
     }
     
+    // 5.5. Pure Address Extraction & Direct Building Geocoding Fallback
+    if (combinedResults.length === 0 && isNaverMapActive) {
+        try {
+            const noUnits = query.replace(/\s*\d+층/g, "")
+                                 .replace(/\s*[B|b]?\d+호/g, "")
+                                 .replace(/\s*지하\d+층?/g, "")
+                                 .replace(/\s*지하/g, "")
+                                 .trim();
+            
+            const roadMatch = noUnits.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+            if (roadMatch) {
+                const pureRoadAddr = roadMatch[1].trim();
+                const refined = await refineCoordinatesViaNaverGeocoder(pureRoadAddr);
+                if (refined) {
+                    let titleName = noUnits.replace(roadMatch[0], "").trim();
+                    if (!titleName || titleName.length < 2) titleName = query.trim();
+                    
+                    combinedResults.push({
+                        name: titleName,
+                        address: pureRoadAddr,
+                        lat: refined.lat,
+                        lng: refined.lng,
+                        category: "Restaurant"
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn("[Pure Address Fallback Error]", err);
+        }
+    }
+
     // 6. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
         try {
@@ -1233,29 +1264,37 @@ function searchNaverGeocoder(query) {
         }
         
         const cleanQ = query.trim();
-        const queriesToTry = [
-            cleanQ,
-            `서울 ${cleanQ}`,
-            `경기 ${cleanQ}`,
-            `인천 ${cleanQ}`,
-            `부산 ${cleanQ}`,
-            `대구 ${cleanQ}`,
-            `대전 ${cleanQ}`,
-            `광주 ${cleanQ}`,
-            `울산 ${cleanQ}`,
-            `세종 ${cleanQ}`,
-            `강남구 ${cleanQ}`,
-            `서초구 ${cleanQ}`,
-            `송파구 ${cleanQ}`,
-            `마포구 ${cleanQ}`,
-            `성동구 ${cleanQ}`,
-            `영등포구 ${cleanQ}`,
-            `용산구 ${cleanQ}`,
-            `분당 ${cleanQ}`,
-            `일산 ${cleanQ}`,
-            `수원 ${cleanQ}`,
-            `유성구 ${cleanQ}`
+        const queriesToTry = [cleanQ];
+
+        // Address & Unit/Store Parsing (e.g. "대전 유성구 문지동 엑스포로446번길 36 1층 소바공방")
+        const noUnits = cleanQ.replace(/\s*\d+층/g, "")
+                              .replace(/\s*[B|b]?\d+호/g, "")
+                              .replace(/\s*지하\d+층?/g, "")
+                              .replace(/\s*지하/g, "")
+                              .trim();
+        if (noUnits !== cleanQ && !queriesToTry.includes(noUnits)) {
+            queriesToTry.push(noUnits);
+        }
+
+        // Extract pure road address pattern (e.g. "엑스포로446번길 36", "대전 유성구 문지동 엑스포로446번길 36")
+        const fullRoadAddrMatch = noUnits.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+        if (fullRoadAddrMatch) {
+            const extractedRoad = fullRoadAddrMatch[1].trim();
+            if (!queriesToTry.includes(extractedRoad)) {
+                queriesToTry.push(extractedRoad);
+            }
+        }
+
+        const cityPrefixed = [
+            `서울 ${cleanQ}`, `경기 ${cleanQ}`, `인천 ${cleanQ}`, `부산 ${cleanQ}`,
+            `대구 ${cleanQ}`, `대전 ${cleanQ}`, `광주 ${cleanQ}`, `울산 ${cleanQ}`,
+            `세종 ${cleanQ}`, `강남구 ${cleanQ}`, `서초구 ${cleanQ}`, `송파구 ${cleanQ}`,
+            `마포구 ${cleanQ}`, `성동구 ${cleanQ}`, `영등포구 ${cleanQ}`, `용산구 ${cleanQ}`,
+            `분당 ${cleanQ}`, `일산 ${cleanQ}`, `수원 ${cleanQ}`, `유성구 ${cleanQ}`
         ];
+        cityPrefixed.forEach(c => {
+            if (!queriesToTry.includes(c)) queriesToTry.push(c);
+        });
 
         if (!cleanQ.includes("아파트") && !cleanQ.includes("빌딩") && !cleanQ.includes("타워") && !cleanQ.includes("점") && cleanQ.length <= 8) {
             queriesToTry.push(`${cleanQ} 식당`);
@@ -1413,17 +1452,20 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
 
 // Dedicated Gemini API call for map geocoding & multi-branch / apartment search
 async function callGeminiSearchAPI(query) {
-    const searchPrompt = `You are a Local Geocoding & Business/Store/Apartment Search utility for South Korea.
+    const searchPrompt = `You are a Smart Geocoding & Business/Store/Restaurant Search utility for South Korea.
 The user searched for: "${query}"
-Find 4-8 REAL, SPECIFIC, EXISTING stores, shops, local restaurants, cafes, bakeries, eateries, apartment complexes (아파트 단지), residential buildings, company branches, offices, or venues matching "${query}" anywhere in South Korea.
-For local restaurants, cafes, or stores (e.g., "소문난성수감자탕", "우래옥", "하카타분코", "몽탄", "해목", "카멜커피"), locate the exact real store branch and provide its official detailed Korean road-name address (도로명 주소) and precise latitude/longitude coordinates in South Korea.
+
+Instructions:
+1. TYPO CORRECTION & FUZZY MATCHING: If the user query has typos, spelling mistakes, or phonetic errors in Korean (e.g., if user searches "소방공방", recognize it as "소바공방" in Daejeon Munji-dong / Expo-ro 446beon-gil 36), automatically correct the typo and locate the real store.
+2. COMBINED ADDRESS & STORE PARSING: If the user input contains a full address, floor number, and store name (e.g. "대전 유성구 문지동 엑스포로446번길 36 1층 소바공방"), extract the real store name ("소바공방") and its official Korean Road Address ("대전광역시 유성구 엑스포로446번길 36").
+3. ACCURATE COORDINATES: Find 4-8 REAL, SPECIFIC, EXISTING stores, shops, local restaurants, cafes, bakeries, eateries, or venues matching "${query}" in South Korea with exact real Korean road-name addresses and precise latitude/longitude coordinates in South Korea.
 
 Return STRICTLY a JSON array of objects with this format (no markdown, no preamble):
 [
   {
-    "name": "Exact Name in Korean (e.g., 소문난성수감자탕, 은마아파트)",
-    "address": "Detailed Real Korean Road Address (e.g., 서울특별시 성동구 연무장길 45)",
-    "lat": 37.xxxx or 35.xxxx (latitude in South Korea),
+    "name": "Exact Store/Landmark Name in Korean (e.g., 소바공방, 소문난성수감자탕)",
+    "address": "Detailed Real Official Korean Road Address (e.g., 대전광역시 유성구 엑스포로446번길 36)",
+    "lat": 36.xxxx or 37.xxxx or 35.xxxx (latitude in South Korea),
     "lng": 127.xxxx or 129.xxxx (longitude in South Korea),
     "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other"
   }
