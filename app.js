@@ -2015,12 +2015,12 @@ window.saveMapSearchResult = async function(encoded) {
             }
         }
 
-        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
-        const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
-        if (existing) {
-            showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
-            clearSearchMarkers();
-            return;
+        const naverUrl = getNaverMapUrl({ name: data.name, address: data.address, lat: saveLat, lng: saveLng });
+        
+        // Allow adding to Wishlist even if place is already in Visited Places (or for another date)
+        const existingWishlist = await db.places.filter(p => (p.name || "").trim().toLowerCase() === (data.name || "").trim().toLowerCase() && p.isVisited === 0 && p.isDeleted !== 1).first();
+        if (existingWishlist) {
+            showToast(`'${data.name}'이(가) 이미 위시리스트에 있지만, 다른 날짜/기록을 위해 하나 더 추가합니다! 💖`, "info");
         }
 
         await db.places.add({
@@ -3197,16 +3197,16 @@ async function saveToCloud() {
     
     try {
         const places = await db.places.toArray();
-        const seenNames = new Set();
+        const seenKeys = new Set();
         const cleanPlaces = [];
         places.forEach(p => {
             const copy = { ...p };
             sanitizePlaceObject(copy);
             const cleanName = (copy.name || "").trim();
             if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
-                const nameKey = cleanName.toLowerCase();
-                if (!seenNames.has(nameKey)) {
-                    seenNames.add(nameKey);
+                const itemKey = copy.id ? `id_${copy.id}` : `${cleanName.toLowerCase()}_${copy.isVisited}_${copy.createdAt || ''}`;
+                if (!seenKeys.has(itemKey)) {
+                    seenKeys.add(itemKey);
                     cleanPlaces.push(copy);
                 }
             }
@@ -3356,17 +3356,17 @@ async function loadFromCloud() {
             }
 
             if (Array.isArray(fetchedPlaces)) {
-                // Filter out any junk/duplicate places directly from fetched cloud data
-                const seenCloudNames = new Set();
+                // Filter out any junk/duplicate places directly from fetched cloud data (by ID or Unique Key)
+                const seenCloudKeys = new Set();
                 const placesToApply = [];
 
                 fetchedPlaces.forEach(fp => {
                     sanitizePlaceObject(fp);
                     const cleanName = (fp.name || "").trim();
                     if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
-                        const nameKey = cleanName.toLowerCase();
-                        if (!seenCloudNames.has(nameKey)) {
-                            seenCloudNames.add(nameKey);
+                        const itemKey = fp.id ? `id_${fp.id}` : `${cleanName.toLowerCase()}_${fp.isVisited}_${fp.createdAt || ''}`;
+                        if (!seenCloudKeys.has(itemKey)) {
+                            seenCloudKeys.add(itemKey);
                             placesToApply.push(fp);
                         }
                     }
@@ -3376,7 +3376,7 @@ async function loadFromCloud() {
 
                 // Preserve local photo attachments and tombstones
                 placesToApply.forEach(fp => {
-                    const localMatch = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === (fp.name || "").trim().toLowerCase());
+                    const localMatch = localPlaces.find(lp => lp.id === fp.id || ((lp.name || "").trim().toLowerCase() === (fp.name || "").trim().toLowerCase() && lp.isVisited === fp.isVisited && lp.createdAt === fp.createdAt));
                     if (localMatch) {
                         if (localMatch.isDeleted === 1 || localMatch.isVisited === -1) {
                             fp.isDeleted = 1;
@@ -3394,11 +3394,11 @@ async function loadFromCloud() {
                     return;
                 }
 
-                // Smart Upsert Engine: Upsert places to Dexie DB safely without clearing DB
+                // Smart Upsert Engine: Upsert places to Dexie DB safely by ID or unique key match
                 let hasChanges = false;
                 for (const fp of placesToApply) {
                     const cleanFpName = (fp.name || "").trim().toLowerCase();
-                    const existing = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === cleanFpName);
+                    const existing = localPlaces.find(lp => lp.id === fp.id || ((lp.name || "").trim().toLowerCase() === cleanFpName && lp.isVisited === fp.isVisited && lp.createdAt === fp.createdAt));
                     
                     if (existing) {
                         const updatePayload = { ...fp };
@@ -4084,14 +4084,14 @@ async function cleanJunkData(showToastMsg = false) {
                 continue;
             }
 
-            // 4. Deduplicate by lowercased place name
-            const nameKey = cleanName.toLowerCase();
-            if (seenNames.has(nameKey)) {
+            // 4. Deduplicate by unique item key (allows same place name across Visited vs Wishlist or different dates)
+            const itemKey = p.id ? `id_${p.id}` : `${cleanName.toLowerCase()}_${p.isVisited}_${p.createdAt || ''}`;
+            if (seenNames.has(itemKey)) {
                 removedCount++;
                 continue;
             }
 
-            seenNames.add(nameKey);
+            seenNames.add(itemKey);
             cleanList.push(p);
         }
 
