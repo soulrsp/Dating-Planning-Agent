@@ -23,7 +23,7 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
-let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
+let naverClientId = localStorage.getItem("aura_naver_client_id") || "stouz9nm0e";
 let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
 let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
 if (localStorage.getItem("aura_naver_search_secret") === "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB" || !localStorage.getItem("aura_naver_search_secret")) {
@@ -1019,22 +1019,18 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim()) 
             || localStorage.getItem("aura_naver_search_id") 
             || naverSearchId 
-            || localStorage.getItem("aura_naver_client_id") 
-            || naverClientId;
+            || "xaxinl85gc";
 
         const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim()) 
             || localStorage.getItem("aura_naver_search_secret") 
-            || naverSearchSecret;
+            || naverSearchSecret 
+            || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
 
         // Support both Ncloud API Gateway and Naver Open API Header Specifications
         const headerOptions = [
             {
                 'X-NCP-APIGW-API-KEY-ID': currentSearchId,
                 'X-NCP-APIGW-API-KEY': currentSearchSecret
-            },
-            {
-                'X-Naver-Client-Id': currentSearchId,
-                'X-Naver-Client-Secret': currentSearchSecret
             }
         ];
 
