@@ -614,7 +614,9 @@ async function initNaverMap() {
         let startCenter = new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]);
         map = new naver.maps.Map('map', {
             center: startCenter,
-            zoom: 14,
+            minZoom: 6,
+            maxZoom: 21,
+            zoom: 10, // Fixed initial scale to 4 levels larger than the minimum zoom (-) (minZoom 6 -> 10)
             zoomControl: true,
             zoomControlOptions: {
                 position: naver.maps.Position.RIGHT_CENTER
@@ -634,7 +636,7 @@ async function initNaverMap() {
     getUserCurrentLocation().then(userLoc => {
         if (userLoc && userLoc.lat && userLoc.lng && map) {
             map.setCenter(new naver.maps.LatLng(userLoc.lat, userLoc.lng));
-            map.setZoom(14);
+            map.setZoom(10);
         }
     });
 
@@ -747,7 +749,7 @@ async function updateMapMarkers() {
         if (validPlaces.length > 0 && isInitialMapFit) {
             if (validPlaces.length === 1) {
                 map.setCenter(new naver.maps.LatLng(validPlaces[0].lat, validPlaces[0].lng));
-                map.setZoom(15);
+                map.setZoom(10);
             } else {
                 try {
                     map.fitBounds(bounds, {
@@ -755,7 +757,7 @@ async function updateMapMarkers() {
                     });
                 } catch(e) {
                     map.setCenter(bounds.getCenter());
-                    map.setZoom(14);
+                    map.setZoom(10);
                 }
             }
             isInitialMapFit = false;
