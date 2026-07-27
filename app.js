@@ -915,71 +915,8 @@ function formatDistanceStr(km) {
 }
 
 // Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
+// Obsolete proxy function removed for ultra-fast CORS-free performance
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
-    const tryQueries = [query];
-    
-    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
-    const words = query.trim().split(/\s+/);
-    if (words.length > 1) {
-        tryQueries.push(words[0]);
-        if (words.length > 2) {
-            tryQueries.push(`${words[0]} ${words[1]}`);
-        }
-    }
-    
-    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
-    if (cleanBrand && !tryQueries.includes(cleanBrand)) {
-        tryQueries.push(cleanBrand);
-    }
-
-    const proxyGenerators = [
-        (target) => target // Direct fetch only (eliminates third-party proxy lag)
-    ];
-
-    for (const q of tryQueries) {
-        const encodedQ = encodeURIComponent(q);
-        const centerLng = userLng || 127.388;
-        const centerLat = userLat || 36.438;
-        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
-
-        for (const makeProxy of proxyGenerators) {
-            try {
-                const proxyUrl = makeProxy(targetUrl);
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 400); // 400ms ultra-fast timeout
-                
-                const response = await fetch(proxyUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
-
-                if (!response.ok) continue;
-                
-                const data = await response.json();
-                
-                let rawList = [];
-                if (data.result && data.result.place && data.result.place.list) {
-                    rawList = data.result.place.list;
-                } else if (data.place && data.place.list) {
-                    rawList = data.place.list;
-                }
-                
-                if (Array.isArray(rawList) && rawList.length > 0) {
-                    return rawList.map(item => {
-                        const lat = parseFloat(item.y);
-                        const lng = parseFloat(item.x);
-                        return {
-                            name: item.name || query,
-                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                            lat: lat,
-                            lng: lng,
-                            category: item.category || "Restaurant"
-                        };
-                    });
-                }
-            } catch (err) {
-                // Try next proxy candidate
-            }
-        }
-    }
     return null;
 }
 
@@ -1368,20 +1305,7 @@ async function handleInAppMapSearch() {
         }
     });
 
-    // 5. Early Exit: If primary APIs found matching results, skip slow fallbacks!
-    if (combinedResults.length === 0) {
-        // Fallback pipeline (Naver Dynamic Places)
-        const fallbackPromises = [
-            searchNaverMapPlacesDynamic(query, userLat, userLng)
-        ];
 
-        const fallbackResults = await Promise.allSettled(fallbackPromises);
-        fallbackResults.forEach(res => {
-            if (res.status === "fulfilled" && Array.isArray(res.value)) {
-                combinedResults.push(...res.value);
-            }
-        });
-    }
     
     // 6. AI Business Directory & Local Place Search (Guarantees 100% POI coverage when API Hub returns 0 items)
     if (geminiApiKey && combinedResults.length < 4) {
