@@ -26,6 +26,10 @@ let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
 let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
 let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
+if (localStorage.getItem("aura_naver_search_secret") === "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB" || !localStorage.getItem("aura_naver_search_secret")) {
+    localStorage.setItem("aura_naver_search_secret", "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB");
+    naverSearchSecret = "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
+}
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
@@ -910,17 +914,17 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     if (!naverSearchId) return null;
 
     try {
-        const targetUrls = [
-            `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(query)}`,
-            `https://naverapihub.apigw.ntruss.com/search/v1/local.json?query=${encodeURIComponent(query)}`,
-            `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(query)}`,
-            `https://naverapihub.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}`,
-            `https://naverapihub.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
-            `https://naveropenapi.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(query)}`,
-            `https://naveropenapi.apigw.ntruss.com/v1/search/local.json?query=${encodeURIComponent(query)}`,
-            `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}`
-        ];
-        
+        // Generalizable Multi-Query Expansion Engine (works for "소바공방", "홍칼국수", or any keyword)
+        const cleanRawQuery = query.trim();
+        const queriesToTry = [cleanRawQuery];
+
+        if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
+            queriesToTry.push(`원조 ${cleanRawQuery}`);
+        }
+        if (!cleanRawQuery.includes("본점") && !cleanRawQuery.includes("점")) {
+            queriesToTry.push(`${cleanRawQuery} 본점`);
+        }
+
         // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
         const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim()) 
             || localStorage.getItem("aura_naver_search_id") 
@@ -951,86 +955,106 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             (target) => `https://thingproxy.freeboard.io/fetch/${target}`
         ];
 
-        for (const targetUrl of targetUrls) {
-            for (const reqHeaders of headerOptions) {
-                for (const makeProxy of proxyGenerators) {
-                    try {
-                        const fetchUrl = makeProxy(targetUrl);
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 2500);
-                        
-                        const response = await fetch(fetchUrl, { 
-                            method: 'GET',
-                            headers: reqHeaders,
-                            signal: controller.signal 
-                        });
-                        clearTimeout(timeoutId);
+        const aggregatedResultsMap = new Map();
 
-                    if (response.status === 401) continue;
-                    if (!response.ok) continue;
-                    
-                    const data = await response.json();
-                    const itemsList = (data && (data.items || data.places)) ? (data.items || data.places) : null;
-                    if (itemsList && Array.isArray(itemsList) && itemsList.length > 0) {
-                        const results = [];
-                        for (const item of itemsList) {
-                            const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
-                            const roadAddr = item.roadAddress || item.address || "";
+        for (const q of queriesToTry) {
+            const targetUrls = [
+                `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`,
+                `https://naverapihub.apigw.ntruss.com/search/v1/local.json?query=${encodeURIComponent(q)}&display=30`,
+                `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`,
+                `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`
+            ];
+
+            let queryFetchedSuccess = false;
+
+            for (const targetUrl of targetUrls) {
+                if (queryFetchedSuccess) break;
+                for (const reqHeaders of headerOptions) {
+                    if (queryFetchedSuccess) break;
+                    for (const makeProxy of proxyGenerators) {
+                        try {
+                            const fetchUrl = makeProxy(targetUrl);
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 2500);
                             
-                            let lat = null;
-                            let lng = null;
+                            const response = await fetch(fetchUrl, { 
+                                method: 'GET',
+                                headers: reqHeaders,
+                                signal: controller.signal 
+                            });
+                            clearTimeout(timeoutId);
 
-                            // 2단계: 1단계에서 얻은 roadAddress를 Ncloud JS SDK Geocoder에 전송하여 건물 옥정밀 좌표 변환
-                            if (roadAddr && isNaverMapActive) {
-                                const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
-                                if (refined) {
-                                    lat = refined.lat;
-                                    lng = refined.lng;
+                            if (response.status === 401) continue;
+                            if (!response.ok) continue;
+                            
+                            const data = await response.json();
+                            const itemsList = (data && (data.items || data.places)) ? (data.items || data.places) : null;
+                            if (itemsList && Array.isArray(itemsList) && itemsList.length > 0) {
+                                queryFetchedSuccess = true;
+                                for (const item of itemsList) {
+                                    const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
+                                    const roadAddr = item.roadAddress || item.address || "";
+                                    
+                                    let lat = null;
+                                    let lng = null;
+
+                                    if (roadAddr && isNaverMapActive) {
+                                        const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
+                                        if (refined) {
+                                            lat = refined.lat;
+                                            lng = refined.lng;
+                                        }
+                                    }
+
+                                    if (!lat || !lng) {
+                                        const mx = parseFloat(item.mapx);
+                                        const my = parseFloat(item.mapy);
+                                        if (mx > 100000000 && my > 10000000) {
+                                            lng = mx / 1000000.0;
+                                            lat = my / 1000000.0;
+                                        } else if (mx > 10000000 && my > 1000000) {
+                                            lng = mx / 100000.0;
+                                            lat = my / 100000.0;
+                                        }
+                                    }
+
+                                    let categoryType = "Restaurant";
+                                    const rawCategory = item.category || "";
+                                    if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) {
+                                        categoryType = "Cafe";
+                                    } else if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) {
+                                        categoryType = "Hotel";
+                                    } else if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) {
+                                        categoryType = "Bar";
+                                    } else if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) {
+                                        categoryType = "Activity";
+                                    }
+
+                                    if (lat && lng) {
+                                        const dedupeKey = `${cleanTitle}_${roadAddr}`;
+                                        if (!aggregatedResultsMap.has(dedupeKey)) {
+                                            aggregatedResultsMap.set(dedupeKey, {
+                                                name: cleanTitle,
+                                                address: roadAddr || "네이버 공식 장소",
+                                                lat: lat,
+                                                lng: lng,
+                                                category: categoryType
+                                            });
+                                        }
+                                    }
                                 }
+                                break;
                             }
-
-                            // 10^6 integer scale fallback WGS84 conversion (e.g. mapx: 127394120 -> 127.394120, mapy: 36389530 -> 36.389530)
-                            if (!lat || !lng) {
-                                const mx = parseFloat(item.mapx);
-                                const my = parseFloat(item.mapy);
-                                if (mx > 100000000 && my > 10000000) {
-                                    lng = mx / 1000000.0;
-                                    lat = my / 1000000.0;
-                                } else if (mx > 10000000 && my > 1000000) {
-                                    lng = mx / 100000.0;
-                                    lat = my / 100000.0;
-                                }
-                            }
-
-                            let categoryType = "Restaurant";
-                            const rawCategory = item.category || "";
-                            if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) {
-                                categoryType = "Cafe";
-                            } else if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) {
-                                categoryType = "Hotel";
-                            } else if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) {
-                                categoryType = "Bar";
-                            } else if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) {
-                                categoryType = "Activity";
-                            }
-
-                            if (lat && lng) {
-                                results.push({
-                                    name: cleanTitle,
-                                    address: roadAddr || "네이버 공식 장소",
-                                    lat: lat,
-                                    lng: lng,
-                                    category: categoryType
-                                });
-                            }
+                        } catch (err) {
+                            // Try next proxy
                         }
-                        if (results.length > 0) return results;
                     }
-                } catch (err) {
-                    // Try next proxy
-                }
                 }
             }
+        }
+
+        if (aggregatedResultsMap.size > 0) {
+            return Array.from(aggregatedResultsMap.values());
         }
     } catch (err) {
         console.warn("[Ncloud Local Search API Error]", err);
