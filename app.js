@@ -23,9 +23,9 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
-let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
-let naverSearchId = localStorage.getItem("aura_naver_search_id") || "";
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
+let naverClientId = localStorage.getItem("aura_naver_client_id") || "stouz9nm0e";
+let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "";
 let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
@@ -1313,7 +1313,7 @@ async function handleInAppMapSearch() {
     const primaryPromises = [
         searchNaverLocalSearchAPI(query, userLat, userLng),
         searchKakaoPlaces(query, userLat, userLng),
-        isNaverMapActive ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null)
+        (window.naver && window.naver.maps && window.naver.maps.Service) ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null)
     ];
 
     // TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
@@ -1492,14 +1492,15 @@ async function handleInAppMapSearch() {
         uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
     }
 
+    const saveCacheKey = query.toLowerCase().trim();
+    mapSearchCache.set(saveCacheKey, uniqueResults);
+    renderMapSearchResults(uniqueResults, query);
+
     if (uniqueResults.length > 0) {
-        const cacheKey = query.toLowerCase().trim();
-        mapSearchCache.set(cacheKey, uniqueResults);
-        renderMapSearchResults(uniqueResults);
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
     } else {
-        showToast(`'${query}' 자동 탐색 중입니다. 지도의 원하는 건물/위치를 바로 클릭하여 핀을 꽂으실 수 있습니다 📍`, "info");
+        showToast(`'${query}' 장소를 직접 클릭하거나 재검색하실 수 있습니다 📍`, "info");
         enableManualMapPinMode(query);
     }
 }
@@ -1842,15 +1843,33 @@ window.focusMapSearchResult = function(index, lat, lng) {
     }
 };
 
-function renderMapSearchResults(results) {
+function renderMapSearchResults(results, queryStr = "") {
     console.log(`[Search UI] Rendering ${results ? results.length : 0} search results panel`);
     clearSearchMarkers();
-
-    if (!results || results.length === 0) return;
 
     // Automatically switch to Map Tab so user can visually see search results & markers
     if (typeof switchTab === "function" && currentActiveTab !== "map") {
         switchTab("map");
+    }
+
+    if (!results || results.length === 0) {
+        const emptyPanelHtml = `
+            <div id="map-search-results-panel" class="map-search-results-panel" style="margin-top:0.5rem;">
+                <div class="search-results-header">
+                    <span>📍 네이버 지도 검색 결과 (0건)</span>
+                    <button class="btn-close-results" onclick="clearSearchMarkers()">닫기 ✖</button>
+                </div>
+                <div style="padding:0.75rem; font-size:0.8rem; color:var(--color-text-medium); text-align:center;">
+                    '${queryStr || '입력하신 장소'}'에 대한 자동 검색 결과가 없습니다.<br>
+                    지도의 원하시는 위치를 직접 클릭하시면 즉시 핀을 꽂으실 수 있습니다 📍
+                </div>
+            </div>
+        `;
+        const resContainer = document.getElementById("map-search-results-container");
+        if (resContainer) {
+            resContainer.innerHTML = emptyPanelHtml;
+        }
+        return;
     }
 
     let cardsHtml = "";
