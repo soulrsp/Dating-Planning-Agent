@@ -1313,14 +1313,22 @@ async function handleInAppMapSearch() {
         combinedResults.push(...kbResults);
     }
 
-    // Start primary API searches INSTANTLY at 0ms (non-blocking location resolution)
-    const primaryPromises = [
-        searchNaverLocalSearchAPI(query),
-        searchKakaoPlaces(query)
-    ];
+    let userLat = null;
+    let userLng = null;
+    try {
+        const userLoc = await getUserCurrentLocation();
+        if (userLoc) {
+            userLat = userLoc.lat;
+            userLng = userLoc.lng;
+        }
+    } catch (e) {}
 
-    // Optional GPS location in parallel (non-blocking)
-    const userLocPromise = getUserCurrentLocation();
+    // Start primary API searches INSTANTLY (Naver API Hub + Kakao Places + Naver SDK Geocoder)
+    const primaryPromises = [
+        searchNaverLocalSearchAPI(query, userLat, userLng),
+        searchKakaoPlaces(query, userLat, userLng),
+        isNaverMapActive ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null)
+    ];
 
     // TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
     if (isNaverMapActive) {
@@ -1374,11 +1382,10 @@ async function handleInAppMapSearch() {
         }
     });
 
-    // 5. Early Exit: If primary APIs (Naver API Hub / Kakao) found matching results, skip slow fallbacks!
+    // 5. Early Exit: If primary APIs found matching results, skip slow fallbacks!
     if (combinedResults.length === 0) {
-        // Fallback pipeline (Naver Geocoder & Dynamic Search)
+        // Fallback pipeline (Naver Dynamic Places)
         const fallbackPromises = [
-            isNaverMapActive ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null),
             searchNaverMapPlacesDynamic(query, userLat, userLng)
         ];
 
