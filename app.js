@@ -661,10 +661,19 @@ async function updateMapMarkers() {
     if (!map) return;
     const places = await db.places.toArray();
 
-    // 1. Sequentially resolve missing coordinates for all saved wishlist & visited places BEFORE rendering markers
+    // 1. Sequentially resolve missing/corrupted coordinates for all saved wishlist & visited places BEFORE rendering markers
     for (const place of places) {
         if (place.isDeleted === 1 || place.isVisited === -1) continue;
-        if (!place.lat || !place.lng) {
+        
+        // Auto-fix corrupted coordinates (out of Korea boundary or 10x scaled due to previous 10^6 division bug)
+        const isCorrupted = place.lat && place.lng && (place.lat > 45 || place.lat < 30 || place.lng > 135 || place.lng < 120);
+        if (isCorrupted && place.lat > 300 && place.lat < 450) {
+            place.lat = place.lat / 10.0;
+            place.lng = place.lng / 10.0;
+            await db.places.update(place.id, { lat: place.lat, lng: place.lng });
+        }
+
+        if (!place.lat || !place.lng || (place.lat > 45 || place.lat < 30 || place.lng > 135 || place.lng < 120)) {
             const searchAddr = place.notes || place.address || place.name || "";
             if (searchAddr && isNaverMapActive) {
                 const refined = await refineCoordinatesViaNaverGeocoder(searchAddr);
@@ -962,9 +971,18 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     if (!naverSearchId) return null;
 
     try {
-        // Generalizable Multi-Query Expansion Engine (works for "소바공방", "홍칼국수", or any keyword)
+        // Generalizable Multi-Query Expansion Engine (works for "소바공방", "부원냉삼집", "홍칼국수", or any keyword)
         const cleanRawQuery = query.trim();
         const queriesToTry = [cleanRawQuery];
+
+        // Add region-aware search variations to guarantee local stores like "부원냉삼집 대전 관평동점" are retrieved
+        if (userLat && userLng) {
+            queriesToTry.push(`대전 ${cleanRawQuery}`);
+            queriesToTry.push(`유성 ${cleanRawQuery}`);
+            queriesToTry.push(`관평동 ${cleanRawQuery}`);
+        } else {
+            queriesToTry.push(`대전 ${cleanRawQuery}`);
+        }
 
         if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
             queriesToTry.push(`원조 ${cleanRawQuery}`);
@@ -1057,12 +1075,13 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                                     if (!lat || !lng) {
                                         const mx = parseFloat(item.mapx);
                                         const my = parseFloat(item.mapy);
+                                        // Naver Search API mapx/mapy coordinate scaling is (10^7, i.e. 10 million)
                                         if (mx > 100000000 && my > 10000000) {
+                                            lng = mx / 10000000.0;
+                                            lat = my / 10000000.0;
+                                        } else if (mx > 10000000 && my > 1000000) {
                                             lng = mx / 1000000.0;
                                             lat = my / 1000000.0;
-                                        } else if (mx > 10000000 && my > 1000000) {
-                                            lng = mx / 100000.0;
-                                            lat = my / 100000.0;
                                         }
                                     }
 
