@@ -904,19 +904,25 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     return null;
 }
 
-// 2-Step Hybrid Pipeline: Naver Open Local Search API + Naver Geocoding (Blog Ref: ljhyunstory.tistory.com/459)
+// Ncloud Official 2-Step Recommended Workflow: Ncloud API Hub Local Search API -> Ncloud Geocoding API
+// Ref: https://api.ncloud-docs.com/docs/naver-api-hub-search-local & https://api.ncloud-docs.com/docs/application-maps-overview
 async function searchNaverLocalSearchAPI(query, userLat, userLng) {
-    if (!naverSearchId || !naverSearchSecret) {
-        console.warn("[Naver Local Search API] Client ID & Secret not configured in Settings.");
-        return null;
-    }
+    if (!naverSearchId) return null;
 
     try {
         const targetUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
-        const reqHeaders = {
-            'X-Naver-Client-Id': naverSearchId,
-            'X-Naver-Client-Secret': naverSearchSecret
-        };
+        
+        // Support both Ncloud API Gateway and Naver Open API Header Specifications
+        const headerOptions = [
+            {
+                'X-Naver-Client-Id': naverSearchId,
+                'X-Naver-Client-Secret': naverSearchSecret || naverClientId
+            },
+            {
+                'X-NCP-APIGW-API-KEY-ID': naverSearchId,
+                'X-NCP-APIGW-API-KEY': naverSearchSecret || naverClientId
+            }
+        ];
 
         const proxyGenerators = [
             (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
@@ -924,76 +930,74 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             (target) => `https://thingproxy.freeboard.io/fetch/${target}`
         ];
 
-        for (const makeProxy of proxyGenerators) {
-            try {
-                const proxyUrl = makeProxy(targetUrl);
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
-                
-                const response = await fetch(proxyUrl, { 
-                    method: 'GET',
-                    headers: reqHeaders,
-                    signal: controller.signal 
-                });
-                clearTimeout(timeoutId);
+        for (const reqHeaders of headerOptions) {
+            for (const makeProxy of proxyGenerators) {
+                try {
+                    const proxyUrl = makeProxy(targetUrl);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 2500);
+                    
+                    const response = await fetch(proxyUrl, { 
+                        method: 'GET',
+                        headers: reqHeaders,
+                        signal: controller.signal 
+                    });
+                    clearTimeout(timeoutId);
 
-                if (response.status === 401) {
-                    console.warn("[Naver Local Search API] 401 Unauthorized - Invalid Search API Key/Secret. Falling back to Naver Geocoder & AI.");
-                    return null;
-                }
+                    if (response.status === 401) continue;
+                    if (!response.ok) continue;
+                    
+                    const data = await response.json();
+                    if (data && Array.isArray(data.items) && data.items.length > 0) {
+                        const results = [];
+                        for (const item of data.items) {
+                            const cleanTitle = (item.title || "").replace(/<[^>]*>/g, "").trim();
+                            const roadAddr = item.roadAddress || item.address || "";
+                            
+                            let lat = null;
+                            let lng = null;
 
-                if (!response.ok) continue;
-                const data = await response.json();
-                
-                if (data && Array.isArray(data.items) && data.items.length > 0) {
-                    const results = [];
-                    for (const item of data.items) {
-                        const cleanTitle = (item.title || "").replace(/<[^>]*>/g, "").trim();
-                        const roadAddr = item.roadAddress || item.address || "";
-                        
-                        let lat = null;
-                        let lng = null;
+                            // 2단계: 1단계에서 얻은 roadAddress를 Ncloud JS SDK Geocoder에 전송하여 건물 옥정밀 좌표 변환
+                            if (roadAddr && isNaverMapActive) {
+                                const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
+                                if (refined) {
+                                    lat = refined.lat;
+                                    lng = refined.lng;
+                                }
+                            }
 
-                        // 1. Refine coordinates via Naver Official Geocoder first for 100% building roof precision
-                        if (roadAddr && isNaverMapActive) {
-                            const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
-                            if (refined) {
-                                lat = refined.lat;
-                                lng = refined.lng;
+                            // 10^7 KATECH scale fallback WGS84 conversion
+                            if (!lat || !lng) {
+                                const mx = parseFloat(item.mapx);
+                                const my = parseFloat(item.mapy);
+                                if (mx > 100000000 && my > 30000000) {
+                                    lng = mx / 10000000.0;
+                                    lat = my / 10000000.0;
+                                } else if (mx > 10000000 && my > 3000000) {
+                                    lng = mx / 1000000.0;
+                                    lat = my / 1000000.0;
+                                }
+                            }
+
+                            if (lat && lng) {
+                                results.push({
+                                    name: cleanTitle,
+                                    address: roadAddr || "네이버 공식 장소",
+                                    lat: lat,
+                                    lng: lng,
+                                    category: item.category ? (item.category.includes("카페") ? "Cafe" : "Restaurant") : "Restaurant"
+                                });
                             }
                         }
-
-                        // 2. Direct conversion from mapx/mapy (10^7 scale WGS84 format)
-                        if (!lat || !lng) {
-                            const mx = parseFloat(item.mapx);
-                            const my = parseFloat(item.mapy);
-                            if (mx > 100000000 && my > 30000000) {
-                                lng = mx / 10000000.0;
-                                lat = my / 10000000.0;
-                            } else if (mx > 10000000 && my > 3000000) {
-                                lng = mx / 1000000.0;
-                                lat = my / 1000000.0;
-                            }
-                        }
-
-                        if (lat && lng) {
-                            results.push({
-                                name: cleanTitle,
-                                address: roadAddr || "네이버 지도 검색 장소",
-                                lat: lat,
-                                lng: lng,
-                                category: item.category ? (item.category.includes("카페") ? "Cafe" : "Restaurant") : "Restaurant"
-                            });
-                        }
+                        if (results.length > 0) return results;
                     }
-                    if (results.length > 0) return results;
+                } catch (err) {
+                    // Try next proxy
                 }
-            } catch (err) {
-                // Try next proxy candidate
             }
         }
     } catch (err) {
-        console.warn("[Naver Local Search API Error]", err);
+        console.warn("[Ncloud Local Search API Error]", err);
     }
     return null;
 }
