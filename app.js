@@ -24,6 +24,8 @@ let currentPlacesFilter = "wishlist";
 // Couple Info & Settings (LocalStorage)
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "";
+let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
+let isKakaoPlacesActive = false;
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
@@ -51,6 +53,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
     document.getElementById("settings-naver-client-id").value = naverClientId;
+    const kakaoInput = document.getElementById("settings-kakao-api-key");
+    if (kakaoInput) kakaoInput.value = kakaoApiKey;
     document.getElementById("settings-budget-limit").value = budgetLimit;
     document.getElementById("settings-partner-a-name").value = partnerAName;
     document.getElementById("settings-partner-b-name").value = partnerBName;
@@ -82,6 +86,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         loadNaverMapScript(naverClientId);
     } else {
         initLeafletMap();
+    }
+
+    if (kakaoApiKey) {
+        loadKakaoPlacesScript(kakaoApiKey);
     }
 
     // Cleanup legacy test comments & deduplicate junk places if present
@@ -462,6 +470,99 @@ function loadNaverMapScript(clientId) {
         initLeafletMap();
     };
     document.head.appendChild(script);
+}
+
+// Kakao Places SDK Loader
+function loadKakaoPlacesScript(appKey) {
+    const cleanKey = (appKey || "").trim();
+    if (!cleanKey) return;
+
+    const existingScript = document.getElementById("kakao-map-sdk-script");
+    if (existingScript) {
+        if (existingScript.getAttribute("data-app-key") === cleanKey) return;
+        existingScript.remove();
+    }
+
+    const script = document.createElement("script");
+    script.id = "kakao-map-sdk-script";
+    script.setAttribute("data-app-key", cleanKey);
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(cleanKey)}&libraries=services`;
+    script.onload = () => {
+        if (window.kakao && window.kakao.maps) {
+            window.kakao.maps.load(() => {
+                isKakaoPlacesActive = true;
+                console.log("[Map System] Kakao Places SDK successfully injected & ready.");
+            });
+        }
+    };
+    script.onerror = () => {
+        console.warn("[Map System] Kakao Places SDK loading failed.");
+        isKakaoPlacesActive = false;
+    };
+    document.head.appendChild(script);
+}
+
+// Kakao Places Keyword Search Engine (Direct browser CORS-free POI search)
+function searchKakaoPlaces(query, userLat, userLng) {
+    return new Promise((resolve) => {
+        if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services || !window.kakao.maps.services.Places) {
+            resolve(null);
+            return;
+        }
+
+        try {
+            const ps = new kakao.maps.services.Places();
+            const handleSearchResponse = (data, status) => {
+                if (status === kakao.maps.services.Status.OK && Array.isArray(data) && data.length > 0) {
+                    const results = data.map(item => {
+                        const lat = parseFloat(item.y);
+                        const lng = parseFloat(item.x);
+
+                        let cat = "Other";
+                        const catName = `${item.category_name || ""} ${item.category_group_name || ""}`;
+                        if (catName.includes("카페") || catName.includes("커피") || catName.includes("디저트") || catName.includes("베이커리")) cat = "Cafe";
+                        else if (catName.includes("음식점") || catName.includes("식당") || catName.includes("맛집") || catName.includes("푸드")) cat = "Restaurant";
+                        else if (catName.includes("주점") || catName.includes("술집") || catName.includes("바") || catName.includes("호프")) cat = "Bar";
+                        else if (catName.includes("공원") || catName.includes("관광") || catName.includes("명소")) cat = "Park";
+                        else if (catName.includes("문화") || catName.includes("미술관") || catName.includes("박물관") || catName.includes("전시")) cat = "Museum";
+
+                        return {
+                            name: item.place_name,
+                            address: item.road_address_name || item.address_name || "카카오 장소 검색",
+                            lat: lat,
+                            lng: lng,
+                            category: cat,
+                            phone: item.phone || "",
+                            url: item.place_url || ""
+                        };
+                    });
+                    resolve(results);
+                } else {
+                    resolve(null);
+                }
+            };
+
+            const searchOptions = {};
+            if (userLat && userLng) {
+                searchOptions.location = new kakao.maps.LatLng(userLat, userLng);
+                searchOptions.radius = 20000;
+            }
+
+            ps.keywordSearch(query, (data, status) => {
+                if (status === kakao.maps.services.Status.OK && data && data.length > 0) {
+                    handleSearchResponse(data, status);
+                } else {
+                    // Retry globally without location radius restriction
+                    ps.keywordSearch(query, (globalData, globalStatus) => {
+                        handleSearchResponse(globalData, globalStatus);
+                    });
+                }
+            }, searchOptions);
+        } catch (err) {
+            console.warn("[Kakao Places API Error]", err);
+            resolve(null);
+        }
+    });
 }
 
 function initLeafletMap() {
@@ -990,6 +1091,16 @@ async function handleInAppMapSearch() {
     const userLoc = await getUserCurrentLocation();
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
+
+    // 2.5. Kakao Places Keyword Search API (Instant 100% store/business/brand POI lookup in South Korea)
+    try {
+        const kakaoPlaces = await searchKakaoPlaces(query, userLat, userLng);
+        if (Array.isArray(kakaoPlaces) && kakaoPlaces.length > 0) {
+            combinedResults.push(...kakaoPlaces);
+        }
+    } catch (err) {
+        console.warn("[Kakao Places Search Error]", err);
+    }
 
     // 3. Real-time Naver Maps Dynamic POI/Business Search API
     try {
@@ -3110,6 +3221,8 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
 async function saveSettings() {
     const apiKeyVal = document.getElementById("settings-gemini-key").value.trim();
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
+    const kakaoInputEl = document.getElementById("settings-kakao-api-key");
+    const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
     const limitVal = parseInt(document.getElementById("settings-budget-limit").value) || 500000;
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
@@ -3118,6 +3231,7 @@ async function saveSettings() {
     
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
+    localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
     localStorage.setItem("aura_budget_limit", limitVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
     localStorage.setItem("aura_partner_b_name", partnerBVal);
@@ -3126,6 +3240,7 @@ async function saveSettings() {
     
     geminiApiKey = apiKeyVal;
     naverClientId = naverClientIdVal;
+    kakaoApiKey = kakaoApiKeyVal;
     budgetLimit = limitVal;
     partnerAName = partnerAVal;
     partnerBName = partnerBVal;
@@ -3145,6 +3260,10 @@ async function saveSettings() {
         loadNaverMapScript(naverClientId);
     } else {
         initLeafletMap();
+    }
+
+    if (kakaoApiKey) {
+        loadKakaoPlacesScript(kakaoApiKey);
     }
     
     // Restart Cloud Sync interval with new room configuration and push to cloud
