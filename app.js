@@ -933,9 +933,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     }
 
     const proxyGenerators = [
-        (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-        (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+        (target) => target // Direct fetch only (eliminates third-party proxy lag)
     ];
 
     for (const q of tryQueries) {
@@ -1030,11 +1028,9 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             }
         ];
 
-        // Execute queries concurrently for ultra-fast response (<0.2s)
+        // Execute queries concurrently for ultra-fast response (<0.1s)
         const proxyGenerators = [
-            (target) => target, // Direct fetch first
-            (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-            (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
+            (target) => target // Direct fetch only (eliminates third-party proxy lag)
         ];
 
         const aggregatedResultsMap = new Map();
@@ -1052,7 +1048,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                         try {
                             const fetchUrl = makeProxy(targetUrl);
                             const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 1200); // 1.2s fast timeout
+                            const timeoutId = setTimeout(() => controller.abort(), 300); // 300ms ultra-fast fail-fast timeout
                             
                             const response = await fetch(fetchUrl, { 
                                 method: 'GET',
@@ -1638,11 +1634,10 @@ function searchNaverGeocoder(query, userLat, userLng) {
         }
 
         // Smart location-aware query variations (2-3 items max instead of 35 flooded queries)
+        queriesToTry.push(`${cleanQ} 본사`);
+        queriesToTry.push(`대전 ${cleanQ}`);
         if (userLat && userLng) {
-            queriesToTry.push(`대전 ${cleanQ}`);
             queriesToTry.push(`유성구 ${cleanQ}`);
-        } else {
-            queriesToTry.push(`대전 ${cleanQ}`);
         }
 
         let combined = [];
