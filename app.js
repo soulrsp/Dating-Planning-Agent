@@ -602,14 +602,30 @@ function initLeafletMap() {
     updateMapMarkers();
 }
 
-function initNaverMap() {
+async function initNaverMap() {
     isNaverMapActive = true;
     const container = document.getElementById("map");
     if (!container) return;
-    container.innerHTML = ""; // Wiping Leaflet residues
     
+    // Destroy previous Naver map instance to prevent overlapping map DOM elements!
+    if (map) {
+        try {
+            if (typeof map.destroy === 'function') map.destroy();
+        } catch(e) {}
+        map = null;
+    }
+    container.innerHTML = ""; // Complete DOM reset
+
+    // 1. Detect user's current GPS location first for intelligent initial centering
+    const userLoc = await getUserCurrentLocation();
+    let startCenter = new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]);
+    if (userLoc && userLoc.lat && userLoc.lng) {
+        startCenter = new naver.maps.LatLng(userLoc.lat, userLoc.lng);
+        console.log(`[Naver Map Init] Starting directly at user GPS: (${userLoc.lat}, ${userLoc.lng})`);
+    }
+
     map = new naver.maps.Map('map', {
-        center: new naver.maps.LatLng(defaultMapCoords[0], defaultMapCoords[1]),
+        center: startCenter,
         zoom: 14,
         zoomControl: true,
         zoomControlOptions: {
@@ -617,15 +633,12 @@ function initNaverMap() {
         }
     });
 
-    // 1. Instantly center Naver Map on user's current GPS location
-    getUserCurrentLocation().then(userLoc => {
-        if (userLoc && map) {
-            const userPos = new naver.maps.LatLng(userLoc.lat, userLoc.lng);
-            map.setCenter(userPos);
-            map.setZoom(14);
-            console.log(`[Naver Map Init] Centered on user current GPS: (${userLoc.lat}, ${userLoc.lng})`);
+    // Force map tile recalculation to prevent blank/gray tile rendering
+    setTimeout(() => {
+        if (map && isNaverMapActive) {
+            naver.maps.Event.trigger(map, 'resize');
         }
-    });
+    }, 150);
 
     // Close any open popup when clicking empty space on Naver Map
     naver.maps.Event.addListener(map, "click", () => {
@@ -636,7 +649,7 @@ function initNaverMap() {
     });
 
     // 2. Render all saved place markers and auto-resolve missing coordinates
-    updateMapMarkers();
+    await updateMapMarkers();
 }
 
 let isInitialMapFit = true;
@@ -678,7 +691,6 @@ async function updateMapMarkers() {
         const bounds = new naver.maps.LatLngBounds();
         
         validPlaces.forEach(place => {
-            
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
             const markerColor = isVisited ? "#74B9FF" : "#FF6584";
             const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
@@ -726,8 +738,13 @@ async function updateMapMarkers() {
             bounds.extend(marker.getPosition());
         });
         
-        if (places.length > 0 && isInitialMapFit) {
-            map.fitBounds(bounds);
+        if (validPlaces.length > 0 && isInitialMapFit) {
+            if (validPlaces.length === 1) {
+                map.setCenter(new naver.maps.LatLng(validPlaces[0].lat, validPlaces[0].lng));
+                map.setZoom(15);
+            } else {
+                map.fitBounds(bounds);
+            }
             isInitialMapFit = false;
         }
     } else {
