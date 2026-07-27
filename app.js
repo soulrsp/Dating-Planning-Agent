@@ -1390,26 +1390,27 @@ async function handleInAppMapSearch() {
         });
     }
     
-    // 6. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
+    // 6. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes with 800ms fast timeout)
     if (geminiApiKey && combinedResults.length < 4) {
         try {
-            const responseText = await callGeminiSearchAPI(query);
-            const searchResults = cleanAndParseJSON(responseText);
-            if (Array.isArray(searchResults) && searchResults.length > 0) {
-                // Refine each AI store address via Naver Official Geocoder for 100% exact building roof precision
-                for (const item of searchResults) {
-                    if (item.address && isNaverMapActive) {
-                        const refined = await refineCoordinatesViaNaverGeocoder(item.address);
-                        if (refined) {
-                            item.lat = refined.lat;
-                            item.lng = refined.lng;
+            const responseText = await withTimeout(callGeminiSearchAPI(query), 800);
+            if (responseText) {
+                const searchResults = cleanAndParseJSON(responseText);
+                if (Array.isArray(searchResults) && searchResults.length > 0) {
+                    for (const item of searchResults) {
+                        if (item.address && isNaverMapActive) {
+                            const refined = await refineCoordinatesViaNaverGeocoder(item.address);
+                            if (refined) {
+                                item.lat = refined.lat;
+                                item.lng = refined.lng;
+                            }
                         }
                     }
+                    combinedResults.push(...searchResults);
                 }
-                combinedResults.push(...searchResults);
             }
         } catch (err) {
-            console.warn("[Map Search] Gemini AI search failed:", err.message);
+            console.warn("[Map Search] Gemini AI search skipped or timed out:", err.message);
         }
     }
     
