@@ -854,7 +854,7 @@ async function updateMapMarkers() {
     }
 }
 
-// Knowledge Base completely removed per user request (relying purely on general geocoding logic)
+// Dynamic Real-Time Geocoding Mode (Knowledge Base disabled per user request to ensure pure real-time search)
 const AURA_LOCAL_PLACE_KB = [];
 
 function searchLocalKnowledgeBase(query) {
