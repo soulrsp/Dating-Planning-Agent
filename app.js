@@ -22,14 +22,30 @@ let currentActiveTab = "dashboard";
 let currentPlacesFilter = "wishlist"; 
 
 // Couple Info & Settings (LocalStorage)
+//
+// Key handling policy:
+//   - naverClientId / kakaoApiKey are PUBLIC client-side keys. They are meant to ship in the page and
+//     are protected by the domain allowlist configured in the Ncloud / Kakao Developers consoles.
+//   - naverSearchSecret is a real SECRET. It must never be hardcoded here: this file is served to every
+//     visitor, and the CORS-proxy fallbacks forward request headers through third-party hosts.
+//     It is read from settings/localStorage only, and is best replaced by a server-side proxy entirely.
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
 let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
-if (localStorage.getItem("aura_naver_search_secret") === "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB" || !localStorage.getItem("aura_naver_search_secret")) {
-    localStorage.setItem("aura_naver_search_secret", "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB");
-    naverSearchSecret = "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB";
+
+// Earlier builds shipped this secret in the source AND force-wrote it into localStorage, so dropping
+// the hardcoded default is not enough — the leaked value has to be purged from browsers that ran them.
+// Only the known-leaked strings are removed; a secret the user typed in themselves is left alone.
+const LEAKED_NAVER_SECRETS = [
+    "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB",
+    "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB"
+];
+if (LEAKED_NAVER_SECRETS.includes(localStorage.getItem("aura_naver_search_secret"))) {
+    localStorage.removeItem("aura_naver_search_secret");
+    console.warn("[Security] 유출된 네이버 시크릿이 localStorage에서 제거되었습니다. Ncloud 콘솔에서 키를 재발급하세요.");
 }
+
+let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 
@@ -550,27 +566,47 @@ function waitForKakaoSdk(maxWaitMs = 1500) {
     });
 }
 
-const KAKAO_PAGE_SIZE = 15; // Kakao's per-page maximum
+const KAKAO_PAGE_SIZE = 15;      // Kakao's per-page maximum
+const KAKAO_MAX_PAGES = 3;       // up to 45 places per pass; enough for the results panel
 
+// Resolves with every place across up to KAKAO_MAX_PAGES pages. Kakao hands back a `pagination`
+// object with .hasNextPage/.nextPage(); each nextPage() call re-invokes this same callback.
 function runKakaoKeywordSearch(ps, query, options) {
     return new Promise((resolve) => {
+        const collected = [];
+        let pagesFetched = 0;
         let settled = false;
-        const done = (value) => {
+
+        const done = () => {
             if (!settled) {
                 settled = true;
-                resolve(value);
+                clearTimeout(timer);
+                resolve(collected);
             }
         };
-        const timer = setTimeout(() => done([]), 2500);
+        const timer = setTimeout(done, 3000);
+
         try {
-            ps.keywordSearch(query, (data, status) => {
-                clearTimeout(timer);
-                done(status === kakao.maps.services.Status.OK && Array.isArray(data) ? data : []);
+            ps.keywordSearch(query, (data, status, pagination) => {
+                if (status === kakao.maps.services.Status.OK && Array.isArray(data)) {
+                    collected.push(...data);
+                }
+                pagesFetched++;
+
+                const canPage = pagination
+                    && typeof pagination.hasNextPage !== "undefined"
+                    && pagination.hasNextPage
+                    && typeof pagination.nextPage === "function";
+
+                if (!settled && canPage && pagesFetched < KAKAO_MAX_PAGES) {
+                    pagination.nextPage();
+                } else {
+                    done();
+                }
             }, options);
         } catch (err) {
-            clearTimeout(timer);
             console.warn("[Kakao Places API Error]", err);
-            done([]);
+            done();
         }
     });
 }
@@ -857,11 +893,36 @@ async function updateMapMarkers() {
     }
 }
 
-// Knowledge Base completely removed per user request (relying purely on general geocoding logic)
-const AURA_LOCAL_PLACE_KB = [];
+// Major Korean region centres, used to derive query prefixes from the user's actual position instead
+// of hardcoding one city. Keeps region-expanded searches relevant wherever the app is used.
+const KR_REGION_CENTERS = [
+    { name: "서울", lat: 37.5665, lng: 126.9780 },
+    { name: "인천", lat: 37.4563, lng: 126.7052 },
+    { name: "수원", lat: 37.2636, lng: 127.0286 },
+    { name: "성남", lat: 37.4200, lng: 127.1265 },
+    { name: "천안", lat: 36.8151, lng: 127.1139 },
+    { name: "세종", lat: 36.4800, lng: 127.2890 },
+    { name: "대전", lat: 36.3504, lng: 127.3845 },
+    { name: "청주", lat: 36.6424, lng: 127.4890 },
+    { name: "전주", lat: 35.8242, lng: 127.1480 },
+    { name: "광주", lat: 35.1595, lng: 126.8526 },
+    { name: "대구", lat: 35.8714, lng: 128.6014 },
+    { name: "포항", lat: 36.0190, lng: 129.3435 },
+    { name: "창원", lat: 35.2280, lng: 128.6811 },
+    { name: "울산", lat: 35.5384, lng: 129.3114 },
+    { name: "부산", lat: 35.1796, lng: 129.0756 },
+    { name: "강릉", lat: 37.7519, lng: 128.8761 },
+    { name: "제주", lat: 33.4996, lng: 126.5312 }
+];
 
-function searchLocalKnowledgeBase(query) {
-    return [];
+// Nearest region names to the given position, closest first. Falls back to the largest metros.
+function getNearbyRegionNames(lat, lng, count = 2) {
+    if (!lat || !lng) return ["서울", "대전"].slice(0, count);
+    return KR_REGION_CENTERS
+        .map(r => ({ name: r.name, d: calculateDistanceKm(lat, lng, r.lat, r.lng) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, count)
+        .map(r => r.name);
 }
 
 // Geolocation & Distance Proximity Search Helpers
@@ -1041,16 +1102,13 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
 async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     if (!naverSearchId) return null;
 
-    // Region/brand expansion — the main source of multi-result recall for bare business names
+    // Region/brand expansion — the main source of multi-result recall for bare business names.
+    // Region names come from the user's position rather than being pinned to one city.
     const cleanRawQuery = query.trim();
     const queriesToTry = [cleanRawQuery];
-    if (userLat && userLng) {
-        queriesToTry.push(`대전 ${cleanRawQuery}`);
-        queriesToTry.push(`유성 ${cleanRawQuery}`);
-        queriesToTry.push(`관평동 ${cleanRawQuery}`);
-    } else {
-        queriesToTry.push(`대전 ${cleanRawQuery}`);
-    }
+    getNearbyRegionNames(userLat, userLng, 3).forEach((region) => {
+        queriesToTry.push(`${region} ${cleanRawQuery}`);
+    });
     if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
         queriesToTry.push(`원조 ${cleanRawQuery}`);
     }
@@ -1350,6 +1408,18 @@ async function geocodeAddressCandidates(query) {
     }
 }
 
+// Disables the search button while a search is running so repeated clicks/Enter presses can't stack
+// duplicate engine fan-outs on top of each other.
+function setMapSearchBusy(isBusy) {
+    const btn = document.getElementById("btn-map-search");
+    if (!btn) return;
+    btn.disabled = isBusy;
+    btn.style.opacity = isBusy ? "0.6" : "";
+    btn.style.cursor = isBusy ? "wait" : "";
+}
+
+let isMapSearchRunning = false;
+
 async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
@@ -1358,7 +1428,19 @@ async function handleInAppMapSearch() {
         showToast("검색어를 입력해 주세요 📍", "warning");
         return;
     }
+    if (isMapSearchRunning) return;
 
+    isMapSearchRunning = true;
+    setMapSearchBusy(true);
+    try {
+        await runInAppMapSearch(query);
+    } finally {
+        isMapSearchRunning = false;
+        setMapSearchBusy(false);
+    }
+}
+
+async function runInAppMapSearch(query) {
     // Invalidate any in-flight search so its late results can't overwrite this one
     const myGeneration = ++mapSearchGeneration;
     const isStale = () => myGeneration !== mapSearchGeneration;
@@ -1378,12 +1460,6 @@ async function handleInAppMapSearch() {
     showToast(`'${query}' 장소를 지도에서 탐색 중입니다... 📍`, "info");
 
     let combinedResults = [];
-
-    // Local Knowledge Base (Instant, reliable, pre-verified coordinates)
-    const kbResults = searchLocalKnowledgeBase(query);
-    if (kbResults.length > 0) {
-        combinedResults.push(...kbResults);
-    }
 
     // Detect user's current GPS location (max 1s timeout)
     const userLoc = await getUserCurrentLocation();
@@ -1455,7 +1531,7 @@ async function handleInAppMapSearch() {
     // 4. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
         try {
-            const freeResults = await searchNominatimFree(query);
+            const freeResults = await searchNominatimFree(query, userLat, userLng);
             if (Array.isArray(freeResults) && freeResults.length > 0) {
                 combinedResults.push(...freeResults);
             }
@@ -1522,7 +1598,7 @@ window.debugMapSearch = async function(query) {
         ["Naver Dynamic", () => searchNaverMapPlacesDynamic(query, userLat, userLng)],
         ["Naver LocalSearch", () => searchNaverLocalSearchAPI(query, userLat, userLng)],
         ["Naver Geocoder", () => searchNaverGeocoder(query, userLat, userLng)],
-        ["Nominatim", () => searchNominatimFree(query)],
+        ["Nominatim", () => searchNominatimFree(query, userLat, userLng)],
         ["Gemini AI", async () => cleanAndParseJSON(await callGeminiSearchAPI(query))]
     ];
 
@@ -1562,32 +1638,42 @@ window.debugMapSearch = async function(query) {
 };
 
 // OpenStreetMap Nominatim Free Search Helper (CORS-free, Key-free POI search)
-async function searchNominatimFree(query) {
-    // Nominatim asks clients to stay light; two variants raced beats five awaited in series.
-    const queriesToTry = [query, `${query} 대한민국`];
+async function searchNominatimFree(query, userLat, userLng) {
+    // Nominatim asks clients to stay light, so this stays at two concurrent requests: the bare query
+    // plus one region-qualified variant derived from the user's position (not a hardcoded city).
+    const nearestRegion = getNearbyRegionNames(userLat, userLng, 1)[0];
+    const queriesToTry = [query, `${nearestRegion} ${query}`];
 
-    try {
-        return await Promise.any(queriesToTry.map((qStr) => {
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&countrycodes=kr&limit=5`;
-            return fetchWithTimeout(url, { headers: { 'Accept-Language': 'ko' } }, 1500)
-                .then((res) => res.json())
-                .then((data) => {
-                    if (!Array.isArray(data) || data.length === 0) throw new Error("empty");
-                    return data.map(item => {
-                        const cleanTitle = (item.display_name || "").split(',')[0].trim();
-                        return {
-                            name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
-                            address: item.display_name,
-                            lat: parseFloat(item.lat),
-                            lng: parseFloat(item.lon),
-                            category: "Restaurant"
-                        };
-                    });
-                });
-        }));
-    } catch (e) {
-        return null;
+    const settled = await Promise.allSettled(queriesToTry.map((qStr) => {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&countrycodes=kr&limit=10`;
+        return fetchWithTimeout(url, { headers: { 'Accept-Language': 'ko' } }, 1500)
+            .then((res) => res.json());
+    }));
+
+    // Merge across variants instead of taking whichever answered first
+    const byKey = new Map();
+    for (const outcome of settled) {
+        if (outcome.status !== "fulfilled" || !Array.isArray(outcome.value)) continue;
+        for (const item of outcome.value) {
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lon);
+            if (isNaN(lat) || isNaN(lng)) continue;
+
+            const key = item.osm_id ? `${item.osm_type}_${item.osm_id}` : `${lat.toFixed(5)}_${lng.toFixed(5)}`;
+            if (byKey.has(key)) continue;
+
+            const cleanTitle = (item.display_name || "").split(',')[0].trim();
+            byKey.set(key, {
+                name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
+                address: item.display_name,
+                lat: lat,
+                lng: lng,
+                category: "Restaurant"
+            });
+        }
     }
+
+    return byKey.size > 0 ? Array.from(byKey.values()) : null;
 }
 
 // Enable Manual Map Pin Placement Mode when auto-search returns 0 items
@@ -3203,6 +3289,10 @@ async function saveToCloud() {
 
         // Save local DB to cloud room (including empty list when user clears/deletes places)
         const now = Date.now();
+        // The sync room is an unauthenticated Firebase path — anyone who knows the room id can read it.
+        // Public client keys (Naver Client ID, Kakao JS key) are safe to sync and are domain-restricted.
+        // Real secrets are not synced, and are explicitly nulled so PATCH deletes any copy already stored
+        // in the room by earlier builds. Enter those per-device in 설정 instead.
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
             memoryPhotos: JSON.stringify(customMemoryPhotos),
@@ -3210,9 +3300,9 @@ async function saveToCloud() {
             partnerBName: partnerBName,
             naverClientId: naverClientId,
             naverSearchId: naverSearchId,
-            naverSearchSecret: naverSearchSecret,
             kakaoApiKey: kakaoApiKey,
-            geminiApiKey: geminiApiKey,
+            naverSearchSecret: null,
+            geminiApiKey: null,
             timestamp: now
         };
         
@@ -3297,25 +3387,15 @@ async function loadFromCloud() {
                 if (el) el.value = naverSearchId;
             }
 
-            if (resData.naverSearchSecret && resData.naverSearchSecret !== naverSearchSecret) {
-                naverSearchSecret = resData.naverSearchSecret;
-                localStorage.setItem("aura_naver_search_secret", naverSearchSecret);
-                const el = document.getElementById("settings-naver-search-secret");
-                if (el) el.value = naverSearchSecret;
-            }
+            // naverSearchSecret / geminiApiKey are deliberately NOT restored from the room — see the
+            // saveToCloud payload. Secrets pulled from an unauthenticated path would re-plant themselves
+            // in localStorage on every device that opens the room.
 
             if (resData.kakaoApiKey && resData.kakaoApiKey !== kakaoApiKey) {
                 kakaoApiKey = resData.kakaoApiKey;
                 localStorage.setItem("aura_kakao_key", kakaoApiKey);
                 const el = document.getElementById("settings-kakao-api-key");
                 if (el) el.value = kakaoApiKey;
-            }
-
-            if (resData.geminiApiKey && resData.geminiApiKey !== geminiApiKey) {
-                geminiApiKey = resData.geminiApiKey;
-                localStorage.setItem("aura_gemini_key", geminiApiKey);
-                const el = document.getElementById("settings-gemini-key");
-                if (el) el.value = geminiApiKey;
             }
 
             if (resData.memoryPhotos) {
