@@ -51,6 +51,19 @@ let isDownloading = false;
 let defaultMapCoords = [37.5665, 126.9780]; // Seoul Central
 
 // 3. Document Loaded Initialization
+function openAddPlaceModal() {
+    const modal = document.getElementById("modal-place-add");
+    if (modal) modal.classList.add("active");
+}
+function closeAddPlaceModal() {
+    const modal = document.getElementById("modal-place-add");
+    if (modal) modal.classList.remove("active");
+    const form = document.getElementById("form-place-add");
+    if (form) form.reset();
+}
+window.openAddPlaceModal = openAddPlaceModal;
+window.closeAddPlaceModal = closeAddPlaceModal;
+
 document.addEventListener("DOMContentLoaded", async () => {
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
