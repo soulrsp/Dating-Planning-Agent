@@ -930,13 +930,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260728_v50"></script>
+    <script src="app.js?v=20260728_v100"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260728_v50').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260728_v100').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
