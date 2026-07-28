@@ -914,6 +914,19 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
+// Timeout wrapper helper for async promises
+function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`Timeout after ${ms}ms`));
+        }, ms);
+        promise.then(
+            (res) => { clearTimeout(timer); resolve(res); },
+            (err) => { clearTimeout(timer); reject(err); }
+        );
+    });
+}
+
 // Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
 // Obsolete proxy function removed for ultra-fast CORS-free performance
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
@@ -965,9 +978,10 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
             }
         ];
 
-        // Execute queries concurrently for ultra-fast response (<0.1s)
+        // Execute queries concurrently for ultra-fast response (<0.8s)
         const proxyGenerators = [
-            (target) => target // Direct fetch only (eliminates third-party proxy lag)
+            (target) => target,
+            (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
         ];
 
         const aggregatedResultsMap = new Map();
@@ -975,8 +989,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         // Helper function to fetch a single query safely and quickly
         const fetchSingleQuery = async (q) => {
             const targetUrls = [
-                `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`,
-                `https://naveropenapi.apigw.ntruss.com/map-place/v1/search?query=${encodeURIComponent(q)}`
+                `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`
             ];
 
             for (const targetUrl of targetUrls) {
@@ -985,7 +998,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                         try {
                             const fetchUrl = makeProxy(targetUrl);
                             const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 300); // 300ms ultra-fast fail-fast timeout
+                            const timeoutId = setTimeout(() => controller.abort(), 800); // 800ms fast timeout
                             
                             const response = await fetch(fetchUrl, { 
                                 method: 'GET',
@@ -1902,11 +1915,15 @@ function renderMapSearchResults(results, queryStr = "") {
             bounds.extend(marker.getPosition());
         });
         
-        if (results.length === 1) {
-            map.setCenter(new naver.maps.LatLng(results[0].lat, results[0].lng));
-            map.setZoom(16);
-        } else {
-            map.fitBounds(bounds);
+        try {
+            if (results.length === 1 && results[0] && !isNaN(results[0].lat) && !isNaN(results[0].lng)) {
+                map.setCenter(new naver.maps.LatLng(results[0].lat, results[0].lng));
+                map.setZoom(16);
+            } else if (bounds) {
+                map.fitBounds(bounds);
+            }
+        } catch (e) {
+            console.warn("[Map Bounds Error]", e);
         }
     } else {
         // Fallback rendering inside Leaflet
