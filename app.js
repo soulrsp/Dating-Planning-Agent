@@ -32,6 +32,12 @@ if (localStorage.getItem("aura_naver_search_secret") === "olG5ArjuqTMzfbXwQsy6OI
 }
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
+
+// Map Search Performance Layer: in-session result cache, dead-route memory, and stale-result cancellation
+const mapSearchResultCache = new Map(); // normalizedQuery -> { results, timestamp }
+const MAP_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+const deadRouteCache = new Set(); // "engine|proxyName" combos known to fail this session
+let mapSearchGeneration = 0; // bumped on every new search; stale async chains check this before rendering
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
@@ -496,83 +502,129 @@ function loadKakaoPlacesScript(appKey) {
     const script = document.createElement("script");
     script.id = "kakao-map-sdk-script";
     script.setAttribute("data-app-key", cleanKey);
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(cleanKey)}&libraries=services`;
+    // autoload=false is REQUIRED when the tag is injected dynamically: with the default autoload the
+    // SDK bootstraps itself as the script parses, and kakao.maps.load() can fire before the extra
+    // libraries (services) have finished downloading — leaving kakao.maps.services undefined.
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(cleanKey)}&libraries=services&autoload=false`;
     script.onload = () => {
-        if (window.kakao && window.kakao.maps) {
+        if (window.kakao && window.kakao.maps && typeof window.kakao.maps.load === "function") {
             window.kakao.maps.load(() => {
-                isKakaoPlacesActive = true;
-                console.log("[Map System] Kakao Places SDK successfully injected & ready.");
+                isKakaoPlacesActive = isKakaoSdkReady();
+                if (isKakaoPlacesActive) {
+                    console.log("[Map System] Kakao Places SDK successfully injected & ready.");
+                } else {
+                    console.warn("[Map System] Kakao SDK initialized but kakao.maps.services is still missing. Confirm the app key has 카카오맵 enabled and that 'services' is included in the libraries parameter.");
+                }
             });
+        } else {
+            console.warn("[Map System] Kakao SDK script loaded but window.kakao is undefined. This usually means the current domain is not registered in Kakao Developers (앱 설정 > 플랫폼 > Web > 사이트 도메인).");
         }
     };
     script.onerror = () => {
-        console.warn("[Map System] Kakao Places SDK loading failed.");
+        console.warn(`[Map System] Kakao Places SDK failed to load from ${script.src}. Verify the JavaScript key and that ${location.origin} is registered as a Web platform domain in Kakao Developers.`);
         isKakaoPlacesActive = false;
     };
     document.head.appendChild(script);
 }
 
-// Kakao Places Keyword Search Engine (Direct browser CORS-free POI search)
-function searchKakaoPlaces(query, userLat, userLng) {
+const isKakaoSdkReady = () => !!(window.kakao && window.kakao.maps && window.kakao.maps.services && window.kakao.maps.services.Places);
+
+// The SDK is injected asynchronously at startup, so a search fired right after page load would
+// otherwise skip Kakao entirely and silently fall through to the weaker engines.
+function waitForKakaoSdk(maxWaitMs = 1500) {
     return new Promise((resolve) => {
-        if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services || !window.kakao.maps.services.Places) {
-            resolve(null);
+        if (isKakaoSdkReady()) {
+            resolve(true);
             return;
         }
-
-        try {
-            const ps = new kakao.maps.services.Places();
-            const handleSearchResponse = (data, status) => {
-                if (status === kakao.maps.services.Status.OK && Array.isArray(data) && data.length > 0) {
-                    const results = data.map(item => {
-                        const lat = parseFloat(item.y);
-                        const lng = parseFloat(item.x);
-
-                        let cat = "Other";
-                        const catName = `${item.category_name || ""} ${item.category_group_name || ""}`;
-                        if (catName.includes("카페") || catName.includes("커피") || catName.includes("디저트") || catName.includes("베이커리")) cat = "Cafe";
-                        else if (catName.includes("음식점") || catName.includes("식당") || catName.includes("맛집") || catName.includes("푸드")) cat = "Restaurant";
-                        else if (catName.includes("주점") || catName.includes("술집") || catName.includes("바") || catName.includes("호프")) cat = "Bar";
-                        else if (catName.includes("공원") || catName.includes("관광") || catName.includes("명소")) cat = "Park";
-                        else if (catName.includes("문화") || catName.includes("미술관") || catName.includes("박물관") || catName.includes("전시")) cat = "Museum";
-
-                        return {
-                            name: item.place_name,
-                            address: item.road_address_name || item.address_name || "카카오 장소 검색",
-                            lat: lat,
-                            lng: lng,
-                            category: cat,
-                            phone: item.phone || "",
-                            url: item.place_url || ""
-                        };
-                    });
-                    resolve(results);
-                } else {
-                    resolve(null);
-                }
-            };
-
-            const searchOptions = {};
-            if (userLat && userLng) {
-                searchOptions.location = new kakao.maps.LatLng(userLat, userLng);
-                searchOptions.radius = 20000;
+        const startedAt = Date.now();
+        const poll = setInterval(() => {
+            if (isKakaoSdkReady()) {
+                clearInterval(poll);
+                resolve(true);
+            } else if (Date.now() - startedAt >= maxWaitMs) {
+                clearInterval(poll);
+                resolve(false);
             }
+        }, 100);
+    });
+}
 
+const KAKAO_PAGE_SIZE = 15; // Kakao's per-page maximum
+
+function runKakaoKeywordSearch(ps, query, options) {
+    return new Promise((resolve) => {
+        let settled = false;
+        const done = (value) => {
+            if (!settled) {
+                settled = true;
+                resolve(value);
+            }
+        };
+        const timer = setTimeout(() => done([]), 2500);
+        try {
             ps.keywordSearch(query, (data, status) => {
-                if (status === kakao.maps.services.Status.OK && data && data.length > 0) {
-                    handleSearchResponse(data, status);
-                } else {
-                    // Retry globally without location radius restriction
-                    ps.keywordSearch(query, (globalData, globalStatus) => {
-                        handleSearchResponse(globalData, globalStatus);
-                    });
-                }
-            }, searchOptions);
+                clearTimeout(timer);
+                done(status === kakao.maps.services.Status.OK && Array.isArray(data) ? data : []);
+            }, options);
         } catch (err) {
+            clearTimeout(timer);
             console.warn("[Kakao Places API Error]", err);
-            resolve(null);
+            done([]);
         }
     });
+}
+
+function mapKakaoPlaceItem(item) {
+    let cat = "Other";
+    const catName = `${item.category_name || ""} ${item.category_group_name || ""}`;
+    if (catName.includes("카페") || catName.includes("커피") || catName.includes("디저트") || catName.includes("베이커리")) cat = "Cafe";
+    else if (catName.includes("음식점") || catName.includes("식당") || catName.includes("맛집") || catName.includes("푸드")) cat = "Restaurant";
+    else if (catName.includes("주점") || catName.includes("술집") || catName.includes("바") || catName.includes("호프")) cat = "Bar";
+    else if (catName.includes("공원") || catName.includes("관광") || catName.includes("명소")) cat = "Park";
+    else if (catName.includes("문화") || catName.includes("미술관") || catName.includes("박물관") || catName.includes("전시")) cat = "Museum";
+
+    return {
+        name: item.place_name,
+        address: item.road_address_name || item.address_name || "카카오 장소 검색",
+        lat: parseFloat(item.y),
+        lng: parseFloat(item.x),
+        category: cat,
+        phone: item.phone || "",
+        url: item.place_url || ""
+    };
+}
+
+// Kakao Places Keyword Search Engine (Direct browser CORS-free POI search)
+async function searchKakaoPlaces(query, userLat, userLng) {
+    if (!(await waitForKakaoSdk())) return null;
+
+    const ps = new kakao.maps.services.Places();
+
+    // A nationwide pass is what actually surfaces every branch of a business. The old code only ran a
+    // 20km-radius search around the user and never widened it unless that returned exactly zero, so a
+    // single nearby hit suppressed every other location the keyword matches.
+    const searches = [runKakaoKeywordSearch(ps, query, { size: KAKAO_PAGE_SIZE })];
+    if (userLat && userLng) {
+        searches.push(runKakaoKeywordSearch(ps, query, {
+            size: KAKAO_PAGE_SIZE,
+            location: new kakao.maps.LatLng(userLat, userLng),
+            radius: 20000
+        }));
+    }
+
+    const batches = await Promise.all(searches);
+
+    const byId = new Map();
+    for (const batch of batches) {
+        for (const item of batch) {
+            const key = item.id || `${item.place_name}_${item.x}_${item.y}`;
+            if (!byId.has(key)) byId.set(key, item);
+        }
+    }
+
+    if (byId.size === 0) return null;
+    return Array.from(byId.values()).map(mapKakaoPlaceItem);
 }
 
 function initLeafletMap() {
@@ -896,10 +948,33 @@ function formatDistanceStr(km) {
     return `${km.toFixed(1)}km`;
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine with Multi-Proxy Fallback Loop
+// Shared fetch helper: per-request timeout + session-scoped dead-route memory (skips combos known to fail)
+function fetchWithTimeout(url, options = {}, timeoutMs = 1200, routeKey = null) {
+    if (routeKey && deadRouteCache.has(routeKey)) {
+        return Promise.reject(new Error("dead-route-skip"));
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal })
+        .then((res) => {
+            clearTimeout(timeoutId);
+            if (!res.ok) {
+                if (routeKey) deadRouteCache.add(routeKey);
+                throw new Error(`HTTP ${res.status}`);
+            }
+            return res;
+        })
+        .catch((err) => {
+            clearTimeout(timeoutId);
+            if (routeKey) deadRouteCache.add(routeKey);
+            throw err;
+        });
+}
+
+// Real-time Dynamic Naver Map POI & Business Search Engine (parallel race across query variants & proxies)
 async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
     const tryQueries = [query];
-    
+
     // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
     const words = query.trim().split(/\s+/);
     if (words.length > 1) {
@@ -908,240 +983,194 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
             tryQueries.push(`${words[0]} ${words[1]}`);
         }
     }
-    
+
     const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
     if (cleanBrand && !tryQueries.includes(cleanBrand)) {
         tryQueries.push(cleanBrand);
     }
 
     const proxyGenerators = [
-        (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-        (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+        ["allorigins", (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`],
+        ["corsproxy", (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`],
+        ["thingproxy", (target) => `https://thingproxy.freeboard.io/fetch/${target}`]
     ];
+    const centerLng = userLng || 127.388;
+    const centerLat = userLat || 36.438;
 
+    const attempts = [];
     for (const q of tryQueries) {
         const encodedQ = encodeURIComponent(q);
-        const centerLng = userLng || 127.388;
-        const centerLat = userLat || 36.438;
         const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
-
-        for (const makeProxy of proxyGenerators) {
-            try {
-                const proxyUrl = makeProxy(targetUrl);
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
-                
-                const response = await fetch(proxyUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
-
-                if (!response.ok) continue;
-                
-                const data = await response.json();
-                
-                let rawList = [];
-                if (data.result && data.result.place && data.result.place.list) {
-                    rawList = data.result.place.list;
-                } else if (data.place && data.place.list) {
-                    rawList = data.place.list;
-                }
-                
-                if (Array.isArray(rawList) && rawList.length > 0) {
-                    return rawList.map(item => {
-                        const lat = parseFloat(item.y);
-                        const lng = parseFloat(item.x);
-                        return {
-                            name: item.name || query,
+        for (const [proxyName, makeProxy] of proxyGenerators) {
+            const routeKey = `dynamic|${proxyName}`;
+            attempts.push(
+                fetchWithTimeout(makeProxy(targetUrl), {}, 1200, routeKey)
+                    .then((res) => res.json())
+                    .then((data) => {
+                        let rawList = [];
+                        if (data.result && data.result.place && data.result.place.list) {
+                            rawList = data.result.place.list;
+                        } else if (data.place && data.place.list) {
+                            rawList = data.place.list;
+                        }
+                        if (!Array.isArray(rawList) || rawList.length === 0) throw new Error("empty");
+                        return rawList.map(item => ({
+                            name: item.name || q,
                             address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                            lat: lat,
-                            lng: lng,
+                            lat: parseFloat(item.y),
+                            lng: parseFloat(item.x),
                             category: item.category || "Restaurant"
-                        };
-                    });
-                }
-            } catch (err) {
-                // Try next proxy candidate
-            }
+                        }));
+                    })
+            );
         }
     }
-    return null;
+
+    try {
+        return await Promise.any(attempts);
+    } catch (aggregateErr) {
+        return null;
+    }
 }
 
-// Ncloud Official 2-Step Recommended Workflow: Ncloud API Hub Local Search API -> Ncloud Geocoding API
-// Ref: https://api.ncloud-docs.com/docs/naver-api-hub-search-local & https://api.ncloud-docs.com/docs/application-maps-overview
+// Naver Open API Local Search.
+// Latency fix: the old 4-deep cartesian loop (query x url x header x proxy) awaited every combo in series.
+// Here each query variant races only its proxies (Promise.any), and all variants run concurrently —
+// but their items are still MERGED (Promise.allSettled), because query expansion is what gives this
+// engine its recall. Racing variants against each other would throw away most of the results.
 async function searchNaverLocalSearchAPI(query, userLat, userLng) {
     if (!naverSearchId) return null;
 
-    try {
-        // Generalizable Multi-Query Expansion Engine (works for "소바공방", "부원냉삼집", "홍칼국수", or any keyword)
-        const cleanRawQuery = query.trim();
-        const queriesToTry = [cleanRawQuery];
-
-        // Add region-aware search variations to guarantee local stores like "부원냉삼집 대전 관평동점" are retrieved
-        if (userLat && userLng) {
-            queriesToTry.push(`대전 ${cleanRawQuery}`);
-            queriesToTry.push(`유성 ${cleanRawQuery}`);
-            queriesToTry.push(`관평동 ${cleanRawQuery}`);
-        } else {
-            queriesToTry.push(`대전 ${cleanRawQuery}`);
-        }
-
-        if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
-            queriesToTry.push(`원조 ${cleanRawQuery}`);
-        }
-        if (!cleanRawQuery.includes("본점") && !cleanRawQuery.includes("점")) {
-            queriesToTry.push(`${cleanRawQuery} 본점`);
-        }
-
-        // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
-        const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim()) 
-            || localStorage.getItem("aura_naver_search_id") 
-            || naverSearchId 
-            || localStorage.getItem("aura_naver_client_id") 
-            || naverClientId;
-
-        const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim()) 
-            || localStorage.getItem("aura_naver_search_secret") 
-            || naverSearchSecret;
-
-        // Support both Ncloud API Gateway and Naver Open API Header Specifications
-        const headerOptions = [
-            {
-                'X-NCP-APIGW-API-KEY-ID': currentSearchId,
-                'X-NCP-APIGW-API-KEY': currentSearchSecret
-            },
-            {
-                'X-Naver-Client-Id': currentSearchId,
-                'X-Naver-Client-Secret': currentSearchSecret
-            }
-        ];
-
-        const proxyGenerators = [
-            (target) => target, // Direct fetch first
-            (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-            (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-            (target) => `https://thingproxy.freeboard.io/fetch/${target}`
-        ];
-
-        const aggregatedResultsMap = new Map();
-
-        for (const q of queriesToTry) {
-            const targetUrls = [
-                `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`,
-                `https://naverapihub.apigw.ntruss.com/search/v1/local.json?query=${encodeURIComponent(q)}&display=30`,
-                `https://naveropenapi.apigw.ntruss.com/debug/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`,
-                `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`
-            ];
-
-            let queryFetchedSuccess = false;
-
-            for (const targetUrl of targetUrls) {
-                if (queryFetchedSuccess) break;
-                for (const reqHeaders of headerOptions) {
-                    if (queryFetchedSuccess) break;
-                    for (const makeProxy of proxyGenerators) {
-                        try {
-                            const fetchUrl = makeProxy(targetUrl);
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 2500);
-                            
-                            const response = await fetch(fetchUrl, { 
-                                method: 'GET',
-                                headers: reqHeaders,
-                                signal: controller.signal 
-                            });
-                            clearTimeout(timeoutId);
-
-                            if (response.status === 401) continue;
-                            if (!response.ok) continue;
-                            
-                            const data = await response.json();
-                            const itemsList = (data && (data.items || data.places)) ? (data.items || data.places) : null;
-                            if (itemsList && Array.isArray(itemsList) && itemsList.length > 0) {
-                                queryFetchedSuccess = true;
-                                for (const item of itemsList) {
-                                    const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
-                                    const roadAddr = item.roadAddress || item.address || "";
-                                    
-                                    let lat = null;
-                                    let lng = null;
-
-                                    if (roadAddr && isNaverMapActive) {
-                                        const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
-                                        if (refined) {
-                                            lat = refined.lat;
-                                            lng = refined.lng;
-                                        }
-                                    }
-
-                                    if (!lat || !lng) {
-                                        const mx = parseFloat(item.mapx);
-                                        const my = parseFloat(item.mapy);
-                                        // Naver Search API mapx/mapy coordinate scaling is (10^7, i.e. 10 million)
-                                        if (mx > 100000000 && my > 10000000) {
-                                            lng = mx / 10000000.0;
-                                            lat = my / 10000000.0;
-                                        } else if (mx > 10000000 && my > 1000000) {
-                                            lng = mx / 1000000.0;
-                                            lat = my / 1000000.0;
-                                        }
-                                    }
-
-                                    let categoryType = "Restaurant";
-                                    const rawCategory = item.category || "";
-                                    if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) {
-                                        categoryType = "Cafe";
-                                    } else if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) {
-                                        categoryType = "Hotel";
-                                    } else if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) {
-                                        categoryType = "Bar";
-                                    } else if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) {
-                                        categoryType = "Activity";
-                                    }
-
-                                    if (lat && lng) {
-                                        const dedupeKey = `${cleanTitle}_${roadAddr}`;
-                                        if (!aggregatedResultsMap.has(dedupeKey)) {
-                                            aggregatedResultsMap.set(dedupeKey, {
-                                                name: cleanTitle,
-                                                address: roadAddr || "네이버 공식 장소",
-                                                lat: lat,
-                                                lng: lng,
-                                                category: categoryType
-                                            });
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        } catch (err) {
-                            // Try next proxy
-                        }
-                    }
-                }
-            }
-        }
-
-        if (aggregatedResultsMap.size > 0) {
-            return Array.from(aggregatedResultsMap.values());
-        }
-    } catch (err) {
-        console.warn("[Ncloud Local Search API Error]", err);
+    // Region/brand expansion — the main source of multi-result recall for bare business names
+    const cleanRawQuery = query.trim();
+    const queriesToTry = [cleanRawQuery];
+    if (userLat && userLng) {
+        queriesToTry.push(`대전 ${cleanRawQuery}`);
+        queriesToTry.push(`유성 ${cleanRawQuery}`);
+        queriesToTry.push(`관평동 ${cleanRawQuery}`);
+    } else {
+        queriesToTry.push(`대전 ${cleanRawQuery}`);
     }
-    return null;
+    if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
+        queriesToTry.push(`원조 ${cleanRawQuery}`);
+    }
+    if (!cleanRawQuery.includes("본점") && !cleanRawQuery.includes("점")) {
+        queriesToTry.push(`${cleanRawQuery} 본점`);
+    }
+
+    // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
+    const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim())
+        || localStorage.getItem("aura_naver_search_id")
+        || naverSearchId
+        || localStorage.getItem("aura_naver_client_id")
+        || naverClientId;
+
+    const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim())
+        || localStorage.getItem("aura_naver_search_secret")
+        || naverSearchSecret;
+
+    const headers = {
+        'X-Naver-Client-Id': currentSearchId,
+        'X-Naver-Client-Secret': currentSearchSecret
+    };
+
+    const proxyGenerators = [
+        ["direct", (target) => target],
+        ["corsproxy", (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`],
+        ["allorigins", (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`]
+    ];
+
+    const detectCategoryType = (rawCategory) => {
+        if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) return "Cafe";
+        if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) return "Hotel";
+        if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) return "Bar";
+        if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) return "Activity";
+        return "Restaurant";
+    };
+
+    // Per query variant: race the proxies, first usable response wins for THAT variant
+    const perQueryFetches = queriesToTry.map((q) => {
+        const targetUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`;
+        return Promise.any(proxyGenerators.map(([proxyName, makeProxy]) =>
+            fetchWithTimeout(makeProxy(targetUrl), { headers }, 1200, `localsearch|${proxyName}`)
+                .then((res) => res.json())
+                .then((data) => {
+                    const itemsList = (data && (data.items || data.places)) || null;
+                    if (!Array.isArray(itemsList) || itemsList.length === 0) throw new Error("empty");
+                    return itemsList;
+                })
+        ));
+    });
+
+    // Across variants: keep everything that came back
+    const settled = await Promise.allSettled(perQueryFetches);
+    const allItems = settled.filter(s => s.status === "fulfilled").flatMap(s => s.value);
+    if (allItems.length === 0) return null;
+
+    const aggregatedResultsMap = new Map();
+    const needsGeocode = [];
+
+    for (const item of allItems) {
+        const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
+        const roadAddr = item.roadAddress || item.address || "";
+        const dedupeKey = `${cleanTitle}_${roadAddr}`;
+        if (aggregatedResultsMap.has(dedupeKey) || needsGeocode.some(n => n.dedupeKey === dedupeKey)) continue;
+
+        // Naver Search API mapx/mapy coordinate scaling is (10^7, i.e. 10 million) and is already accurate,
+        // so it's tried first — geocoding every result item sequentially was the single biggest bottleneck.
+        let lat = null;
+        let lng = null;
+        const mx = parseFloat(item.mapx);
+        const my = parseFloat(item.mapy);
+        if (mx > 100000000 && my > 10000000) {
+            lng = mx / 10000000.0;
+            lat = my / 10000000.0;
+        } else if (mx > 10000000 && my > 1000000) {
+            lng = mx / 1000000.0;
+            lat = my / 1000000.0;
+        }
+
+        const entry = {
+            name: cleanTitle,
+            address: roadAddr || "네이버 공식 장소",
+            lat: lat,
+            lng: lng,
+            category: detectCategoryType(item.category || "")
+        };
+
+        if (lat && lng) {
+            aggregatedResultsMap.set(dedupeKey, entry);
+        } else if (roadAddr && isNaverMapActive) {
+            needsGeocode.push({ dedupeKey, roadAddr, entry });
+        }
+    }
+
+    // Only items the API gave no coordinates for, resolved in parallel and capped
+    if (needsGeocode.length > 0) {
+        await Promise.all(needsGeocode.slice(0, 8).map(async ({ dedupeKey, roadAddr, entry }) => {
+            const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
+            if (refined) {
+                entry.lat = refined.lat;
+                entry.lng = refined.lng;
+                aggregatedResultsMap.set(dedupeKey, entry);
+            }
+        }));
+    }
+
+    return aggregatedResultsMap.size > 0 ? Array.from(aggregatedResultsMap.values()) : null;
 }
 
 // Reset & Re-Fetch All Saved Wishlist & Visited Place Pins via Naver API Hub
 window.resetAllPlaceMapPins = async function() {
     showToast("위시리스트 및 다녀온 곳 장소 핀을 네이버 API Hub에서 다시 수진하여 최신화 중입니다... 🔄", "info");
     const places = await db.places.toArray();
+    const targets = places.filter(p => p.isDeleted !== 1 && p.isVisited !== -1);
     let updatedCount = 0;
-    
-    for (const place of places) {
-        if (place.isDeleted === 1 || place.isVisited === -1) continue;
+
+    const refreshOnePlace = async (place) => {
         const placeQuery = (place.name || "").trim();
         const addressQuery = (place.address || place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-        
+
         let newLat = null;
         let newLng = null;
         let newAddr = null;
@@ -1174,6 +1203,12 @@ window.resetAllPlaceMapPins = async function() {
             await db.places.update(place.id, payload);
             updatedCount++;
         }
+    };
+
+    // Refresh in small concurrent batches — sequential lookups made this scale linearly with saved places
+    const BATCH_SIZE = 4;
+    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        await Promise.all(targets.slice(i, i + BATCH_SIZE).map(refreshOnePlace));
     }
 
     await updateDashboardStats();
@@ -1216,7 +1251,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
                 done = true;
                 resolve(null);
             }
-        }, 3000);
+        }, 1200);
 
         try {
             naver.maps.Service.geocode({ query: cleanQuery }, (status, response) => {
@@ -1258,6 +1293,63 @@ function refineCoordinatesViaNaverGeocoder(address) {
 }
 
 // 6. In-App Map Real-Time Search Pipeline (Local KB → Naver Geocoder → Naver POI API → AI → Nominatim)
+// Shared road-address candidate extraction (previously duplicated as pipeline steps 1 and 5.5)
+// Handles inputs like "대전 유성구 문지동 엑스포로446번길 36 1층 소바공방" or "서울 중구 다산로 108 진남포면옥"
+function extractAddressCandidates(query) {
+    const noUnits = query.replace(/\s*\d+층/g, "")
+                         .replace(/\s*[B|b]?\d+호/g, "")
+                         .replace(/\s*지하\d+층?/g, "")
+                         .replace(/\s*지하/g, "")
+                         .trim();
+
+    const roadMatch = noUnits.match(/([가-힣A-Za-z0-9]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+    if (!roadMatch) return null;
+
+    const noDong = noUnits.replace(/[가-힣]+동\s+/g, "").trim();
+    const fullRoadNoDongMatch = noDong.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
+
+    let titleName = noUnits.replace(roadMatch[0], "").trim();
+    titleName = titleName.replace(/^[가-힣]+구\s+/, "").replace(/^[가-힣]+동\s+/, "").trim();
+    if (!titleName || titleName.length < 2) titleName = query.trim();
+
+    return {
+        titleName,
+        candidates: [
+            fullRoadNoDongMatch ? fullRoadNoDongMatch[1].trim() : null,
+            roadMatch[0].trim(),
+            noUnits,
+            noDong
+        ].filter(Boolean)
+    };
+}
+
+// Races the address candidates through the geocoder in parallel rather than awaiting each in turn
+async function geocodeAddressCandidates(query) {
+    if (!isNaverMapActive) return null;
+    const extracted = extractAddressCandidates(query);
+    if (!extracted) return null;
+
+    try {
+        const hit = await Promise.any(
+            extracted.candidates.map((cand) =>
+                refineCoordinatesViaNaverGeocoder(cand).then((refined) => {
+                    if (!refined) throw new Error("no-match");
+                    return { cand, refined };
+                })
+            )
+        );
+        return {
+            name: extracted.titleName,
+            address: hit.cand,
+            lat: hit.refined.lat,
+            lng: hit.refined.lng,
+            category: "Restaurant"
+        };
+    } catch (err) {
+        return null;
+    }
+}
+
 async function handleInAppMapSearch() {
     const inputEl = document.getElementById("map-search-query");
     if (!inputEl) return;
@@ -1266,185 +1358,101 @@ async function handleInAppMapSearch() {
         showToast("검색어를 입력해 주세요 📍", "warning");
         return;
     }
-    
+
+    // Invalidate any in-flight search so its late results can't overwrite this one
+    const myGeneration = ++mapSearchGeneration;
+    const isStale = () => myGeneration !== mapSearchGeneration;
+
     // Clear old search markers and panel
     clearSearchMarkers();
-    
-    showToast(`'${query}' 장소를 네이버 지도에서 탐색 중입니다... 📍`, "info");
-    
+
+    // Serve repeat searches straight from the in-session cache
+    const cacheKey = query.toLowerCase().replace(/\s+/g, " ");
+    const cached = mapSearchResultCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < MAP_SEARCH_CACHE_TTL_MS) {
+        renderMapSearchResults(cached.results);
+        showToast(`'${query}' 검색 결과 ${cached.results.length}건 (최근 검색 캐시) 📍`, "success");
+        return;
+    }
+
+    showToast(`'${query}' 장소를 지도에서 탐색 중입니다... 📍`, "info");
+
     let combinedResults = [];
 
-    // 1. Local Knowledge Base (Instant, reliable, pre-verified coordinates)
+    // Local Knowledge Base (Instant, reliable, pre-verified coordinates)
     const kbResults = searchLocalKnowledgeBase(query);
     if (kbResults.length > 0) {
         combinedResults.push(...kbResults);
     }
 
-    // 1. Detect user's current GPS location (max 1s timeout)
+    // Detect user's current GPS location (max 1s timeout)
     const userLoc = await getUserCurrentLocation();
+    if (isStale()) return;
     const userLat = userLoc ? userLoc.lat : null;
     const userLng = userLoc ? userLoc.lng : null;
 
-    // 1. TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
-    // Handles inputs like "대전 유성구 문지동 엑스포로446번길 36 1층 소바공방" or "서울 중구 다산로 108 진남포면옥"
-    if (isNaverMapActive) {
-        try {
-            const noUnits = query.replace(/\s*\d+층/g, "")
-                                 .replace(/\s*[B|b]?\d+호/g, "")
-                                 .replace(/\s*지하\d+층?/g, "")
-                                 .replace(/\s*지하/g, "")
-                                 .trim();
-            
-            const roadMatch = noUnits.match(/([가-힣A-Za-z0-9]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
-            if (roadMatch) {
-                const roadOnly = roadMatch[0].trim();
-                const noDong = noUnits.replace(/[가-힣]+동\s+/g, "").trim();
-                const fullRoadNoDongMatch = noDong.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
-                
-                const candidates = [
-                    fullRoadNoDongMatch ? fullRoadNoDongMatch[1].trim() : null,
-                    roadOnly,
-                    noUnits,
-                    noDong
-                ].filter(Boolean);
-
-                for (const cand of candidates) {
-                    const refined = await refineCoordinatesViaNaverGeocoder(cand);
-                    if (refined) {
-                        let titleName = noUnits.replace(roadMatch[0], "").trim();
-                        titleName = titleName.replace(/^[가-힣]+구\s+/, "").replace(/^[가-힣]+동\s+/, "").trim();
-                        if (!titleName || titleName.length < 2) titleName = query.trim();
-                        
-                        combinedResults.push({
-                            name: titleName,
-                            address: cand,
-                            lat: refined.lat,
-                            lng: refined.lng,
-                            category: "Restaurant"
-                        });
-                        break;
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("[Pure Address & Store Extraction Error]", err);
-        }
-    }
-
-    // 1. Real-time Naver Maps Dynamic Search API (Fastest & 100% Reliable Engine)
-    try {
-        const dynamicNaverPlaces = await searchNaverMapPlacesDynamic(query, userLat, userLng);
-        if (Array.isArray(dynamicNaverPlaces) && dynamicNaverPlaces.length > 0) {
-            combinedResults.push(...dynamicNaverPlaces);
-        }
-    } catch (err) {
-        console.warn("[Naver Dynamic Search]", err);
-    }
-
-    // 2. Naver Geocoder Engine (Instant & 100% General Region-Expanded POI & Building Search)
-    if (isNaverMapActive && combinedResults.length === 0) {
-        try {
-            const naverResults = await searchNaverGeocoder(query, userLat, userLng);
-            if (Array.isArray(naverResults) && naverResults.length > 0) {
-                combinedResults.push(...naverResults);
-            }
-        } catch (err) {
-            console.warn("[Naver Map Search Error]", err);
-        }
-    }
-
-    // 3. Naver Open Local Search API (Fast 800ms fallback)
+    // 1. All primary engines run CONCURRENTLY and their results are MERGED.
+    // Running them in sequence behind `length === 0` guards meant whichever engine answered first
+    // silently suppressed all the others — one Kakao hit would hide the dozens of matches the Naver
+    // engines find via query expansion. Wall-clock cost here is the slowest engine, not the sum.
     if (combinedResults.length === 0) {
-        try {
-            const localSearchPlaces = await searchNaverLocalSearchAPI(query, userLat, userLng);
-            if (Array.isArray(localSearchPlaces) && localSearchPlaces.length > 0) {
-                combinedResults.push(...localSearchPlaces);
-            }
-        } catch (err) {
-            console.warn("[Naver Local Search API Pipeline Error]", err);
+        const engines = [
+            ["Kakao Places", searchKakaoPlaces(query, userLat, userLng)],
+            ["Pure Address & Store Extraction", geocodeAddressCandidates(query).then(hit => hit ? [hit] : [])],
+            ["Naver Dynamic Search", searchNaverMapPlacesDynamic(query, userLat, userLng)],
+            ["Naver Local Search API", searchNaverLocalSearchAPI(query, userLat, userLng)]
+        ];
+        if (isNaverMapActive) {
+            engines.push(["Naver Geocoder", searchNaverGeocoder(query, userLat, userLng)]);
         }
+
+        // Every engine catches internally and resolves null on failure, so a rejected outcome is rare —
+        // per-engine counts are logged unconditionally, otherwise a silently-empty engine is invisible.
+        const engineStart = performance.now();
+        const settled = await Promise.allSettled(engines.map(([, p]) => p));
+        const report = {};
+        settled.forEach((outcome, i) => {
+            const engineName = engines[i][0];
+            if (outcome.status === "fulfilled") {
+                const got = Array.isArray(outcome.value) ? outcome.value.length : 0;
+                report[engineName] = got;
+                if (got > 0) combinedResults.push(...outcome.value);
+            } else {
+                report[engineName] = `THREW: ${outcome.reason && outcome.reason.message}`;
+            }
+        });
+        console.log(`[Map Search] '${query}' engines (${Math.round(performance.now() - engineStart)}ms)`, report);
+        if (isStale()) return;
     }
 
-    // 4. Kakao Places Keyword Search API (Instant POI lookup in South Korea)
-    if (combinedResults.length === 0) {
-        try {
-            const kakaoPlaces = await searchKakaoPlaces(query, userLat, userLng);
-            if (Array.isArray(kakaoPlaces) && kakaoPlaces.length > 0) {
-                combinedResults.push(...kakaoPlaces);
-            }
-        } catch (err) {
-            console.warn("[Kakao Places Search Error]", err);
-        }
-    }
-    
-    // 6. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
+    // 3. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
     if (geminiApiKey && combinedResults.length < 4) {
         try {
             const responseText = await callGeminiSearchAPI(query);
+            if (isStale()) return;
             const searchResults = cleanAndParseJSON(responseText);
             if (Array.isArray(searchResults) && searchResults.length > 0) {
-                // Refine each AI store address via Naver Official Geocoder for 100% exact building roof precision
-                for (const item of searchResults) {
-                    if (item.address && isNaverMapActive) {
+                // Refine AI-supplied addresses in parallel, and only where the AI gave no usable coordinates
+                const needsRefine = searchResults.filter(item => item.address && (!item.lat || !item.lng)).slice(0, 5);
+                if (isNaverMapActive && needsRefine.length > 0) {
+                    await Promise.all(needsRefine.map(async (item) => {
                         const refined = await refineCoordinatesViaNaverGeocoder(item.address);
                         if (refined) {
                             item.lat = refined.lat;
                             item.lng = refined.lng;
                         }
-                    }
+                    }));
                 }
                 combinedResults.push(...searchResults);
             }
+            console.log(`[Map Search] Gemini AI added ${Array.isArray(searchResults) ? searchResults.length : 0}건`);
         } catch (err) {
             console.warn("[Map Search] Gemini AI search failed:", err.message);
         }
-    }
-    
-    // 5.5. Pure Address Extraction & Direct Building Geocoding Fallback
-    if (combinedResults.length === 0 && isNaverMapActive) {
-        try {
-            const noUnits = query.replace(/\s*\d+층/g, "")
-                                 .replace(/\s*[B|b]?\d+호/g, "")
-                                 .replace(/\s*지하\d+층?/g, "")
-                                 .replace(/\s*지하/g, "")
-                                 .trim();
-            
-            const roadMatch = noUnits.match(/([가-힣A-Za-z0-9]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
-            if (roadMatch) {
-                const roadOnly = roadMatch[0].trim();
-                const noDong = noUnits.replace(/[가-힣]+동\s+/g, "").trim();
-                const fullRoadNoDongMatch = noDong.match(/([가-힣\s\d]+(?:로|길|번길)\s*\d+(?:-\d+)?)/);
-                
-                const candidates = [
-                    fullRoadNoDongMatch ? fullRoadNoDongMatch[1].trim() : null,
-                    roadOnly,
-                    noUnits,
-                    noDong
-                ].filter(Boolean);
-
-                for (const cand of candidates) {
-                    const refined = await refineCoordinatesViaNaverGeocoder(cand);
-                    if (refined) {
-                        let titleName = noUnits.replace(roadMatch[0], "").trim();
-                        if (!titleName || titleName.length < 2) titleName = query.trim();
-                        
-                        combinedResults.push({
-                            name: titleName,
-                            address: cand,
-                            lat: refined.lat,
-                            lng: refined.lng,
-                            category: "Restaurant"
-                        });
-                        break;
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("[Pure Address Fallback Error]", err);
-        }
+        if (isStale()) return;
     }
 
-    // 6. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
+    // 4. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
         try {
             const freeResults = await searchNominatimFree(query);
@@ -1454,8 +1462,9 @@ async function handleInAppMapSearch() {
         } catch (err) {
             console.warn("[OpenStreetMap Search Error]", err);
         }
+        if (isStale()) return;
     }
-    
+
     // Deduplicate combined results by name & location proximity
     const uniqueResults = [];
     const seenMap = new Set();
@@ -1465,16 +1474,16 @@ async function handleInAppMapSearch() {
         const latFixed = parseFloat(item.lat).toFixed(3);
         const lngFixed = parseFloat(item.lng).toFixed(3);
         const key = `${(item.name || "").trim()}_${latFixed}_${lngFixed}`;
-        
+
         if (!seenMap.has(key)) {
             seenMap.add(key);
-            
+
             if (userLoc && item.lat && item.lng) {
                 item.distanceKm = calculateDistanceKm(userLoc.lat, userLoc.lng, item.lat, item.lng);
             } else {
                 item.distanceKm = Infinity;
             }
-            
+
             uniqueResults.push(item);
         }
     }
@@ -1484,7 +1493,10 @@ async function handleInAppMapSearch() {
         uniqueResults.sort((a, b) => (a.distanceKm || Infinity) - (b.distanceKm || Infinity));
     }
 
+    if (isStale()) return;
+
     if (uniqueResults.length > 0) {
+        mapSearchResultCache.set(cacheKey, { results: uniqueResults, timestamp: Date.now() });
         renderMapSearchResults(uniqueResults);
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
@@ -1495,27 +1507,74 @@ async function handleInAppMapSearch() {
 }
 window.handleInAppMapSearch = handleInAppMapSearch;
 
+// Console diagnostic: runs every search engine independently, bypassing the result cache.
+// Usage from DevTools:  await debugMapSearch("민테크")
+window.debugMapSearch = async function(query) {
+    mapSearchResultCache.delete(query.toLowerCase().replace(/\s+/g, " "));
+
+    const userLoc = await getUserCurrentLocation();
+    const userLat = userLoc ? userLoc.lat : null;
+    const userLng = userLoc ? userLoc.lng : null;
+
+    const engines = [
+        ["Kakao Places", () => searchKakaoPlaces(query, userLat, userLng)],
+        ["주소추출 Geocode", () => geocodeAddressCandidates(query).then(h => h ? [h] : [])],
+        ["Naver Dynamic", () => searchNaverMapPlacesDynamic(query, userLat, userLng)],
+        ["Naver LocalSearch", () => searchNaverLocalSearchAPI(query, userLat, userLng)],
+        ["Naver Geocoder", () => searchNaverGeocoder(query, userLat, userLng)],
+        ["Nominatim", () => searchNominatimFree(query)],
+        ["Gemini AI", async () => cleanAndParseJSON(await callGeminiSearchAPI(query))]
+    ];
+
+    const rows = [];
+    for (const [name, run] of engines) {
+        const t0 = performance.now();
+        let count = 0;
+        let note = "";
+        try {
+            const out = await run();
+            count = Array.isArray(out) ? out.length : 0;
+            if (count > 0) note = out.slice(0, 3).map(r => r.name).join(" / ");
+            else if (out === null) note = "null 반환 (실패 또는 결과 없음)";
+        } catch (err) {
+            note = `예외: ${err && err.message}`;
+        }
+        rows.push({ 엔진: name, 결과: count, ms: Math.round(performance.now() - t0), 비고: note });
+    }
+
+    console.table(rows);
+    console.log("SDK 상태:", {
+        kakaoReady: !!(window.kakao && window.kakao.maps && window.kakao.maps.services),
+        kakaoScriptTag: !!document.getElementById("kakao-map-sdk-script"),
+        kakaoKey: kakaoApiKey ? `${kakaoApiKey.slice(0, 6)}...` : "없음",
+        naverReady: !!(window.naver && window.naver.maps && window.naver.maps.Service),
+        isNaverMapActive: isNaverMapActive,
+        naverClientId: naverClientId,
+        origin: location.origin,
+        serviceWorker: navigator.serviceWorker && navigator.serviceWorker.controller
+            ? navigator.serviceWorker.controller.scriptURL
+            : "없음(정상)",
+        geminiKey: geminiApiKey ? "설정됨" : "없음",
+        위치: userLoc || "미허용/실패",
+        deadRoutes: Array.from(deadRouteCache)
+    });
+    return rows;
+};
+
 // OpenStreetMap Nominatim Free Search Helper (CORS-free, Key-free POI search)
 async function searchNominatimFree(query) {
-    try {
-        const queriesToTry = [
-            query,
-            `${query} 대한민국`,
-            `대전 ${query}`,
-            `서울 ${query}`,
-            `세종 ${query}`
-        ];
+    // Nominatim asks clients to stay light; two variants raced beats five awaited in series.
+    const queriesToTry = [query, `${query} 대한민국`];
 
-        for (const qStr of queriesToTry) {
-            try {
-                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&countrycodes=kr&limit=5`;
-                const res = await fetch(url, { headers: { 'Accept-Language': 'ko' } });
-                if (!res.ok) continue;
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
+    try {
+        return await Promise.any(queriesToTry.map((qStr) => {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(qStr)}&countrycodes=kr&limit=5`;
+            return fetchWithTimeout(url, { headers: { 'Accept-Language': 'ko' } }, 1500)
+                .then((res) => res.json())
+                .then((data) => {
+                    if (!Array.isArray(data) || data.length === 0) throw new Error("empty");
                     return data.map(item => {
-                        const parts = (item.display_name || "").split(',');
-                        const cleanTitle = parts[0].trim();
+                        const cleanTitle = (item.display_name || "").split(',')[0].trim();
                         return {
                             name: query.length < 8 ? `${query} (${cleanTitle})` : cleanTitle,
                             address: item.display_name,
@@ -1524,20 +1583,18 @@ async function searchNominatimFree(query) {
                             category: "Restaurant"
                         };
                     });
-                }
-            } catch(e) {}
-        }
+                });
+        }));
     } catch (e) {
-        console.warn("[Map Search] Nominatim fetch error:", e);
+        return null;
     }
-    return null;
 }
 
 // Enable Manual Map Pin Placement Mode when auto-search returns 0 items
 window.enableManualMapPinMode = function(placeName) {
     showToast(`지도의 원하는 건물/위치를 직접 클릭하면 '${placeName}' 마커가 생성됩니다 📍`, "info");
     
-    if (isNaverMapActive && map) {
+    if (isNaverMapActive && map && window.naver && window.naver.maps) {
         const listener = naver.maps.Event.addListener(map, "click", async (e) => {
             naver.maps.Event.removeListener(listener);
             const lat = e.coord.lat();
@@ -1623,6 +1680,9 @@ function searchNaverGeocoder(query, userLat, userLng) {
             }
         }
 
+        // These variants are the recall engine for bare business names ("민테크" -> "대전 민테크", ...).
+        // They are all dispatched at once below and cut off by a single timer, so the list length costs
+        // essentially no wall-clock time — do not trim it to "reduce requests".
         const cityPrefixed = [
             `서울 ${cleanQ}`, `경기 ${cleanQ}`, `인천 ${cleanQ}`, `부산 ${cleanQ}`,
             `대구 ${cleanQ}`, `대전 ${cleanQ}`, `광주 ${cleanQ}`, `울산 ${cleanQ}`,
@@ -1658,7 +1718,8 @@ function searchNaverGeocoder(query, userLat, userLng) {
             }
         };
 
-        const timer = setTimeout(finish, 2800);
+        // Collection window for the parallel geocode fan-out — too short and slower variants get dropped
+        const timer = setTimeout(finish, 2200);
 
         // Auto category classifier helper
         const detectCategory = (title, addrStr) => {
@@ -1900,6 +1961,11 @@ function renderMapSearchResults(results) {
     }
 
     if (isNaverMapActive) {
+        // The result panel above is already rendered; if the Naver SDK never finished loading we skip
+        // the map markers rather than throwing (or falling through to the Leaflet path, which would
+        // run Leaflet calls against a Naver map instance).
+        if (!window.naver || !window.naver.maps) return;
+
         const bounds = new naver.maps.LatLngBounds();
         results.forEach((res, idx) => {
             const markerColor = "#FFB703"; // Yellow search markers
