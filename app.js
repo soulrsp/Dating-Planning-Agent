@@ -1296,11 +1296,12 @@ async function handleInAppMapSearch(queryParam) {
         }
     } catch (e) {}
 
-    // Start primary API searches INSTANTLY (Naver API Hub + Kakao Places + Naver SDK Geocoder)
+    // Start primary API searches INSTANTLY (Naver API Hub + Kakao Places + Naver SDK Geocoder + OpenStreetMap Free Engine)
     const primaryPromises = [
         searchNaverLocalSearchAPI(query, userLat, userLng),
         searchKakaoPlaces(query, userLat, userLng),
-        (window.naver && window.naver.maps && window.naver.maps.Service) ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null)
+        (window.naver && window.naver.maps && window.naver.maps.Service) ? searchNaverGeocoder(query, userLat, userLng) : Promise.resolve(null),
+        searchNominatimFree(query)
     ];
 
     // TOP PRIORITY: Pure Address & Compound Store Extraction (Instant 0.05s pinpoint building roof match!)
@@ -1704,9 +1705,9 @@ function searchNaverGeocoder(query, userLat, userLng) {
 // Dynamic Gemini Model Candidate List (Auto-fallback engine)
 const GEMINI_CANDIDATE_MODELS = [
     "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-exp"
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-pro",
+    "gemini-2.5-flash"
 ];
 
 // Core robust Gemini API Caller with automatic model fallback
