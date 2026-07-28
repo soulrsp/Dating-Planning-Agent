@@ -1028,12 +1028,14 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
                     for (const makeProxy of proxyGenerators) {
                         try {
                             const fetchUrl = makeProxy(targetUrl);
+                            const isProxy = fetchUrl !== targetUrl;
+                            const headersToUse = isProxy ? {} : reqHeaders; // Omit custom X-NCP headers when using public proxy to pass CORS preflight
                             const controller = new AbortController();
                             const timeoutId = setTimeout(() => controller.abort(), 800); // 800ms fast timeout
                             
                             const response = await fetch(fetchUrl, { 
                                 method: 'GET',
-                                headers: reqHeaders,
+                                headers: headersToUse,
                                 signal: controller.signal 
                             });
                             clearTimeout(timeoutId);
@@ -1739,8 +1741,8 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             if (!response.ok) {
                 const errJson = await response.json().catch(() => ({}));
                 const errMsg = errJson.error?.message || `HTTP ${response.status}`;
-                if (response.status === 404 || errMsg.includes("not found") || errMsg.includes("not supported")) {
-                    console.warn(`[Gemini API] Model ${modelName} not available (${errMsg}), trying next candidate...`);
+                if (response.status === 404 || response.status === 429 || errMsg.includes("not found") || errMsg.includes("Quota") || errMsg.includes("quota") || errMsg.includes("429")) {
+                    console.warn(`[Gemini API] Model ${modelName} rate limited/quota exceeded (${errMsg}), failing over to next candidate model...`);
                     lastError = new Error(errMsg);
                     continue;
                 }
@@ -1753,7 +1755,7 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             return text;
         } catch (err) {
             lastError = err;
-            if (err.message && (err.message.includes("not found") || err.message.includes("not supported") || err.message.includes("404"))) {
+            if (err.message && (err.message.includes("not found") || err.message.includes("not supported") || err.message.includes("404") || err.message.includes("Quota") || err.message.includes("quota") || err.message.includes("429"))) {
                 continue;
             }
             throw err;
