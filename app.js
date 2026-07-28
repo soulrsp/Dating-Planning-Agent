@@ -1085,6 +1085,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         // Helper function to fetch a single query safely and quickly
         const fetchSingleQuery = async (q) => {
             const targetUrls = [
+                `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30&X-NCP-APIGW-API-KEY-ID=${encodeURIComponent(currentSearchId)}&X-NCP-APIGW-API-KEY=${encodeURIComponent(currentSearchSecret)}`,
                 `https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(q)}&display=30`
             ];
 
