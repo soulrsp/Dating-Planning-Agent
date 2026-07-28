@@ -306,13 +306,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Visit logging modal logic
-    document.getElementById("btn-close-visit-modal").addEventListener("click", closeVisitModal);
-    document.getElementById("btn-cancel-visit-modal").addEventListener("click", closeVisitModal);
-    document.getElementById("form-visit-log").addEventListener("submit", handleVisitLogSubmit);
-    document.getElementById("visit-photo").addEventListener("change", handlePhotoUploadPreview);
+    // Visit logging modal logic (guarded with null checks)
+    const btnCloseVisit = document.getElementById("btn-close-visit-modal");
+    if (btnCloseVisit) btnCloseVisit.addEventListener("click", closeVisitModal);
+    const btnCancelVisit = document.getElementById("btn-cancel-visit-modal");
+    if (btnCancelVisit) btnCancelVisit.addEventListener("click", closeVisitModal);
+    const formVisitLog = document.getElementById("form-visit-log");
+    if (formVisitLog) formVisitLog.addEventListener("submit", handleVisitLogSubmit);
+    const visitPhoto = document.getElementById("visit-photo");
+    if (visitPhoto) visitPhoto.addEventListener("change", handlePhotoUploadPreview);
 
-    // In-app Map Direct Search logic
+    // In-app Map Direct Search logic (guarded with null checks)
     const btnMapSearch = document.getElementById("btn-map-search");
     if (btnMapSearch) {
         btnMapSearch.addEventListener("click", () => handleInAppMapSearch());
@@ -324,22 +328,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // AI Chatbot planner
-    document.getElementById("chat-input-form").addEventListener("submit", handleChatSubmit);
+    // AI Chatbot planner (guarded with null checks)
+    const chatForm = document.getElementById("chat-input-form");
+    if (chatForm) chatForm.addEventListener("submit", handleChatSubmit);
     document.querySelectorAll(".chip-btn").forEach(chip => {
         chip.addEventListener("click", () => {
             const prompt = chip.getAttribute("data-prompt");
-            document.getElementById("chat-user-input").value = prompt;
-            document.getElementById("chat-input-form").dispatchEvent(new Event("submit"));
+            const chatInput = document.getElementById("chat-user-input");
+            if (chatInput) chatInput.value = prompt;
+            if (chatForm) chatForm.dispatchEvent(new Event("submit"));
         });
     });
 
-    // Settings actions
-    document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
-    document.getElementById("btn-export-data").addEventListener("click", exportData);
-    document.getElementById("btn-import-data-trigger").addEventListener("click", () => document.getElementById("file-import-data").click());
-    document.getElementById("file-import-data").addEventListener("change", importData);
-    document.getElementById("btn-clear-data").addEventListener("click", clearAllData);
+    // Settings actions (guarded with null checks to prevent DOM initialization crash)
+    const btnSaveSet = document.getElementById("btn-save-settings");
+    if (btnSaveSet) btnSaveSet.addEventListener("click", saveSettings);
+    
+    const btnExpData = document.getElementById("btn-export-data");
+    if (btnExpData) btnExpData.addEventListener("click", exportData);
+    
+    const btnImpTrig = document.getElementById("btn-import-data-trigger");
+    if (btnImpTrig) btnImpTrig.addEventListener("click", () => {
+        const fileImp = document.getElementById("file-import-data");
+        if (fileImp) fileImp.click();
+    });
+    
+    const fileImpData = document.getElementById("file-import-data");
+    if (fileImpData) fileImpData.addEventListener("change", importData);
+    
+    const btnClearData = document.getElementById("btn-clear-data");
+    if (btnClearData) btnClearData.addEventListener("click", clearAllData);
 
     // Photo Lightbox modal logic
     document.querySelectorAll(".memory-item").forEach(item => {
