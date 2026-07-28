@@ -2145,11 +2145,15 @@ function handleMapUrlInput(e) {
 // 8. Modals Management (Quick Add & Visit Logging)
 function openAddPlaceModal() {
     document.getElementById("modal-place-add").classList.add("active");
+    // 기본값: 오늘 날짜, "미정" 체크 해제
+    applyDateFieldState("add", Date.now());
 }
 
 function closeAddPlaceModal() {
     document.getElementById("modal-place-add").classList.remove("active");
     document.getElementById("form-place-add").reset();
+    // form.reset()은 체크박스만 되돌리므로 날짜 입력의 disabled 상태를 직접 푼다
+    applyDateFieldState("add", Date.now());
 }
 
 async function handleAddPlaceSubmit(e) {
@@ -2163,7 +2167,11 @@ async function handleAddPlaceSubmit(e) {
     let lng = parseFloat(document.getElementById("add-place-lng").value);
     const notes = document.getElementById("add-place-notes").value.trim();
     const priority = document.getElementById("add-place-priority").value;
-    
+
+    const undatedAddEl = document.getElementById("add-place-undated");
+    const undatedAdd = undatedAddEl ? undatedAddEl.checked : false;
+    const pickedDate = readDateFieldValue("add");
+
     if (isNaN(lat) || isNaN(lng)) {
         lat = 37.5665 + (Math.random() - 0.5) * 0.03;
         lng = 126.9780 + (Math.random() - 0.5) * 0.03;
@@ -2185,7 +2193,9 @@ async function handleAddPlaceSubmit(e) {
             payer: "A",
             peopleCount: 2,
             photo: "",
-            createdAt: new Date().toISOString()
+            // 선택한 방문 예정일을 반영한다. "날짜 미정"이면 null, 아무것도 안 고르면 오늘.
+            // 예전엔 입력한 날짜를 무시하고 항상 오늘로 저장했다.
+            createdAt: undatedAdd ? null : (pickedDate || new Date().toISOString())
         });
 
         showToast(`${name} 장소가 저장되었습니다 🌸`, "success");
@@ -2388,10 +2398,9 @@ async function openEditPlaceModal(id) {
         }
     }
     
-    // Format date for <input type="date"> (YYYY-MM-DD)
-    const dateObj = new Date(place.createdAt);
-    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-    document.getElementById("edit-place-date").value = dateStr;
+    // 방문 예정일 + "날짜 미정" 체크박스 상태를 저장된 값에 맞춰 세팅
+    // 예전엔 값이 없을 때 오늘 날짜를 채워넣어 미정 상태를 표현할 수 없었다.
+    applyDateFieldState("edit", place.createdAt || place.date);
 
     // Clean address from notes
     const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -2452,6 +2461,12 @@ function closeEditPlaceModal() {
     if (modal) modal.classList.remove("active");
     const form = document.getElementById("form-edit-place");
     if (form) form.reset();
+    // form.reset()은 체크박스만 되돌리므로 날짜 입력의 disabled 상태를 직접 푼다
+    const editDateInput = document.getElementById("edit-place-date");
+    if (editDateInput) {
+        editDateInput.disabled = false;
+        editDateInput.style.opacity = "";
+    }
     const photoPreview = document.getElementById("edit-place-photo-preview");
     if (photoPreview) {
         photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
@@ -2513,7 +2528,6 @@ async function handleEditPlaceSubmit(e) {
     const catCustom = document.getElementById("edit-place-custom-category").value.trim();
     const category = (catSelect === "custom" && catCustom) ? catCustom : catSelect;
 
-    const dateVal = document.getElementById("edit-place-date").value;
     const addressVal = document.getElementById("edit-place-address").value.trim();
     
     const commentAEl = document.getElementById("edit-place-comment-a");
@@ -2522,7 +2536,9 @@ async function handleEditPlaceSubmit(e) {
     const place = await db.places.get(id);
     if (!place) return;
 
-    const updatedDate = dateVal ? new Date(dateVal).toISOString() : place.createdAt;
+    // "날짜 미정"이면 null로 확실히 지운다.
+    // 예전엔 기존 createdAt으로 되돌아가서 "미정"으로 바꿀 수가 없었다.
+    const updatedDate = readDateFieldValue("edit");
 
     let updatePayload = {
         name: name,
@@ -2597,6 +2613,81 @@ function parseAnyDate(val) {
     }
     
     return 0;
+}
+
+// ── 날짜 유틸 (모두 로컬 타임존 기준) ──
+// toISOString()은 UTC로 변환하므로 KST(+9)에서 로컬 자정이 전날로 밀린다.
+// 아래 함수들은 그 문제를 피하기 위해 항상 로컬 시각 기준으로 처리한다.
+
+// 저장된 값 → "YYYY-MM-DD" (달력 매칭 / input[type=date] 용). 날짜 없으면 "" (= 미정)
+function toLocalDateKey(val) {
+    const ms = parseAnyDate(val);
+    if (ms <= 0) return "";
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// "YYYY-MM-DD" (input[type=date] 값) → 저장용 ISO 문자열. 빈 값이면 null (= 미정)
+function dateInputToStored(dateVal) {
+    if (!dateVal) return null;
+    const [y, m, d] = String(dateVal).split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+}
+
+// 저장된 값 → 화면 표시용 문자열. 날짜 없으면 "" (= 미정)
+function formatDisplayDate(val) {
+    const ms = parseAnyDate(val);
+    if (ms <= 0) return "";
+    return new Date(ms).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+// 오늘 자정(로컬)의 timestamp
+function todayStartMs() {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t.getTime();
+}
+
+// 📅 "날짜 미정" 체크박스 (추가/수정 모달 공용)
+// index.html에 체크박스는 있었지만 이 함수가 정의돼 있지 않아 클릭해도 아무 동작도 하지 않았다.
+// mode: "add" | "edit"
+window.toggleUndatedDate = function(mode) {
+    const checkbox = document.getElementById(`${mode}-place-undated`);
+    const dateInput = document.getElementById(`${mode}-place-date`);
+    if (!checkbox || !dateInput) return;
+
+    if (checkbox.checked) {
+        // 되돌릴 때 쓰려고 기존 값 보관
+        if (dateInput.value) dateInput.dataset.prevValue = dateInput.value;
+        dateInput.value = "";
+        dateInput.disabled = true;   // disabled면 required 검증도 건너뛴다
+        dateInput.style.opacity = "0.45";
+    } else {
+        dateInput.disabled = false;
+        dateInput.style.opacity = "";
+        if (!dateInput.value) {
+            dateInput.value = dateInput.dataset.prevValue || toLocalDateKey(Date.now());
+        }
+    }
+};
+
+// 모달의 날짜 입력 + 미정 체크박스를 저장된 값에 맞춰 세팅
+function applyDateFieldState(mode, storedValue) {
+    const dateKey = toLocalDateKey(storedValue);
+    const checkbox = document.getElementById(`${mode}-place-undated`);
+    const dateInput = document.getElementById(`${mode}-place-date`);
+    if (dateInput) dateInput.value = dateKey;
+    if (checkbox) checkbox.checked = !dateKey;
+    window.toggleUndatedDate(mode);
+}
+
+// 모달에서 저장할 날짜 값을 읽는다. "미정"이면 null
+function readDateFieldValue(mode) {
+    const checkbox = document.getElementById(`${mode}-place-undated`);
+    if (checkbox && checkbox.checked) return null;
+    const dateInput = document.getElementById(`${mode}-place-date`);
+    return dateInputToStored(dateInput ? dateInput.value : "");
 }
 
 // Switch to Dashboard and pan/zoom Naver Love Map to place coordinates
@@ -2681,11 +2772,26 @@ async function renderPlacesList() {
         
         const allPlaces = await db.places.toArray();
         const wishlistPlaces = allPlaces.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1);
-        // Strict Descending Sort by creation date with ID tie-breaker
+        // 방문 예정일이 오늘과 가까운 순서로 정렬 (미정은 항상 맨 아래)
+        //  1) 다가오는 날짜: 오늘에 가까운 순 (오늘 → 내일 → ...)
+        //  2) 이미 지난 날짜: 그 뒤에, 최근에 지난 순
+        //  3) 날짜 미정: 맨 아래 (최근 등록순)
+        const nowMs = todayStartMs();
         wishlistPlaces.sort((a, b) => {
             const timeA = parseAnyDate(a.createdAt || a.date);
             const timeB = parseAnyDate(b.createdAt || b.date);
-            if (timeB !== timeA) return timeB - timeA;
+            const hasA = timeA > 0;
+            const hasB = timeB > 0;
+
+            if (!hasA && !hasB) return (b.id || 0) - (a.id || 0);
+            if (!hasA) return 1;
+            if (!hasB) return -1;
+
+            const upcomingA = timeA >= nowMs;
+            const upcomingB = timeB >= nowMs;
+            if (upcomingA !== upcomingB) return upcomingA ? -1 : 1;
+
+            if (timeA !== timeB) return upcomingA ? timeA - timeB : timeB - timeA;
             return (b.id || 0) - (a.id || 0);
         });
 
@@ -2708,12 +2814,13 @@ async function renderPlacesList() {
                 const card = document.createElement("div");
                 card.className = "place-card card";
                 card.style.position = "relative";
-                
-                // Date formatting using robust parser
-                const rawDate = place.createdAt || place.date;
-                const parsedMs = parseAnyDate(rawDate);
-                const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
-                
+
+                // 방문 예정일 (없으면 "미정"으로 표시)
+                const dateStr = formatDisplayDate(place.createdAt || place.date);
+                const dateHtml = dateStr
+                    ? dateStr
+                    : `<span style="color:var(--color-text-med); opacity:0.8; font-weight:600;">미정</span>`;
+
                 // Clean address
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
@@ -2729,7 +2836,7 @@ async function renderPlacesList() {
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateStr}</div>` : ''}
+                        <div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateHtml}</div>
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
                             <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
                             <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
@@ -2921,7 +3028,10 @@ async function updateDashboardStats() {
     if (expenseEl) expenseEl.textContent = formatCurrency(expenseSum);
     
     // D-Day update
-    const upcoming = places.filter(p => p.isVisited === 0).sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+    // 날짜 미정인 항목은 "다음 약속" 후보에서 제외 (new Date(null)이 1970년으로 잡히는 문제 방지)
+    const upcoming = places
+        .filter(p => p.isVisited === 0 && parseAnyDate(p.createdAt || p.date) > 0)
+        .sort((a, b) => parseAnyDate(a.createdAt || a.date) - parseAnyDate(b.createdAt || b.date))[0];
     if (upcoming) {
         document.getElementById("next-date-title").textContent = upcoming.name;
         document.getElementById("next-date-dday").textContent = "Wishlist";
@@ -4054,7 +4164,7 @@ async function renderCalendar() {
     const daysInMonth = new Date(currentCalendarYear, currentCalendarMonth + 1, 0).getDate();
     const prevMonthDays = new Date(currentCalendarYear, currentCalendarMonth, 0).getDate();
 
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = toLocalDateKey(Date.now());
 
     // 1. Fill previous month tail days
     for (let i = firstDay - 1; i >= 0; i--) {
@@ -4084,10 +4194,8 @@ async function renderCalendar() {
         // Match places with date & group by type (Visited vs Wishlist)
         const datePlaces = places.filter(p => {
             const pDate = p.createdAt || p.date;
-            const ms = parseAnyDate(pDate);
-            if (ms <= 0) return false;
-            const iso = new Date(ms).toISOString().split("T")[0];
-            return iso === fullDateStr;
+            // 로컬 기준으로 비교해야 KST에서 하루 밀리지 않는다
+            return toLocalDateKey(pDate) === fullDateStr;
         });
 
         const visitedPlaces = datePlaces.filter(p => p.isVisited === 1 || p.isVisited === "1" || p.isVisited === true || p.isVisited === "true");
@@ -4162,10 +4270,8 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
 
     const allDatePlaces = places.filter(p => {
         const pDate = p.createdAt || p.date;
-        const ms = parseAnyDate(pDate);
-        if (ms <= 0) return false;
-        const iso = new Date(ms).toISOString().split("T")[0];
-        return iso === dateStr;
+        // 로컬 기준으로 비교해야 KST에서 하루 밀리지 않는다
+        return toLocalDateKey(pDate) === dateStr;
     });
 
     const datePlaces = allDatePlaces.filter(p => {
@@ -4284,8 +4390,7 @@ async function renderGallery() {
         const card = document.createElement("div");
         card.className = "gallery-card";
 
-        const dateObj = new Date(p.createdAt);
-        const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+        const dateStr = formatDisplayDate(p.createdAt || p.date);
 
         const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
         const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -4360,8 +4465,7 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
 
     activePhotoIndex = Math.max(0, Math.min(initialIdx, activeGalleryPhotos.length - 1));
     
-    const dateObj = new Date(place.createdAt);
-    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+    const dateStr = formatDisplayDate(place.createdAt || place.date);
     
     activePlaceInfo = {
         id: place.id,
