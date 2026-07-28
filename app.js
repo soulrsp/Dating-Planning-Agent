@@ -1077,6 +1077,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         // Execute queries concurrently for ultra-fast response (<0.8s)
         const proxyGenerators = [
             (target) => target,
+            (target) => `https://proxy.cors.sh/${target}`,
             (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
         ];
 
