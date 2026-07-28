@@ -412,27 +412,6 @@
                             <span class="help-text">등록 시 전용 네이버 지도로 로드되며, 미입력 시 Leaflet 지도로 작동합니다.</span>
                         </div>
 
-                        <div class="form-group" style="margin-bottom:0.4rem;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label for="settings-naver-search-id" style="margin:0;">네이버 검색 API Key (선택)</label>
-                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('naver-search')">
-                                    ❓ 가이드 / 발급방법
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="form-group-row" style="margin-bottom:0.3rem;">
-                            <div class="form-group">
-                                <label for="settings-naver-search-id">Client ID</label>
-                                <input type="text" id="settings-naver-search-id" placeholder="developers.naver.com Client ID">
-                            </div>
-                            <div class="form-group">
-                                <label for="settings-naver-search-secret">Client Secret</label>
-                                <input type="password" id="settings-naver-search-secret" placeholder="Client Secret">
-                            </div>
-                        </div>
-                        <span class="help-text" style="margin-bottom:1rem; display:block;">developers.naver.com 전용 키이며, 미입력 시 네이버 지도 지오코더로 자동 작동합니다.</span>
-                        
                         <div class="form-group">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                 <label for="settings-kakao-api-key" style="margin:0;">카카오 장소 검색 API Key (JavaScript 키)</label>
@@ -930,13 +909,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260728_v310"></script>
+    <script src="app.js?v=20260728_v312"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260728_v310').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260728_v312').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

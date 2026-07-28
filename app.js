@@ -23,36 +23,34 @@ let currentPlacesFilter = "wishlist";
 
 // Couple Info & Settings (LocalStorage)
 //
-// Key handling policy:
-//   - naverClientId / kakaoApiKey are PUBLIC client-side keys. They are meant to ship in the page and
-//     are protected by the domain allowlist configured in the Ncloud / Kakao Developers consoles.
-//   - naverSearchSecret is a real SECRET. It must never be hardcoded here: this file is served to every
-//     visitor, and the CORS-proxy fallbacks forward request headers through third-party hosts.
-//     It is read from settings/localStorage only, and is best replaced by a server-side proxy entirely.
+// naverClientId / kakaoApiKey are PUBLIC client-side keys — they are meant to ship in the page and are
+// protected by the domain allowlist configured in the Ncloud / Kakao Developers consoles.
+// No real secret is stored client-side any more: the Naver Search API (which needed one) was removed
+// because its endpoints cannot be called from a browser at all. See docs in secrets/README.md.
 let geminiApiKey = localStorage.getItem("aura_gemini_key") || "";
 let naverClientId = localStorage.getItem("aura_naver_client_id") || "xaxinl85gc";
-let naverSearchId = localStorage.getItem("aura_naver_search_id") || "xaxinl85gc";
 
-// Earlier builds shipped this secret in the source AND force-wrote it into localStorage, so dropping
-// the hardcoded default is not enough — the leaked value has to be purged from browsers that ran them.
-// Only the known-leaked strings are removed; a secret the user typed in themselves is left alone.
+// Earlier builds hardcoded a Naver Search secret AND force-wrote it into localStorage. The Search API
+// is gone now, but the leaked value still has to be purged from browsers that ran those builds.
 const LEAKED_NAVER_SECRETS = [
     "oIG5ArjuqTMzfbXwQsy6OlWcORrWxX08x3fmuMbB",
     "olG5ArjuqTMzfbXwQsy6OIWcORrWxX08x3fmuMbB"
 ];
-if (LEAKED_NAVER_SECRETS.includes(localStorage.getItem("aura_naver_search_secret"))) {
+if (localStorage.getItem("aura_naver_search_secret") !== null) {
+    const wasLeaked = LEAKED_NAVER_SECRETS.includes(localStorage.getItem("aura_naver_search_secret"));
     localStorage.removeItem("aura_naver_search_secret");
-    console.warn("[Security] 유출된 네이버 시크릿이 localStorage에서 제거되었습니다. Ncloud 콘솔에서 키를 재발급하세요.");
+    localStorage.removeItem("aura_naver_search_id");
+    if (wasLeaked) {
+        console.warn("[Security] 유출된 네이버 시크릿을 localStorage에서 제거했습니다. Ncloud 콘솔에서 키를 재발급하세요.");
+    }
 }
 
-let naverSearchSecret = localStorage.getItem("aura_naver_search_secret") || "";
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 
-// Map Search Performance Layer: in-session result cache, dead-route memory, and stale-result cancellation
+// Map Search Performance Layer: in-session result cache and stale-result cancellation
 const mapSearchResultCache = new Map(); // normalizedQuery -> { results, timestamp }
 const MAP_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
-const deadRouteCache = new Set(); // "engine|proxyName" combos known to fail this session
 let mapSearchGeneration = 0; // bumped on every new search; stale async chains check this before rendering
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
@@ -81,10 +79,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
     document.getElementById("settings-naver-client-id").value = naverClientId;
-    const nSearchIdEl = document.getElementById("settings-naver-search-id");
-    if (nSearchIdEl) nSearchIdEl.value = naverSearchId;
-    const nSearchSecEl = document.getElementById("settings-naver-search-secret");
-    if (nSearchSecEl) nSearchSecEl.value = naverSearchSecret;
     const kakaoInput = document.getElementById("settings-kakao-api-key");
     if (kakaoInput) kakaoInput.value = kakaoApiKey;
     document.getElementById("settings-budget-limit").value = budgetLimit;
@@ -1010,217 +1004,24 @@ function formatDistanceStr(km) {
 }
 
 // Shared fetch helper: per-request timeout + session-scoped dead-route memory (skips combos known to fail)
-function fetchWithTimeout(url, options = {}, timeoutMs = 1200, routeKey = null) {
-    if (routeKey && deadRouteCache.has(routeKey)) {
-        return Promise.reject(new Error("dead-route-skip"));
-    }
+function fetchWithTimeout(url, options = {}, timeoutMs = 1200) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(url, { ...options, signal: controller.signal })
         .then((res) => {
             clearTimeout(timeoutId);
-            if (!res.ok) {
-                if (routeKey) deadRouteCache.add(routeKey);
-                throw new Error(`HTTP ${res.status}`);
-            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return res;
         })
         .catch((err) => {
             clearTimeout(timeoutId);
-            if (routeKey) deadRouteCache.add(routeKey);
             throw err;
         });
 }
 
-// Real-time Dynamic Naver Map POI & Business Search Engine (parallel race across query variants & proxies)
-async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
-    const tryQueries = [query];
-
-    // Generate fallback queries (e.g. "부원냉삼집 대전 관평동점" -> "부원냉삼집 대전", "부원냉삼집", "부원냉삼")
-    const words = query.trim().split(/\s+/);
-    if (words.length > 1) {
-        tryQueries.push(words[0]);
-        if (words.length > 2) {
-            tryQueries.push(`${words[0]} ${words[1]}`);
-        }
-    }
-
-    const cleanBrand = query.replace(/(대전|관평동|관평동점|유성구|구룡동점|점)$/g, "").trim();
-    if (cleanBrand && !tryQueries.includes(cleanBrand)) {
-        tryQueries.push(cleanBrand);
-    }
-
-    const proxyGenerators = [
-        ["allorigins", (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`],
-        ["corsproxy", (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`],
-        ["thingproxy", (target) => `https://thingproxy.freeboard.io/fetch/${target}`]
-    ];
-    const centerLng = userLng || 127.388;
-    const centerLat = userLat || 36.438;
-
-    const attempts = [];
-    for (const q of tryQueries) {
-        const encodedQ = encodeURIComponent(q);
-        const targetUrl = `https://map.naver.com/v5/api/search?caller=pcweb&query=${encodedQ}&type=all&searchCoord=${centerLng},${centerLat}&page=1&displayCount=12`;
-        for (const [proxyName, makeProxy] of proxyGenerators) {
-            const routeKey = `dynamic|${proxyName}`;
-            attempts.push(
-                fetchWithTimeout(makeProxy(targetUrl), {}, 1200, routeKey)
-                    .then((res) => res.json())
-                    .then((data) => {
-                        let rawList = [];
-                        if (data.result && data.result.place && data.result.place.list) {
-                            rawList = data.result.place.list;
-                        } else if (data.place && data.place.list) {
-                            rawList = data.place.list;
-                        }
-                        if (!Array.isArray(rawList) || rawList.length === 0) throw new Error("empty");
-                        return rawList.map(item => ({
-                            name: item.name || q,
-                            address: item.roadAddress || item.address || "네이버 지도 검색 장소",
-                            lat: parseFloat(item.y),
-                            lng: parseFloat(item.x),
-                            category: item.category || "Restaurant"
-                        }));
-                    })
-            );
-        }
-    }
-
-    try {
-        return await Promise.any(attempts);
-    } catch (aggregateErr) {
-        return null;
-    }
-}
-
-// Naver Open API Local Search.
-// Latency fix: the old 4-deep cartesian loop (query x url x header x proxy) awaited every combo in series.
-// Here each query variant races only its proxies (Promise.any), and all variants run concurrently —
-// but their items are still MERGED (Promise.allSettled), because query expansion is what gives this
-// engine its recall. Racing variants against each other would throw away most of the results.
-async function searchNaverLocalSearchAPI(query, userLat, userLng) {
-    if (!naverSearchId) return null;
-
-    // Region/brand expansion — the main source of multi-result recall for bare business names.
-    // Region names come from the user's position rather than being pinned to one city.
-    const cleanRawQuery = query.trim();
-    const queriesToTry = [cleanRawQuery];
-    getNearbyRegionNames(userLat, userLng, 3).forEach((region) => {
-        queriesToTry.push(`${region} ${cleanRawQuery}`);
-    });
-    if (!cleanRawQuery.startsWith("원조") && !cleanRawQuery.startsWith("명가") && !cleanRawQuery.startsWith("전통")) {
-        queriesToTry.push(`원조 ${cleanRawQuery}`);
-    }
-    if (!cleanRawQuery.includes("본점") && !cleanRawQuery.includes("점")) {
-        queriesToTry.push(`${cleanRawQuery} 본점`);
-    }
-
-    // Dynamically resolve Naver Search API Key & Secret from room settings / localStorage
-    const currentSearchId = (document.getElementById("settings-naver-search-id") && document.getElementById("settings-naver-search-id").value.trim())
-        || localStorage.getItem("aura_naver_search_id")
-        || naverSearchId
-        || localStorage.getItem("aura_naver_client_id")
-        || naverClientId;
-
-    const currentSearchSecret = (document.getElementById("settings-naver-search-secret") && document.getElementById("settings-naver-search-secret").value.trim())
-        || localStorage.getItem("aura_naver_search_secret")
-        || naverSearchSecret;
-
-    const headers = {
-        'X-Naver-Client-Id': currentSearchId,
-        'X-Naver-Client-Secret': currentSearchSecret
-    };
-
-    const proxyGenerators = [
-        ["direct", (target) => target],
-        ["corsproxy", (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`],
-        ["allorigins", (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`]
-    ];
-
-    const detectCategoryType = (rawCategory) => {
-        if (rawCategory.includes("카페") || rawCategory.includes("디저트") || rawCategory.includes("베이커리")) return "Cafe";
-        if (rawCategory.includes("숙박") || rawCategory.includes("호텔") || rawCategory.includes("펜션") || rawCategory.includes("모텔")) return "Hotel";
-        if (rawCategory.includes("주점") || rawCategory.includes("술집") || rawCategory.includes("와인바") || rawCategory.includes("칵테일") || rawCategory.includes("펍") || rawCategory.includes("포차")) return "Bar";
-        if (rawCategory.includes("문화") || rawCategory.includes("관광") || rawCategory.includes("공연") || rawCategory.includes("영화")) return "Activity";
-        return "Restaurant";
-    };
-
-    // Per query variant: race the proxies, first usable response wins for THAT variant
-    const perQueryFetches = queriesToTry.map((q) => {
-        const targetUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=30`;
-        return Promise.any(proxyGenerators.map(([proxyName, makeProxy]) =>
-            fetchWithTimeout(makeProxy(targetUrl), { headers }, 1200, `localsearch|${proxyName}`)
-                .then((res) => res.json())
-                .then((data) => {
-                    const itemsList = (data && (data.items || data.places)) || null;
-                    if (!Array.isArray(itemsList) || itemsList.length === 0) throw new Error("empty");
-                    return itemsList;
-                })
-        ));
-    });
-
-    // Across variants: keep everything that came back
-    const settled = await Promise.allSettled(perQueryFetches);
-    const allItems = settled.filter(s => s.status === "fulfilled").flatMap(s => s.value);
-    if (allItems.length === 0) return null;
-
-    const aggregatedResultsMap = new Map();
-    const needsGeocode = [];
-
-    for (const item of allItems) {
-        const cleanTitle = (item.title || item.name || "").replace(/<[^>]*>/g, "").trim();
-        const roadAddr = item.roadAddress || item.address || "";
-        const dedupeKey = `${cleanTitle}_${roadAddr}`;
-        if (aggregatedResultsMap.has(dedupeKey) || needsGeocode.some(n => n.dedupeKey === dedupeKey)) continue;
-
-        // Naver Search API mapx/mapy coordinate scaling is (10^7, i.e. 10 million) and is already accurate,
-        // so it's tried first — geocoding every result item sequentially was the single biggest bottleneck.
-        let lat = null;
-        let lng = null;
-        const mx = parseFloat(item.mapx);
-        const my = parseFloat(item.mapy);
-        if (mx > 100000000 && my > 10000000) {
-            lng = mx / 10000000.0;
-            lat = my / 10000000.0;
-        } else if (mx > 10000000 && my > 1000000) {
-            lng = mx / 1000000.0;
-            lat = my / 1000000.0;
-        }
-
-        const entry = {
-            name: cleanTitle,
-            address: roadAddr || "네이버 공식 장소",
-            lat: lat,
-            lng: lng,
-            category: detectCategoryType(item.category || "")
-        };
-
-        if (lat && lng) {
-            aggregatedResultsMap.set(dedupeKey, entry);
-        } else if (roadAddr && isNaverMapActive) {
-            needsGeocode.push({ dedupeKey, roadAddr, entry });
-        }
-    }
-
-    // Only items the API gave no coordinates for, resolved in parallel and capped
-    if (needsGeocode.length > 0) {
-        await Promise.all(needsGeocode.slice(0, 8).map(async ({ dedupeKey, roadAddr, entry }) => {
-            const refined = await refineCoordinatesViaNaverGeocoder(roadAddr);
-            if (refined) {
-                entry.lat = refined.lat;
-                entry.lng = refined.lng;
-                aggregatedResultsMap.set(dedupeKey, entry);
-            }
-        }));
-    }
-
-    return aggregatedResultsMap.size > 0 ? Array.from(aggregatedResultsMap.values()) : null;
-}
-
-// Reset & Re-Fetch All Saved Wishlist & Visited Place Pins via Naver API Hub
+// Reset & Re-Fetch All Saved Wishlist & Visited Place Pins
 window.resetAllPlaceMapPins = async function() {
-    showToast("위시리스트 및 다녀온 곳 장소 핀을 네이버 API Hub에서 다시 수진하여 최신화 중입니다... 🔄", "info");
+    showToast("위시리스트 및 다녀온 곳 장소 핀을 다시 조회하여 최신화 중입니다... 🔄", "info");
     const places = await db.places.toArray();
     const targets = places.filter(p => p.isDeleted !== 1 && p.isVisited !== -1);
     let updatedCount = 0;
@@ -1233,10 +1034,10 @@ window.resetAllPlaceMapPins = async function() {
         let newLng = null;
         let newAddr = null;
 
-        // 1. Try Ncloud NAVER API Hub Local Search API for the place name
+        // 1. Kakao Places lookup by name (browser-native, no proxy)
         if (placeQuery) {
             try {
-                const apiResults = await searchNaverLocalSearchAPI(placeQuery);
+                const apiResults = await searchKakaoPlaces(placeQuery, currentUserLat, currentUserLng);
                 if (Array.isArray(apiResults) && apiResults.length > 0) {
                     newLat = apiResults[0].lat;
                     newLng = apiResults[0].lng;
@@ -1245,7 +1046,7 @@ window.resetAllPlaceMapPins = async function() {
             } catch (e) {}
         }
 
-        // 2. Fallback to Ncloud Geocoder for address string if API Hub search didn't return coordinates
+        // 2. Fallback to Naver Geocoder for address string if the name lookup returned no coordinates
         if ((!newLat || !newLng) && addressQuery) {
             const refined = await refineCoordinatesViaNaverGeocoder(addressQuery);
             if (refined) {
@@ -1275,14 +1076,44 @@ window.resetAllPlaceMapPins = async function() {
     showToast(`저장된 위시리스트 & 다녀온 곳 핀 ${updatedCount}개를 네이버 API Hub 최신 위치로 100% 업데이트 완료했습니다! 📍✨`, "success");
 };
 
-// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with 3s safety timeout)
+// Naver's geocoding endpoint answers with no CORS header when the current origin is not registered as a
+// Web service URL for the Maps client id. Every call then fails identically, so once that is observed the
+// engine is switched off for the session — otherwise each search fires ~37 doomed cross-origin requests.
+let naverGeocoderErrorStreak = 0;
+let naverGeocoderDisabled = false;
+const NAVER_GEOCODER_ERROR_LIMIT = 5;
+
+function isNaverGeocoderUsable() {
+    if (naverGeocoderDisabled) return false;
+    return !!(isNaverMapActive && window.naver && window.naver.maps
+        && window.naver.maps.Service && window.naver.maps.Service.geocode);
+}
+
+// ZERO_RESULT is a normal "nothing matched" answer and must not count as a failure.
+function noteNaverGeocoderStatus(status) {
+    if (naverGeocoderDisabled) return;
+    if (status === naver.maps.Service.Status.ERROR) {
+        naverGeocoderErrorStreak++;
+        if (naverGeocoderErrorStreak >= NAVER_GEOCODER_ERROR_LIMIT) {
+            naverGeocoderDisabled = true;
+            console.warn(
+                `[Naver Geocoder] 연속 ${NAVER_GEOCODER_ERROR_LIMIT}회 실패하여 이번 세션 동안 비활성화합니다. ` +
+                `Ncloud 콘솔에서 Maps 키(${naverClientId})의 Web 서비스 URL에 ${location.origin} 을 등록하세요.`
+            );
+        }
+    } else {
+        naverGeocoderErrorStreak = 0;
+    }
+}
+
+// Refine coordinates using Naver Geocoder (returns precise building-level lat/lng with a safety timeout)
 function refineCoordinatesViaNaverGeocoder(address) {
     return new Promise((resolve) => {
         if (!address || typeof address !== 'string') {
             resolve(null);
             return;
         }
-        if (!window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
+        if (!isNaverGeocoderUsable()) {
             resolve(null);
             return;
         }
@@ -1313,6 +1144,7 @@ function refineCoordinatesViaNaverGeocoder(address) {
 
         try {
             naver.maps.Service.geocode({ query: cleanQuery }, (status, response) => {
+                noteNaverGeocoderStatus(status);
                 if (!done) {
                     done = true;
                     clearTimeout(timer);
@@ -1326,8 +1158,9 @@ function refineCoordinatesViaNaverGeocoder(address) {
                         }
                     }
                     // Fallback to raw address query
-                    if (cleanQuery !== address) {
+                    if (cleanQuery !== address && isNaverGeocoderUsable()) {
                         naver.maps.Service.geocode({ query: address }, (status2, response2) => {
+                            noteNaverGeocoderStatus(status2);
                             if (status2 === naver.maps.Service.Status.OK && response2.v2 && response2.v2.addresses && response2.v2.addresses.length > 0) {
                                 const addr2 = response2.v2.addresses[0];
                                 resolve({ lat: parseFloat(addr2.y), lng: parseFloat(addr2.x) });
@@ -1469,14 +1302,11 @@ async function runInAppMapSearch(query) {
 
     // 1. All primary engines run CONCURRENTLY and their results are MERGED.
     // Running them in sequence behind `length === 0` guards meant whichever engine answered first
-    // silently suppressed all the others — one Kakao hit would hide the dozens of matches the Naver
-    // engines find via query expansion. Wall-clock cost here is the slowest engine, not the sum.
+    // silently suppressed all the others. Wall-clock cost here is the slowest engine, not the sum.
     if (combinedResults.length === 0) {
         const engines = [
             ["Kakao Places", searchKakaoPlaces(query, userLat, userLng)],
-            ["Pure Address & Store Extraction", geocodeAddressCandidates(query).then(hit => hit ? [hit] : [])],
-            ["Naver Dynamic Search", searchNaverMapPlacesDynamic(query, userLat, userLng)],
-            ["Naver Local Search API", searchNaverLocalSearchAPI(query, userLat, userLng)]
+            ["Pure Address & Store Extraction", geocodeAddressCandidates(query).then(hit => hit ? [hit] : [])]
         ];
         if (isNaverMapActive) {
             engines.push(["Naver Geocoder", searchNaverGeocoder(query, userLat, userLng)]);
@@ -1595,8 +1425,6 @@ window.debugMapSearch = async function(query) {
     const engines = [
         ["Kakao Places", () => searchKakaoPlaces(query, userLat, userLng)],
         ["주소추출 Geocode", () => geocodeAddressCandidates(query).then(h => h ? [h] : [])],
-        ["Naver Dynamic", () => searchNaverMapPlacesDynamic(query, userLat, userLng)],
-        ["Naver LocalSearch", () => searchNaverLocalSearchAPI(query, userLat, userLng)],
         ["Naver Geocoder", () => searchNaverGeocoder(query, userLat, userLng)],
         ["Nominatim", () => searchNominatimFree(query, userLat, userLng)],
         ["Gemini AI", async () => cleanAndParseJSON(await callGeminiSearchAPI(query))]
@@ -1632,7 +1460,6 @@ window.debugMapSearch = async function(query) {
             : "없음(정상)",
         geminiKey: geminiApiKey ? "설정됨" : "없음",
         위치: userLoc || "미허용/실패",
-        deadRoutes: Array.from(deadRouteCache)
     });
     return rows;
 };
@@ -1724,12 +1551,11 @@ function createManualPin(placeName, address, lat, lng) {
 // Naver Native Geocoder Promise Wrapper (Supports address, building, apartment complex, store & restaurant lookup)
 function searchNaverGeocoder(query, userLat, userLng) {
     return new Promise((resolve) => {
-        if (!isNaverMapActive || !window.naver || !window.naver.maps || !window.naver.maps.Service || !window.naver.maps.Service.geocode) {
-            console.warn("[Naver Map] Geocoder submodule unavailable.");
+        if (!isNaverGeocoderUsable()) {
             resolve(null);
             return;
         }
-        
+
         const cleanQ = query.trim();
         const queriesToTry = [cleanQ];
 
@@ -1826,6 +1652,7 @@ function searchNaverGeocoder(query, userLat, userLng) {
 
             naver.maps.Service.geocode(geocodeOptions, (status, response) => {
                 completed++;
+                noteNaverGeocoderStatus(status);
                 if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.addresses && response.v2.addresses.length > 0) {
                     response.v2.addresses.forEach((addr) => {
                         const lat = parseFloat(addr.y);
@@ -3180,22 +3007,6 @@ window.openApiGuideModal = function(type) {
             <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
                 💡 무료 티어로 일 수천 건 이상 사용 가능하며 무제한 데이트 코스를 추천받을 수 있습니다.
             </div>`;
-    } else if (type === 'naver-search') {
-        titleEl.innerHTML = `🔑 네이버 검색 API Key 발급 가이드`;
-        bodyEl.innerHTML = `
-            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
-                <li style="margin-bottom:0.6rem;"><strong>네이버 개발자 센터 접속</strong><br>
-                <a href="https://developers.naver.com" target="_blank" style="color:var(--color-primary); text-decoration:underline;">developers.naver.com</a> 접속 후 네이버 아이디로 로그인합니다.</li>
-                <li style="margin-bottom:0.6rem;"><strong>애플리케이션 등록</strong><br>
-                [Application] ➔ [애플리케이션 등록] 클릭 ➔ 앱 이름 입력 (예: AURA) ➔ 사용 API에서 <strong>"검색" (지역)</strong> 체크</li>
-                <li style="margin-bottom:0.6rem;"><strong>WEB 환경 설정</strong><br>
-                서비스 환경으로 'WEB' 선택 후 URL에 <code>http://localhost</code> 또는 본인의 접속 주소 입력</li>
-                <li style="margin-bottom:0.6rem;"><strong>Client ID & Secret 복사</strong><br>
-                [내 애플리케이션]에서 생성된 <strong>Client ID</strong>와 <strong>Client Secret</strong>을 복사하여 아래 입력란에 각각 붙여넣기 하세요!</li>
-            </ol>
-            <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
-                💡 네이버 공식 상권 DB 검색 연동으로 전국의 매장/가게/카페 이름 검색 정확도가 100% 극대화됩니다!
-            </div>`;
     } else {
         titleEl.innerHTML = `🔑 네이버 지도 Client ID 발급 가이드`;
         bodyEl.innerHTML = `
@@ -3299,8 +3110,8 @@ async function saveToCloud() {
             partnerAName: partnerAName,
             partnerBName: partnerBName,
             naverClientId: naverClientId,
-            naverSearchId: naverSearchId,
             kakaoApiKey: kakaoApiKey,
+            naverSearchId: null,
             naverSearchSecret: null,
             geminiApiKey: null,
             timestamp: now
@@ -3378,13 +3189,6 @@ async function loadFromCloud() {
                 if (naverClientId) {
                     loadNaverMapScript(naverClientId);
                 }
-            }
-
-            if (resData.naverSearchId && resData.naverSearchId !== naverSearchId) {
-                naverSearchId = resData.naverSearchId;
-                localStorage.setItem("aura_naver_search_id", naverSearchId);
-                const el = document.getElementById("settings-naver-search-id");
-                if (el) el.value = naverSearchId;
             }
 
             // naverSearchSecret / geminiApiKey are deliberately NOT restored from the room — see the
@@ -3837,10 +3641,6 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
 async function saveSettings() {
     const apiKeyVal = document.getElementById("settings-gemini-key").value.trim();
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
-    const nSearchIdInput = document.getElementById("settings-naver-search-id");
-    const naverSearchIdVal = nSearchIdInput ? nSearchIdInput.value.trim() : naverSearchId;
-    const nSearchSecInput = document.getElementById("settings-naver-search-secret");
-    const naverSearchSecVal = nSearchSecInput ? nSearchSecInput.value.trim() : naverSearchSecret;
     const kakaoInputEl = document.getElementById("settings-kakao-api-key");
     const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
     const limitVal = parseInt(document.getElementById("settings-budget-limit").value) || 500000;
@@ -3851,8 +3651,6 @@ async function saveSettings() {
     
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
-    localStorage.setItem("aura_naver_search_id", naverSearchIdVal);
-    localStorage.setItem("aura_naver_search_secret", naverSearchSecVal);
     localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
     localStorage.setItem("aura_budget_limit", limitVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
@@ -3862,8 +3660,6 @@ async function saveSettings() {
     
     geminiApiKey = apiKeyVal;
     naverClientId = naverClientIdVal;
-    naverSearchId = naverSearchIdVal;
-    naverSearchSecret = naverSearchSecVal;
     kakaoApiKey = kakaoApiKeyVal;
     budgetLimit = limitVal;
     partnerAName = partnerAVal;
