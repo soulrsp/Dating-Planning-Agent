@@ -914,13 +914,27 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260724_v7"></script>
+    <script src="app.js?v=20260728_v10"></script>
 
-    <!-- Service Worker Registration for PWA Mobile App Support -->
+    <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    for (let registration of registrations) {
+                        registration.update();
+                    }
+                });
+                if (window.caches) {
+                    caches.keys().then(keys => {
+                        keys.forEach(key => {
+                            if (key.includes('v7') || key.includes('20260724')) {
+                                caches.delete(key);
+                            }
+                        });
+                    });
+                }
+                navigator.serviceWorker.register('./sw.js?v=20260728_v10').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
