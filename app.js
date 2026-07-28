@@ -853,7 +853,7 @@ async function searchNaverMapPlacesDynamic(query, userLat, userLng) {
 
     const proxyGenerators = [
    //     (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-   //     (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+        (target) => `https://thingproxy.freeboard.io/fetch/${target}`
     ];
 
     for (const q of tryQueries) {
@@ -940,7 +940,7 @@ async function searchNaverLocalSearchAPI(query, userLat, userLng) {
         const proxyGenerators = [
             (target) => target, // Direct fetch first
      //       (target) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
-     //       (target) => `https://thingproxy.freeboard.io/fetch/${target}`
+            (target) => `https://thingproxy.freeboard.io/fetch/${target}`
         ];
 
         for (const targetUrl of targetUrls) {
