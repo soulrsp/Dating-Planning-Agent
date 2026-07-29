@@ -55,7 +55,7 @@ let mapSearchGeneration = 0; // bumped on every new search; stale async chains c
 let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
-let syncRoomId = localStorage.getItem("aura_sync_room_id") || "77";
+let syncRoomId = localStorage.getItem("aura_sync_room_id") || "0";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
 // Cloud Sync Engine variables
@@ -109,6 +109,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         localStorage.setItem("aura_partner_b_name", "SA");
         document.getElementById("settings-partner-a-name").value = "SH";
         document.getElementById("settings-partner-b-name").value = "SA";
+    }
+
+    // Room "77" ships with pinned map keys so anyone opening ?room=77 works immediately without a
+    // trip to 설정. Checked against raw localStorage (not the in-memory var, which already carries
+    // its own global fallback) so this only fills in when nothing was explicitly configured — it
+    // won't clobber a deliberately customized key, and self-heals if the stored key was ever blanked.
+    const ROOM_DEFAULT_KEYS = {
+        "77": { naverClientId: "stouz9nm0e", kakaoApiKey: "132caa45ef567c45aca49b350fc0178f" }
+    };
+    const roomDefaultKeys = ROOM_DEFAULT_KEYS[syncRoomId];
+    if (roomDefaultKeys) {
+        if (!localStorage.getItem("aura_naver_client_id")) {
+            naverClientId = roomDefaultKeys.naverClientId;
+            localStorage.setItem("aura_naver_client_id", naverClientId);
+            document.getElementById("settings-naver-client-id").value = naverClientId;
+        }
+        if (!localStorage.getItem("aura_kakao_key")) {
+            kakaoApiKey = roomDefaultKeys.kakaoApiKey;
+            localStorage.setItem("aura_kakao_key", kakaoApiKey);
+            if (kakaoInput) kakaoInput.value = kakaoApiKey;
+        }
     }
 
     updatePartnerNamesUI();
