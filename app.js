@@ -2033,9 +2033,15 @@ window.saveMapSearchResult = async function(encoded) {
         }
 
         const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
-        const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
+        // This add always stamps today's date below, so "duplicate" only means an active (non-
+        // tombstoned) entry for this place on the SAME day — a different day is a separate visit
+        // plan and should be allowed, e.g. planning to go to the same cafe again next month.
+        const todayKey = toLocalDateKey(new Date().toISOString());
+        const existing = await db.places.where("name").equalsIgnoreCase(data.name)
+            .and(p => p.isDeleted !== 1 && p.isVisited !== -1 && toLocalDateKey(p.createdAt || p.date) === todayKey)
+            .first();
         if (existing) {
-            showToast(`'${data.name}'은(는) 이미 위시리스트에 존재합니다! 💖`, "info");
+            showToast(`'${data.name}'은(는) 이미 오늘 날짜로 위시리스트에 존재합니다! 💖`, "info");
             clearSearchMarkers();
             return;
         }
@@ -2087,7 +2093,10 @@ window.saveMapSearchResultVisited = async function(encoded) {
         }
 
         const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
-        const existing = await db.places.where("name").equalsIgnoreCase(data.name).first();
+        // Deleted places are kept as tombstones (isDeleted:1), not removed — exclude them here so a
+        // re-added place after deletion isn't mistaken for an existing wishlist/visited entry.
+        const existing = await db.places.where("name").equalsIgnoreCase(data.name)
+            .and(p => p.isDeleted !== 1 && p.isVisited !== -1).first();
         if (existing) {
             if (existing.isVisited === 1) {
                 showToast(`'${data.name}'은(는) 이미 다녀온 곳에 등록되어 있습니다! 📸`, "info");
@@ -4672,6 +4681,14 @@ async function renderGallery() {
     const galleryPlaces = places.filter(p => {
         const photos = p.photos || (p.photo ? [p.photo] : []);
         return photos.length > 0;
+    });
+
+    // 가장 최근 항목이 맨 위로 (방문일 기준, 같으면 최근 등록순)
+    galleryPlaces.sort((a, b) => {
+        const timeA = parseAnyDate(a.createdAt || a.date);
+        const timeB = parseAnyDate(b.createdAt || b.date);
+        if (timeB !== timeA) return timeB - timeA;
+        return (b.id || 0) - (a.id || 0);
     });
 
     let totalPhotoCount = 0;
