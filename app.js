@@ -67,6 +67,7 @@ function getFirebaseDbUrl() {
 let lastSyncedDataString = "";
 let lastSyncedTimestamp = 0;
 let localMutationTimestamp = 0;
+let saveRetryTimeoutId = null;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
 let isUploading = false;
@@ -2487,7 +2488,7 @@ window.deletePlaceFromEditModal = async function() {
         return;
     }
 
-    if (!confirm(`'${place.name}' 장소 전체를 삭제하시겠습니까?\n\n이 장소의 모든 사진과 기록이 함께 삭제됩니다.`)) return;
+    if (!(await showConfirmModal(`'${place.name}' 장소 전체를 삭제하시겠습니까?\n\n이 장소의 모든 사진과 기록이 함께 삭제됩니다.`))) return;
 
     await db.places.update(placeId, { isDeleted: 1 });
     closeEditPlaceModal();
@@ -2981,7 +2982,7 @@ async function renderPlacesList() {
 }
 
 async function deletePlace(id, name) {
-    if (!confirm(`'${name}' 장소를 영구히 삭제하시겠습니까?`)) return;
+    if (!(await showConfirmModal(`'${name}' 장소를 영구히 삭제하시겠습니까?`))) return;
     
     try {
         // Tombstone update (Soft delete flag to guarantee multi-device sync deletion)
@@ -2990,6 +2991,12 @@ async function deletePlace(id, name) {
             isDeleted: 1,
             deletedAt: Date.now()
         });
+        // Remember this name in session so loadFromCloud won't re-add it if the upload fails
+        try {
+            const _sd = JSON.parse(sessionStorage.getItem('aura_session_deleted') || '[]');
+            _sd.push((name || '').trim().toLowerCase());
+            sessionStorage.setItem('aura_session_deleted', JSON.stringify(_sd));
+        } catch(_) {}
         
         // Clean up associated cloud photos from Firebase
         if (syncRoomId) {
@@ -3028,17 +3035,61 @@ async function updateDashboardStats() {
     if (expenseEl) expenseEl.textContent = formatCurrency(expenseSum);
     
     // D-Day update
-    // 날짜 미정인 항목은 "다음 약속" 후보에서 제외 (new Date(null)이 1970년으로 잡히는 문제 방지)
-    const upcoming = places
-        .filter(p => p.isVisited === 0 && parseAnyDate(p.createdAt || p.date) > 0)
-        .sort((a, b) => parseAnyDate(a.createdAt || a.date) - parseAnyDate(b.createdAt || b.date))[0];
-    if (upcoming) {
-        document.getElementById("next-date-title").textContent = upcoming.name;
-        document.getElementById("next-date-dday").textContent = "Wishlist";
+    // 날짜 미정 항목, 그리고 이미 지난 항목은 "다음 약속" 후보에서 제외 (오늘 포함, 오늘 이후만)
+    const dashNowMs = todayStartMs();
+    const upcomingCandidates = places
+        .filter(p => p.isVisited === 0 && !p.isDeleted && parseAnyDate(p.createdAt || p.date) >= dashNowMs)
+        .sort((a, b) => parseAnyDate(a.createdAt || a.date) - parseAnyDate(b.createdAt || b.date));
+
+    let nextDday = "D-Day";
+    let sidebarTitle = "아직 약속이 없어요 😢";
+
+    const dashItemsEl = document.getElementById("dashboard-next-schedule-items");
+    const dashNextDdayEl = document.getElementById("dashboard-next-schedule-dday");
+
+    if (upcomingCandidates.length > 0) {
+        // 가장 가까운 날짜를 찾고, 같은 날짜의 항목 전부 수집
+        const nearestMs = parseAnyDate(upcomingCandidates[0].createdAt || upcomingCandidates[0].date);
+        const nearestDateKey = toLocalDateKey(nearestMs);
+        const nearestItems = upcomingCandidates.filter(p => toLocalDateKey(parseAnyDate(p.createdAt || p.date)) === nearestDateKey);
+
+        const diffDays = Math.round((nearestMs - dashNowMs) / 86400000);
+        nextDday = diffDays === 0 ? "오늘! 💗" : diffDays > 0 ? `D-${diffDays}` : `D+${Math.abs(diffDays)}`;
+        sidebarTitle = nearestItems[0].name;
+        const dateText = formatDisplayDate(nearestMs);
+
+        if (dashItemsEl) {
+            dashItemsEl.innerHTML = "";
+            // 날짜 한 줄 (공통)
+            const dateRow = document.createElement("div");
+            dateRow.style.cssText = "font-size:0.78rem; color:var(--color-text-med); margin-bottom:2px;";
+            dateRow.textContent = dateText;
+            dashItemsEl.appendChild(dateRow);
+
+            nearestItems.forEach(p => {
+                const row = document.createElement("div");
+                row.style.cssText = "display:flex; align-items:center; gap:6px; padding:0.45rem 0.7rem; background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.12); border-radius:10px;";
+                row.innerHTML = `
+                    <span style="font-size:0.72rem; padding:1px 7px; border-radius:6px; background:rgba(255,101,132,0.12); color:var(--color-primary); font-weight:700; flex-shrink:0;">📍 위시</span>
+                    <strong style="font-size:0.9rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
+                    ${p.category ? `<span style="font-size:0.72rem; color:var(--color-text-med); background:rgba(0,0,0,0.04); padding:1px 6px; border-radius:4px;">${escapeHtml(p.category)}</span>` : ""}
+                `;
+                dashItemsEl.appendChild(row);
+            });
+        }
     } else {
-        document.getElementById("next-date-title").textContent = "아직 약속이 없어요 😢";
-        document.getElementById("next-date-dday").textContent = "D-Day";
+        if (dashItemsEl) {
+            dashItemsEl.innerHTML = `<span style="font-size:0.85rem; color:var(--color-text-med);">아직 약속이 없어요 😢</span>`;
+        }
     }
+
+    if (dashNextDdayEl) dashNextDdayEl.textContent = nextDday;
+
+    // 사이드바 카드 (데스크톱 전용, 한 줄만)
+    const nextTitleEl = document.getElementById("next-date-title");
+    if (nextTitleEl) nextTitleEl.textContent = sidebarTitle;
+    const nextDdayEl = document.getElementById("next-date-dday");
+    if (nextDdayEl) nextDdayEl.textContent = nextDday;
     
     // Budget Progress fill
     document.getElementById("budget-spent-text").textContent = formatCurrency(expenseSum);
@@ -3239,9 +3290,11 @@ async function saveToCloud() {
             lastSyncedTimestamp = now;
         } else {
             console.error('Firebase save failed:', response.status);
+            scheduleSaveRetry();
         }
     } catch (e) {
         console.error('Firebase save error:', e);
+        scheduleSaveRetry();
     } finally {
         isUploading = false;
     }
@@ -3250,6 +3303,10 @@ async function saveToCloud() {
 // Destructive db.places.clear() REMOVED! Replaced with safe Union Merge Engine.
 async function loadFromCloud() {
     if (!syncRoomId || isDownloading || isUploading) return;
+    // A local edit hasn't been confirmed uploaded yet — pulling now would merge in the cloud's
+    // stale pre-edit copy and silently undo the edit. Stay blocked until saveToCloud() succeeds
+    // (it retries on failure), not just for a fixed window.
+    if (localMutationTimestamp > lastSyncedTimestamp) return;
 
     isDownloading = true;
     
@@ -3379,16 +3436,21 @@ async function loadFromCloud() {
 
                 // Smart Upsert Engine: Upsert places to Dexie DB safely without clearing DB
                 let hasChanges = false;
+                const sessionDeletedNames = new Set(JSON.parse(sessionStorage.getItem('aura_session_deleted') || '[]'));
                 for (const fp of placesToApply) {
                     const cleanFpName = (fp.name || "").trim().toLowerCase();
                     const existing = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === cleanFpName);
-                    
+
                     if (existing) {
+                        // Local tombstone is terminal — never let a stale (pre-delete) cloud copy revive it.
+                        // It stays local-only until saveToCloud() successfully pushes the deletion out.
+                        if (existing.isDeleted === 1 || existing.isVisited === -1) continue;
+
                         const updatePayload = { ...fp };
                         delete updatePayload.id;
                         if (!updatePayload.photo && existing.photo) updatePayload.photo = existing.photo;
                         if ((!updatePayload.photos || updatePayload.photos.length === 0) && existing.photos) updatePayload.photos = existing.photos;
-                        
+
                         let isDifferent = false;
                         for (const key of Object.keys(updatePayload)) {
                             if (JSON.stringify(existing[key]) !== JSON.stringify(updatePayload[key])) {
@@ -3402,6 +3464,8 @@ async function loadFromCloud() {
                             hasChanges = true;
                         }
                     } else {
+                        // Never re-create an entry the cloud marks deleted, or that this session deleted
+                        if (fp.isDeleted === 1 || sessionDeletedNames.has(cleanFpName)) continue;
                         const newData = { ...fp };
                         delete newData.id;
                         await db.places.add(newData);
@@ -3431,6 +3495,18 @@ function triggerSyncUpload() {
     setTimeout(async () => {
         await saveToCloud();
     }, 50);
+}
+
+// Retries a failed saveToCloud() until it succeeds, so loadFromCloud's pending-edit guard
+// (localMutationTimestamp > lastSyncedTimestamp) doesn't stay blocked forever on a flaky network.
+function scheduleSaveRetry() {
+    if (saveRetryTimeoutId) return;
+    saveRetryTimeoutId = setTimeout(async () => {
+        saveRetryTimeoutId = null;
+        if (localMutationTimestamp > lastSyncedTimestamp) {
+            await saveToCloud();
+        }
+    }, 3000);
 }
 
 // ── Firebase Photos REST API sync ──
@@ -3848,6 +3924,35 @@ function formatCurrency(amount) {
     return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount).replace("₩", "") + "원";
 }
 
+// Replaces window.confirm() — many mobile browsers block/no-op native confirm() dialogs when
+// the app is running installed as a standalone PWA, which made every delete button silently
+// do nothing (confirm() returns false without ever showing a prompt).
+function showConfirmModal(message) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById("modal-confirm");
+        const msgEl = document.getElementById("modal-confirm-message");
+        const okBtn = document.getElementById("modal-confirm-ok-btn");
+        const cancelBtn = document.getElementById("modal-confirm-cancel-btn");
+        if (!modal || !msgEl || !okBtn || !cancelBtn) {
+            resolve(window.confirm ? confirm(message) : true);
+            return;
+        }
+        msgEl.textContent = message;
+        modal.classList.add("active");
+
+        const cleanup = (result) => {
+            modal.classList.remove("active");
+            okBtn.removeEventListener("click", onOk);
+            cancelBtn.removeEventListener("click", onCancel);
+            resolve(result);
+        };
+        const onOk = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+        okBtn.addEventListener("click", onOk);
+        cancelBtn.addEventListener("click", onCancel);
+    });
+}
+
 function showToast(message, type = "success") {
     const toast = document.createElement("div");
     toast.className = `toast-banner toast-${type}`;
@@ -4043,9 +4148,12 @@ async function cleanJunkData(showToastMsg = false) {
         let removedCount = 0;
 
         for (const p of places) {
-            // 1. Purge tombstones (deleted items)
+            // 1. Keep tombstones (deleted items) as-is. Purging them here — before the deletion
+            //    has synced to the cloud — erases all local memory that they were deleted, so the
+            //    next cloud pull resurrects them from the stale pre-delete cloud copy as a "new" place.
+            //    They're already excluded from every render/list query via isDeleted !== 1 checks.
             if (p.isDeleted === 1 || p.isVisited === -1) {
-                removedCount++;
+                cleanList.push(p);
                 continue;
             }
 
@@ -4540,7 +4648,7 @@ window.closeGallerySliderModal = function() {
 // 1-by-1 Photo Delete Engine in Gallery Lightbox
 window.deleteCurrentSliderPhoto = async function() {
     if (!activeGalleryPhotos || activeGalleryPhotos.length === 0 || !activePlaceInfo || !activePlaceInfo.id) return;
-    if (!confirm(`'${activePlaceInfo.name}'의 이 추억 사진을 1장 삭제하시겠습니까?`)) return;
+    if (!(await showConfirmModal(`'${activePlaceInfo.name}'의 이 추억 사진을 1장 삭제하시겠습니까?`))) return;
 
     const place = await db.places.get(activePlaceInfo.id);
     if (!place) return;
@@ -4783,9 +4891,9 @@ window.closeMemoryLightboxModal = function() {
     if (modal) modal.classList.remove("active");
 };
 
-window.deleteCurrentMemoryPhoto = function() {
+window.deleteCurrentMemoryPhoto = async function() {
     if (!activeMemoryPhotosList || activeMemoryPhotosList.length === 0) return;
-    if (!confirm("이 추억 사진을 러블리 메모리에서 삭제하시겠습니까?")) return;
+    if (!(await showConfirmModal("이 추억 사진을 러블리 메모리에서 삭제하시겠습니까?"))) return;
 
     const photoToDelete = activeMemoryPhotosList[activeMemoryPhotoIndex];
     const customIdx = customMemoryPhotos.indexOf(photoToDelete);
