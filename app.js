@@ -3567,6 +3567,7 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
             placeKey = placeIdOrName.trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
         }
 
+        const ts = Date.now();
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json`;
 
         // No photos left (last one deleted) — clear the cloud node instead of no-op'ing, otherwise
@@ -3577,7 +3578,7 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
             const body = JSON.stringify({
                 img: base64ImagesArray[0] || "",
                 imgList: base64ImagesArray,
-                ts: Date.now()
+                ts
             });
             await fetch(url, {
                 method: 'PUT',
@@ -3586,18 +3587,26 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
             });
         }
 
-        // Bump a small top-level marker so other devices can cheaply check "did anything change"
-        // (a few bytes) before deciding to download the whole photo library again.
-        const newVersion = Date.now();
+        // Per-place version index (just a number, no image bytes) so other devices can tell WHICH
+        // place changed without downloading every place's photos to find out — lets
+        // loadPhotosFromCloud() fetch only that one place instead of the whole library.
+        const versionsEntryUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions/${encodeURIComponent(placeKey)}.json`;
+        await fetch(versionsEntryUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ts)
+        });
+
+        // Cheap top-level marker so devices can skip even the photoVersions map when nothing changed.
         const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json`;
         await fetch(versionUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newVersion)
+            body: JSON.stringify(ts)
         });
         // This device already has the change it just made — remember the version now so its own
-        // next poll doesn't immediately re-download the whole photo library it just uploaded.
-        lastKnownPhotosVersion = newVersion;
+        // next poll doesn't immediately re-download the photo library it just uploaded.
+        lastKnownPhotosVersion = ts;
     } catch (e) {
         console.error('[Photo Sync] Save failed:', e);
     }
@@ -3609,9 +3618,9 @@ async function loadPhotosFromCloud() {
     // uploaded shouldn't be clobbered by a stale cloud snapshot pulled in the meantime.
     if (localMutationTimestamp > lastSyncedTimestamp) return;
     try {
-        // Cheap check first (a few bytes) — only download the whole photo library (can be many MB)
-        // when it actually changed since our last pull. This is what was blowing through Firebase's
-        // download quota: every device re-fetched every photo, every 10 seconds, forever.
+        // Cheap check first (a few bytes) — skip everything else when nothing changed since our
+        // last pull. This is what was blowing through Firebase's download quota: every device
+        // re-fetched every photo, every 10 seconds, forever.
         const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json?t=${Date.now()}`;
         const versionResp = await fetch(versionUrl, { cache: 'no-store' });
         if (versionResp.ok) {
@@ -3620,19 +3629,14 @@ async function loadPhotosFromCloud() {
             lastKnownPhotosVersion = remoteVersion;
         }
 
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos.json?t=${Date.now()}`;
-        const response = await fetch(url, { cache: 'no-store' });
-        if (!response.ok) return;
-        const photosRaw = await response.json();
-        if (!photosRaw || typeof photosRaw !== 'object') return;
-        
-        const photoMap = {};
-        Object.keys(photosRaw).forEach(k => {
-            photoMap[k] = photosRaw[k];
-            try {
-                photoMap[decodeURIComponent(k)] = photosRaw[k];
-            } catch(e) {}
-        });
+        // Second cheap check: a placeKey -> timestamp map (numbers only, no image bytes) tells us
+        // exactly WHICH place changed, so only that place's actual photos get downloaded below —
+        // "낱장으로" instead of re-pulling the whole photo library on every change.
+        const versionsUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions.json?t=${Date.now()}`;
+        const versionsResp = await fetch(versionsUrl, { cache: 'no-store' });
+        if (!versionsResp.ok) return;
+        const remoteVersions = await versionsResp.json();
+        if (!remoteVersions || typeof remoteVersions !== 'object') return;
 
         const places = await db.places.toArray();
         let changed = false;
@@ -3641,22 +3645,33 @@ async function loadPhotosFromCloud() {
             const cleanName = (place.name || "").trim().toLowerCase();
             const nameKey = cleanName.replace(/[/\\?%*:|"<>. ]/g, "_");
             const encodedKey = encodeURIComponent(nameKey);
-            
-            const entry = photoMap[nameKey] || photoMap[encodedKey] || photoMap[cleanName] || photoMap[place.id];
-            if (entry) {
-                const serverImgList = entry.imgList || (entry.img ? [entry.img] : []);
-                const localImgList = place.photos || (place.photo ? [place.photo] : []);
-                
-                if (serverImgList.length > 0 && JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
-                    await db.places.update(place.id, {
-                        photo: serverImgList[0] || "",
-                        photos: serverImgList
-                    });
-                    changed = true;
-                }
+
+            const remoteTs = remoteVersions[nameKey] ?? remoteVersions[encodedKey] ?? remoteVersions[cleanName] ?? remoteVersions[place.id];
+            if (!remoteTs || place.photoVersion === remoteTs) continue;
+
+            // Only now — for this one place — download its actual image data.
+            const photoUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json?t=${Date.now()}`;
+            const photoResp = await fetch(photoUrl, { cache: 'no-store' });
+            if (!photoResp.ok) continue;
+            const entry = await photoResp.json();
+            if (!entry) continue;
+
+            const serverImgList = entry.imgList || (entry.img ? [entry.img] : []);
+            const localImgList = place.photos || (place.photo ? [place.photo] : []);
+
+            if (serverImgList.length > 0 && JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
+                await db.places.update(place.id, {
+                    photo: serverImgList[0] || "",
+                    photos: serverImgList,
+                    photoVersion: remoteTs
+                });
+                changed = true;
+            } else {
+                // Content already matches — just remember the version so this place isn't re-fetched every poll.
+                await db.places.update(place.id, { photoVersion: remoteTs });
             }
         }
-        
+
         if (changed) {
             console.log("[Photo Sync] Photos successfully synchronized across devices.");
             await renderPlacesList();
