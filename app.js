@@ -59,14 +59,19 @@ let syncRoomId = localStorage.getItem("aura_sync_room_id") || "77";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
 // Cloud Sync Engine variables
-const DEFAULT_FIREBASE_DB_URL = 'https://pill-reminder-ai-43ffa-default-rtdb.asia-southeast1.firebasedatabase.app';
+const DEFAULT_FIREBASE_DB_URL = 'https://dating-planning-agent-default-rtdb.asia-southeast1.firebasedatabase.app';
 function getFirebaseDbUrl() {
     return customFirebaseUrl ? customFirebaseUrl.replace(/\/$/, "") : DEFAULT_FIREBASE_DB_URL;
 }
 
 let lastSyncedDataString = "";
 let lastSyncedTimestamp = 0;
-let localMutationTimestamp = 0;
+// Restored from localStorage: if the tab is closed/reloaded before a save finishes (or its retry),
+// the in-memory guard below would otherwise reset to 0 and let the very next loadFromCloud() pull
+// the still-stale cloud copy over the edit that never made it out — reproducing the "revert on
+// restart" bug even after the upload itself works fine server-side.
+let localMutationTimestamp = parseInt(localStorage.getItem('aura_pending_mutation_ts') || '0', 10) || 0;
+let lastKnownPhotosVersion = 0;
 let saveRetryTimeoutId = null;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
@@ -121,6 +126,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Cleanup legacy test comments & deduplicate junk places if present
     await cleanJunkData(false);
+
+    // Pull the latest cloud state BEFORE pushing anything on startup. saveToCloud() PATCHes the
+    // whole placesData list wholesale (no server-side merge) — if this device's local IndexedDB
+    // is behind (e.g. it's been idle while edits happened on another device/tab), pushing before
+    // the initial pull finishes would silently erase those not-yet-synced-down cloud records.
+    if (syncRoomId) {
+        await loadFromCloud();
+    }
 
     // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
     if (syncRoomId && (naverClientId || geminiApiKey)) {
@@ -3223,15 +3236,27 @@ function startCloudSyncLoop() {
         banner.style.borderColor = "rgba(255, 101, 132, 0.25)";
     }
 
-    // Establish 5-second interval loop for main DB state sync
+    // Polling this often per open device/tab is what exhausted the Firebase free-tier download
+    // quota. This is a 2-person app, not real-time collaboration — 20s/45s is still responsive
+    // enough while cutting request volume by 4x, and loadPhotosFromCloud() now skips the actual
+    // download entirely unless photosVersion changed, so this interval mostly costs a few bytes.
     syncIntervalId = setInterval(async () => {
+        if (document.visibilityState !== 'visible') return;
         await loadFromCloud();
-    }, 5000);
-    
-    // Establish 10-second interval loop for heavy photos syncing
+    }, 20000);
+
     photoSyncIntervalId = setInterval(async () => {
+        if (document.visibilityState !== 'visible') return;
         await loadPhotosFromCloud();
-    }, 10000);
+    }, 45000);
+
+    // A pending edit from before the last reload never got a chance to retry (the JS context that
+    // scheduled it was torn down). Flush it now, before the first loadFromCloud() below runs, so
+    // the guard's protection actually results in the edit reaching the cloud instead of just
+    // sitting there un-synced until the user happens to make another edit.
+    if (localMutationTimestamp > lastSyncedTimestamp) {
+        saveToCloud();
+    }
 
     // Run immediately on start
     loadFromCloud();
@@ -3249,6 +3274,13 @@ async function saveToCloud() {
         places.forEach(p => {
             const copy = { ...p };
             sanitizePlaceObject(copy);
+            // Photos sync through their own dedicated path (uploadPhotoToCloud / loadPhotosFromCloud).
+            // Embedding base64 photo data in placesData too made this PATCH balloon past Firebase
+            // Realtime Database's per-value size limit, which is why every save silently failed
+            // with 400 — and since it never succeeded, every fresh app load re-pulled the old stale
+            // cloud snapshot and appeared to "revert" local edits.
+            delete copy.photo;
+            delete copy.photos;
             const cleanName = (copy.name || "").trim();
             if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
                 const nameKey = cleanName.toLowerCase();
@@ -3288,6 +3320,8 @@ async function saveToCloud() {
         });
         if (response.ok) {
             lastSyncedTimestamp = now;
+            // Confirmed on the server now — safe to let a reload skip straight to a fresh pull again.
+            localStorage.removeItem('aura_pending_mutation_ts');
         } else {
             console.error('Firebase save failed:', response.status);
             scheduleSaveRetry();
@@ -3309,11 +3343,21 @@ async function loadFromCloud() {
     if (localMutationTimestamp > lastSyncedTimestamp) return;
 
     isDownloading = true;
-    
+
     try {
+        // Cheap check first (a few bytes) — full placesData can run tens of KB, and re-downloading
+        // it in full on every poll across multiple always-open devices is what drove Firebase
+        // download usage into the tens of GB/day range. Only pull the full room when it changed.
+        const tsUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/timestamp.json?t=${Date.now()}`;
+        const tsResp = await fetch(tsUrl, { cache: 'no-store' });
+        if (tsResp.ok) {
+            const remoteTs = await tsResp.json();
+            if (remoteTs && remoteTs === lastSyncedTimestamp) return;
+        }
+
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json?t=${Date.now()}`;
         const response = await fetch(url, { cache: 'no-store' });
-        
+
         if (!response.ok) return;
         
         const resData = await response.json();
@@ -3492,6 +3536,8 @@ async function loadFromCloud() {
 // Standalone trigger to force immediate sync uploads on local edits
 function triggerSyncUpload() {
     localMutationTimestamp = Date.now();
+    // Survives a reload/close before the upload (or its retry) finishes — see the init comment above.
+    localStorage.setItem('aura_pending_mutation_ts', String(localMutationTimestamp));
     setTimeout(async () => {
         await saveToCloud();
     }, 50);
@@ -3511,7 +3557,7 @@ function scheduleSaveRetry() {
 
 // ── Firebase Photos REST API sync ──
 async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
-    if (!syncRoomId || !base64ImagesArray || base64ImagesArray.length === 0) return;
+    if (!syncRoomId) return;
     try {
         let placeKey = placeIdOrName;
         if (typeof placeIdOrName === 'number') {
@@ -3520,18 +3566,38 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
         } else if (typeof placeIdOrName === 'string') {
             placeKey = placeIdOrName.trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
         }
-        
+
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json`;
-        const body = JSON.stringify({
-            img: base64ImagesArray[0] || "",
-            imgList: base64ImagesArray,
-            ts: Date.now()
-        });
-        await fetch(url, {
+
+        // No photos left (last one deleted) — clear the cloud node instead of no-op'ing, otherwise
+        // the stale non-empty entry survives and the next loadPhotosFromCloud() poll restores it.
+        if (!base64ImagesArray || base64ImagesArray.length === 0) {
+            await fetch(url, { method: 'DELETE' });
+        } else {
+            const body = JSON.stringify({
+                img: base64ImagesArray[0] || "",
+                imgList: base64ImagesArray,
+                ts: Date.now()
+            });
+            await fetch(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body
+            });
+        }
+
+        // Bump a small top-level marker so other devices can cheaply check "did anything change"
+        // (a few bytes) before deciding to download the whole photo library again.
+        const newVersion = Date.now();
+        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json`;
+        await fetch(versionUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body
+            body: JSON.stringify(newVersion)
         });
+        // This device already has the change it just made — remember the version now so its own
+        // next poll doesn't immediately re-download the whole photo library it just uploaded.
+        lastKnownPhotosVersion = newVersion;
     } catch (e) {
         console.error('[Photo Sync] Save failed:', e);
     }
@@ -3539,7 +3605,21 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
 
 async function loadPhotosFromCloud() {
     if (!syncRoomId) return;
+    // Same pending-edit guard as loadFromCloud() — a local photo add/delete not yet confirmed
+    // uploaded shouldn't be clobbered by a stale cloud snapshot pulled in the meantime.
+    if (localMutationTimestamp > lastSyncedTimestamp) return;
     try {
+        // Cheap check first (a few bytes) — only download the whole photo library (can be many MB)
+        // when it actually changed since our last pull. This is what was blowing through Firebase's
+        // download quota: every device re-fetched every photo, every 10 seconds, forever.
+        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json?t=${Date.now()}`;
+        const versionResp = await fetch(versionUrl, { cache: 'no-store' });
+        if (versionResp.ok) {
+            const remoteVersion = await versionResp.json();
+            if (remoteVersion && remoteVersion === lastKnownPhotosVersion) return;
+            lastKnownPhotosVersion = remoteVersion;
+        }
+
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos.json?t=${Date.now()}`;
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) return;
@@ -4901,8 +4981,27 @@ window.deleteCurrentMemoryPhoto = async function() {
         customMemoryPhotos.splice(customIdx, 1);
         localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
         triggerSyncUpload();
+    } else {
+        // Not a custom-uploaded memory — it's a photo pulled in from a visited place's own
+        // photo list. Removing it there is what actually removes it from this gallery.
+        const places = await db.places.toArray();
+        const owner = places.find(p => (p.photos && p.photos.includes(photoToDelete)) || p.photo === photoToDelete);
+        if (owner) {
+            const updatedPhotos = (owner.photos || (owner.photo ? [owner.photo] : [])).filter(src => src !== photoToDelete);
+            await db.places.update(owner.id, { photos: updatedPhotos, photo: updatedPhotos[0] || null });
+            // Photos sync through their own cloud path, separate from triggerSyncUpload()'s
+            // placesData push — without this, the next loadPhotosFromCloud() poll pulls the old
+            // (still-undeleted) photo list back down and silently undoes this delete.
+            if (syncRoomId) {
+                await uploadPhotoToCloud(owner.id, updatedPhotos);
+            }
+            triggerSyncUpload();
+        } else {
+            showToast("이 사진의 원본 장소를 찾을 수 없어 삭제하지 못했습니다.", "warning");
+            return;
+        }
     }
-    renderLovelyMemoryGallery();
+    await renderLovelyMemoryGallery();
     showToast("추억 사진이 삭제되었습니다.", "success");
     closeMemoryLightboxModal();
 };
