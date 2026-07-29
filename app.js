@@ -3525,8 +3525,14 @@ async function loadFromCloud() {
 
                         const updatePayload = { ...fp };
                         delete updatePayload.id;
-                        if (!updatePayload.photo && existing.photo) updatePayload.photo = existing.photo;
-                        if ((!updatePayload.photos || updatePayload.photos.length === 0) && existing.photos) updatePayload.photos = existing.photos;
+                        // photo/photos are deliberately absent from fp (stripped before placesData was
+                        // stringified — see saveToCloud) and must stay absent from updatePayload too, so
+                        // Dexie's update() leaves them untouched. They used to be explicitly re-added here
+                        // from `existing`, but `existing` is a snapshot taken before this function's own
+                        // call, and loadFromCloud()/loadPhotosFromCloud() run concurrently (both fired
+                        // unawaited from startCloudSyncLoop) — so this was overwriting a photo
+                        // loadPhotosFromCloud() had *just* correctly written with the stale pre-sync value,
+                        // silently reverting it back to empty every time any other field also changed.
 
                         let isDifferent = false;
                         for (const key of Object.keys(updatePayload)) {
