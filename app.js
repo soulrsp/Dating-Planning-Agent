@@ -72,6 +72,7 @@ let lastSyncedTimestamp = 0;
 // restart" bug even after the upload itself works fine server-side.
 let localMutationTimestamp = parseInt(localStorage.getItem('aura_pending_mutation_ts') || '0', 10) || 0;
 let lastKnownPhotosVersion = 0;
+let lastKnownMemoryPhotosVersion = 0;
 let saveRetryTimeoutId = null;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
@@ -3273,6 +3274,7 @@ function startCloudSyncLoop() {
     photoSyncIntervalId = setInterval(async () => {
         if (document.visibilityState !== 'visible') return;
         await loadPhotosFromCloud();
+        await loadMemoryPhotosFromCloud();
     }, 45000);
 
     // A pending edit from before the last reload never got a chance to retry (the JS context that
@@ -3286,6 +3288,7 @@ function startCloudSyncLoop() {
     // Run immediately on start
     loadFromCloud();
     loadPhotosFromCloud();
+    loadMemoryPhotosFromCloud();
 }
 
 async function saveToCloud() {
@@ -3324,7 +3327,10 @@ async function saveToCloud() {
         // in the room by earlier builds. Enter those per-device in 설정 instead.
         const payload = {
             placesData: JSON.stringify(cleanPlaces),
-            memoryPhotos: JSON.stringify(customMemoryPhotos),
+            // memoryPhotos deliberately excluded — it syncs through its own version-gated path
+            // (uploadMemoryPhotosToCloud/loadMemoryPhotosFromCloud) now. It used to be embedded here,
+            // which meant every single placesData edit re-downloaded the entire memory gallery as
+            // base64 on every device's next poll — this was most of the "full room fetch" cost.
             partnerAName: partnerAName,
             partnerBName: partnerBName,
             naverClientId: naverClientId,
@@ -3337,7 +3343,9 @@ async function saveToCloud() {
         
         const bodyStr = JSON.stringify(payload);
         lastSyncedDataString = bodyStr;
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json`;
+        // print=silent — the response body (which Firebase otherwise echoes back in full) is never
+        // read below, so there's no reason to pay for downloading it.
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json?print=silent`;
         const response = await fetch(url, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -3380,15 +3388,24 @@ async function loadFromCloud() {
             if (remoteTs && remoteTs === lastSyncedTimestamp) return;
         }
 
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json?t=${Date.now()}`;
-        const response = await fetch(url, { cache: 'no-store' });
+        // Fetch only the specific fields this function actually uses, one small request each — NOT
+        // the parent /aura-rooms/{room}.json. That single request pulls down every child node,
+        // including photos/photoVersions/memoryPhotos (megabytes of base64), even though none of
+        // that is read below. This was the real source of the multi-MB "full room" fetches: the
+        // per-place/per-gallery version-gating elsewhere never protected this path at all.
+        const roomBase = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`;
+        const roomFields = ['placesData', 'partnerAName', 'partnerBName', 'naverClientId', 'kakaoApiKey', 'timestamp'];
+        const fieldResults = await Promise.all(roomFields.map(f =>
+            fetch(`${roomBase}/${f}.json?t=${Date.now()}`, { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : undefined)
+                .catch(() => undefined)
+        ));
+        const resData = {};
+        roomFields.forEach((f, i) => { resData[f] = fieldResults[i]; });
 
-        if (!response.ok) return;
-        
-        const resData = await response.json();
         const localPlaces = await db.places.toArray();
-        
-        if (resData === null) {
+
+        if (resData.placesData == null && resData.timestamp == null) {
             // Room empty in cloud, initialize cloud with local data
             if (localPlaces.length > 0) {
                 await saveToCloud();
@@ -3438,18 +3455,9 @@ async function loadFromCloud() {
                 if (el) el.value = kakaoApiKey;
             }
 
-            if (resData.memoryPhotos) {
-                try {
-                    const cloudMemories = JSON.parse(resData.memoryPhotos);
-                    if (Array.isArray(cloudMemories) && cloudMemories.length > 0) {
-                        if (JSON.stringify(customMemoryPhotos) !== JSON.stringify(cloudMemories)) {
-                            customMemoryPhotos = cloudMemories;
-                            localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
-                            renderLovelyMemoryGallery();
-                        }
-                    }
-                } catch(e) {}
-            }
+            // memoryPhotos is no longer read here — see loadMemoryPhotosFromCloud(), its own
+            // version-gated path. (Legacy rooms may still have a stray resData.memoryPhotos field
+            // from before this fix; it's simply ignored now.)
         }
 
         if (resData.placesData) {
@@ -3593,7 +3601,9 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
         }
 
         const ts = Date.now();
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json`;
+        // print=silent — Firebase otherwise echoes the written value back in the response, which
+        // for a PUT of image data means downloading the photo a second time for nothing.
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json?print=silent`;
 
         // No photos left (last one deleted) — clear the cloud node instead of no-op'ing, otherwise
         // the stale non-empty entry survives and the next loadPhotosFromCloud() poll restores it.
@@ -3615,7 +3625,7 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
         // Per-place version index (just a number, no image bytes) so other devices can tell WHICH
         // place changed without downloading every place's photos to find out — lets
         // loadPhotosFromCloud() fetch only that one place instead of the whole library.
-        const versionsEntryUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions/${encodeURIComponent(placeKey)}.json`;
+        const versionsEntryUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions/${encodeURIComponent(placeKey)}.json?print=silent`;
         await fetch(versionsEntryUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -3623,7 +3633,7 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
         });
 
         // Cheap top-level marker so devices can skip even the photoVersions map when nothing changed.
-        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json`;
+        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json?print=silent`;
         await fetch(versionUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -3706,6 +3716,60 @@ async function loadPhotosFromCloud() {
         }
     } catch (e) {
         console.error('[Photo Sync] Load failed:', e);
+    }
+}
+
+// ── Memory gallery photos (the dashboard's "우리의 러블리 메모리" widget) ──
+// Same anti-pattern as place photos used to have: this used to be embedded whole in every
+// placesData save/load, so any unrelated edit re-downloaded the entire gallery as base64.
+// Synced through its own path with its own version marker instead, same as place photos.
+async function uploadMemoryPhotosToCloud() {
+    if (!syncRoomId) return;
+    try {
+        const ts = Date.now();
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotos.json?print=silent`;
+        await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(customMemoryPhotos)
+        });
+
+        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotosVersion.json?print=silent`;
+        await fetch(versionUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ts)
+        });
+        // Avoid immediately re-downloading the gallery this device just uploaded.
+        lastKnownMemoryPhotosVersion = ts;
+    } catch (e) {
+        console.error('[Memory Photos Sync] Save failed:', e);
+    }
+}
+
+async function loadMemoryPhotosFromCloud() {
+    if (!syncRoomId) return;
+    if (localMutationTimestamp > lastSyncedTimestamp) return;
+    try {
+        const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotosVersion.json?t=${Date.now()}`;
+        const versionResp = await fetch(versionUrl, { cache: 'no-store' });
+        if (!versionResp.ok) return;
+        const remoteVersion = await versionResp.json();
+        if (remoteVersion && remoteVersion === lastKnownMemoryPhotosVersion) return;
+        lastKnownMemoryPhotosVersion = remoteVersion || lastKnownMemoryPhotosVersion;
+
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotos.json?t=${Date.now()}`;
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) return;
+        const cloudMemories = await response.json();
+        if (!Array.isArray(cloudMemories) || cloudMemories.length === 0) return;
+        if (JSON.stringify(customMemoryPhotos) === JSON.stringify(cloudMemories)) return;
+
+        customMemoryPhotos = cloudMemories;
+        localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+        await renderLovelyMemoryGallery();
+    } catch (e) {
+        console.error('[Memory Photos Sync] Load failed:', e);
     }
 }
 
@@ -5020,7 +5084,7 @@ window.deleteCurrentMemoryPhoto = async function() {
     if (customIdx !== -1) {
         customMemoryPhotos.splice(customIdx, 1);
         localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
-        triggerSyncUpload();
+        if (syncRoomId) await uploadMemoryPhotosToCloud();
     } else {
         // Not a custom-uploaded memory — it's a photo pulled in from a visited place's own
         // photo list. Removing it there is what actually removes it from this gallery.
@@ -5088,7 +5152,7 @@ window.saveMemoryGalleryPhotos = async function() {
             customMemoryPhotos = [...customMemoryPhotos, ...newPhotos];
             localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
             await renderLovelyMemoryGallery();
-            triggerSyncUpload();
+            if (syncRoomId) await uploadMemoryPhotosToCloud();
             showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
             closeEditMemoryGalleryModal();
             return;
