@@ -1786,8 +1786,12 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             if (!response.ok) {
                 const errJson = await response.json().catch(() => ({}));
                 const errMsg = errJson.error?.message || `HTTP ${response.status}`;
-                if (response.status === 404 || errMsg.includes("not found") || errMsg.includes("not supported")) {
-                    console.warn(`[Gemini API] Model ${modelName} not available (${errMsg}), trying next candidate...`);
+                // 429/quota errors are per-model, not per-key — a model being exhausted doesn't mean
+                // the others are too, so fall through to the next candidate instead of giving up.
+                const isUnavailable = response.status === 404 || errMsg.includes("not found") || errMsg.includes("not supported");
+                const isQuotaExceeded = response.status === 429 || errMsg.toLowerCase().includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
+                if (isUnavailable || isQuotaExceeded) {
+                    console.warn(`[Gemini API] Model ${modelName} unavailable (${errMsg}), trying next candidate...`);
                     lastError = new Error(errMsg);
                     continue;
                 }
