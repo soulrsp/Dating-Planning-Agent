@@ -381,7 +381,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("btn-export-data").addEventListener("click", exportData);
     document.getElementById("btn-import-data-trigger").addEventListener("click", () => document.getElementById("file-import-data").click());
     document.getElementById("file-import-data").addEventListener("change", importData);
-    document.getElementById("btn-clear-data").addEventListener("click", clearAllData);
+    // btn-clear-data no longer exists in index.html; this threw uncaught on every load and, since
+    // nothing here is wrapped in try/catch, silently aborted the rest of this handler — breaking the
+    // photo lightbox listeners registered further down (memory gallery click-to-enlarge, close button).
+    const clearDataBtn = document.getElementById("btn-clear-data");
+    if (clearDataBtn) clearDataBtn.addEventListener("click", clearAllData);
 
     // Photo Lightbox modal logic
     document.querySelectorAll(".memory-item").forEach(item => {
