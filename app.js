@@ -3595,8 +3595,13 @@ function scheduleSaveRetry() {
 }
 
 // ── Firebase Photos REST API sync ──
-async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
+// A failed attempt retries a few times with a short delay — this used to fail silently and
+// permanently on any hiccup (a 401 during the rules lockdown, a 400 from the old oversized-payload
+// bug, a dropped connection), leaving the place's photo stuck locally with nothing to show it was
+// ever lost. Real place: 한국전통문화대학교's photo never reached the cloud at all until this was added.
+async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1) {
     if (!syncRoomId) return;
+    const MAX_ATTEMPTS = 4;
     try {
         let placeKey = placeIdOrName;
         if (typeof placeIdOrName === 'number') {
@@ -3613,20 +3618,25 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
 
         // No photos left (last one deleted) — clear the cloud node instead of no-op'ing, otherwise
         // the stale non-empty entry survives and the next loadPhotosFromCloud() poll restores it.
+        let mainOk;
         if (!base64ImagesArray || base64ImagesArray.length === 0) {
-            await fetch(url, { method: 'DELETE' });
+            const r = await fetch(url, { method: 'DELETE' });
+            mainOk = r.ok;
         } else {
             const body = JSON.stringify({
                 img: base64ImagesArray[0] || "",
                 imgList: base64ImagesArray,
                 ts
             });
-            await fetch(url, {
+            const r = await fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body
             });
+            mainOk = r.ok;
         }
+
+        if (!mainOk) throw new Error('photo write failed');
 
         // Per-place version index (just a number, no image bytes) so other devices can tell WHICH
         // place changed without downloading every place's photos to find out — lets
@@ -3649,7 +3659,12 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray) {
         // next poll doesn't immediately re-download the photo library it just uploaded.
         lastKnownPhotosVersion = ts;
     } catch (e) {
-        console.error('[Photo Sync] Save failed:', e);
+        console.error(`[Photo Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(() => uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt + 1), 3000 * attempt);
+        } else {
+            console.error('[Photo Sync] Giving up after max retries — photo stayed local-only.');
+        }
     }
 }
 
