@@ -1371,32 +1371,9 @@ async function runInAppMapSearch(query) {
         if (isStale()) return;
     }
 
-    // 3. AI Business Directory & Local Place Search (Finds restaurants, stores, cafes & apartment complexes)
-    if (geminiApiKey && combinedResults.length < 4) {
-        try {
-            const responseText = await callGeminiSearchAPI(query);
-            if (isStale()) return;
-            const searchResults = cleanAndParseJSON(responseText);
-            if (Array.isArray(searchResults) && searchResults.length > 0) {
-                // Refine AI-supplied addresses in parallel, and only where the AI gave no usable coordinates
-                const needsRefine = searchResults.filter(item => item.address && (!item.lat || !item.lng)).slice(0, 5);
-                if (isNaverMapActive && needsRefine.length > 0) {
-                    await Promise.all(needsRefine.map(async (item) => {
-                        const refined = await refineCoordinatesViaNaverGeocoder(item.address);
-                        if (refined) {
-                            item.lat = refined.lat;
-                            item.lng = refined.lng;
-                        }
-                    }));
-                }
-                combinedResults.push(...searchResults);
-            }
-            console.log(`[Map Search] Gemini AI added ${Array.isArray(searchResults) ? searchResults.length : 0}건`);
-        } catch (err) {
-            console.warn("[Map Search] Gemini AI search failed:", err.message);
-        }
-        if (isStale()) return;
-    }
+    // 3. AI Business Directory search via Gemini — intentionally disabled. It was silently spending
+    // Gemini's limited free-tier quota on every map search that returned fewer than 4 results, which
+    // is common. Gemini is still used for the separate "AI 코스 플래너" chat feature, just not here.
 
     // 4. OpenStreetMap Nominatim Free Search Engine (Final fallback only)
     if (combinedResults.length === 0) {
