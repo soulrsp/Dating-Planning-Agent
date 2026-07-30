@@ -71,8 +71,22 @@ let lastSyncedTimestamp = 0;
 // the still-stale cloud copy over the edit that never made it out — reproducing the "revert on
 // restart" bug even after the upload itself works fine server-side.
 let localMutationTimestamp = parseInt(localStorage.getItem('aura_pending_mutation_ts') || '0', 10) || 0;
-let lastKnownPhotosVersion = 0;
-let lastKnownMemoryPhotosVersion = 0;
+// Restored from localStorage for the same reason as localMutationTimestamp above: without this,
+// every fresh page load starts back at 0, so the cheap "did anything change" check always looks
+// like "yes" even when the locally cached copy (also in localStorage) is already current — forcing
+// a full re-download of the photo library / memory gallery once per reload for no reason.
+let lastKnownPhotosVersion = parseInt(localStorage.getItem('aura_last_photos_version') || '0', 10) || 0;
+let lastKnownMemoryPhotosVersion = parseInt(localStorage.getItem('aura_last_memory_photos_version') || '0', 10) || 0;
+
+function setLastKnownPhotosVersion(v) {
+    lastKnownPhotosVersion = v;
+    localStorage.setItem('aura_last_photos_version', String(v));
+}
+function setLastKnownMemoryPhotosVersion(v) {
+    lastKnownMemoryPhotosVersion = v;
+    localStorage.setItem('aura_last_memory_photos_version', String(v));
+}
+
 let saveRetryTimeoutId = null;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
@@ -3647,7 +3661,7 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
         });
         // This device already has the change it just made — remember the version now so its own
         // next poll doesn't immediately re-download the photo library it just uploaded.
-        lastKnownPhotosVersion = ts;
+        setLastKnownPhotosVersion(ts);
     } catch (e) {
         console.error(`[Photo Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
         if (attempt < MAX_ATTEMPTS) {
@@ -3672,7 +3686,7 @@ async function loadPhotosFromCloud() {
         if (versionResp.ok) {
             const remoteVersion = await versionResp.json();
             if (remoteVersion && remoteVersion === lastKnownPhotosVersion) return;
-            lastKnownPhotosVersion = remoteVersion;
+            setLastKnownPhotosVersion(remoteVersion);
         }
 
         // Second cheap check: a placeKey -> timestamp map (numbers only, no image bytes) tells us
@@ -3752,7 +3766,7 @@ async function uploadMemoryPhotosToCloud() {
             body: JSON.stringify(ts)
         });
         // Avoid immediately re-downloading the gallery this device just uploaded.
-        lastKnownMemoryPhotosVersion = ts;
+        setLastKnownMemoryPhotosVersion(ts);
     } catch (e) {
         console.error('[Memory Photos Sync] Save failed:', e);
     }
@@ -3767,7 +3781,7 @@ async function loadMemoryPhotosFromCloud() {
         if (!versionResp.ok) return;
         const remoteVersion = await versionResp.json();
         if (remoteVersion && remoteVersion === lastKnownMemoryPhotosVersion) return;
-        lastKnownMemoryPhotosVersion = remoteVersion || lastKnownMemoryPhotosVersion;
+        if (remoteVersion) setLastKnownMemoryPhotosVersion(remoteVersion);
 
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotos.json?t=${Date.now()}`;
         const response = await fetch(url, { cache: 'no-store' });
@@ -3832,8 +3846,8 @@ window.forceCloudSync = async function() {
     }
     showToast("클라우드와 강제 동기화 중... 🔄", "info");
     lastSyncedTimestamp = 0;
-    lastKnownPhotosVersion = 0;
-    lastKnownMemoryPhotosVersion = 0;
+    setLastKnownPhotosVersion(0);
+    setLastKnownMemoryPhotosVersion(0);
     try {
         await loadFromCloud();
         await forceResyncAllPlacePhotos();
