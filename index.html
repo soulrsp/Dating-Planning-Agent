@@ -454,6 +454,8 @@
                             <label for="settings-sync-room-id">실시간 동기화 룸 이름 (방 이름)</label>
                             <input type="text" id="settings-sync-room-id" placeholder="예: lovestory (비워둘 시 동기화 미사용)">
                             <span class="help-text">주소창에 <code>?room=방이름</code>을 붙이거나 여기에 입력하면 5초마다 자동 동기화 룸이 실행됩니다.</span>
+                            <button type="button" class="btn btn-outline" id="btn-force-sync" style="margin-top:0.6rem;" onclick="forceCloudSync()"><i data-lucide="refresh-cw"></i> 지금 클라우드와 강제 동기화</button>
+                            <span class="help-text">다른 기기에서 올린 사진/장소가 안 보일 때 눌러보세요. 평소 자동 동기화가 건너뛰는 확인 절차를 무시하고 전부 다시 확인합니다.</span>
                         </div>
 
                         <div class="form-group">

@@ -3481,16 +3481,16 @@ async function loadFromCloud() {
 
                 const localPlaces = await db.places.toArray();
 
-                // Preserve local photo attachments and tombstones
+                // Preserve local tombstones. (This used to also copy localMatch.photo/photos onto fp
+                // "to avoid wiping them" — but that's exactly the race the comment below describes:
+                // localPlaces is a snapshot taken before this function's own await, so copying from it
+                // reintroduces a stale photo into updatePayload every time. photo/photos belong to
+                // loadPhotosFromCloud() alone now; fp must never carry them.)
                 placesToApply.forEach(fp => {
                     const localMatch = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === (fp.name || "").trim().toLowerCase());
-                    if (localMatch) {
-                        if (localMatch.isDeleted === 1 || localMatch.isVisited === -1) {
-                            fp.isDeleted = 1;
-                            fp.isVisited = -1;
-                        }
-                        if (localMatch.photo && !fp.photo) fp.photo = localMatch.photo;
-                        if (localMatch.photos && (!fp.photos || fp.photos.length === 0)) fp.photos = localMatch.photos;
+                    if (localMatch && (localMatch.isDeleted === 1 || localMatch.isVisited === -1)) {
+                        fp.isDeleted = 1;
+                        fp.isVisited = -1;
                     }
                 });
 
@@ -3783,6 +3783,71 @@ async function loadMemoryPhotosFromCloud() {
         console.error('[Memory Photos Sync] Load failed:', e);
     }
 }
+
+// Checks every local place's photo directly against the cloud, bypassing the photoVersions index
+// entirely. loadPhotosFromCloud()'s normal per-place diffing depends on that index existing for a
+// place — if a place's entry was never written into it (e.g. its photo was uploaded before this
+// versioning scheme existed, or a write silently failed), that place is invisible to the version
+// check forever and its photo never syncs, even though the actual /photos/{key} data is fine. This
+// is a deliberate one-time full check — acceptable cost for an explicit, rare, user-triggered action.
+async function forceResyncAllPlacePhotos() {
+    if (!syncRoomId) return;
+    const places = await db.places.toArray();
+    let changed = false;
+    for (const place of places) {
+        if (place.isDeleted === 1 || place.isVisited === -1) continue;
+        const nameKey = (place.name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+        if (!nameKey) continue;
+        try {
+            const photoUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json?t=${Date.now()}`;
+            const resp = await fetch(photoUrl, { cache: 'no-store' });
+            if (!resp.ok) continue;
+            const entry = await resp.json();
+            const serverImgList = entry ? (entry.imgList || (entry.img ? [entry.img] : [])) : [];
+            const localImgList = place.photos || (place.photo ? [place.photo] : []);
+            if (JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
+                await db.places.update(place.id, {
+                    photo: serverImgList[0] || "",
+                    photos: serverImgList,
+                    photoVersion: entry ? entry.ts : undefined
+                });
+                changed = true;
+            }
+        } catch (e) {
+            console.error(`[Force Sync] Photo check failed for '${place.name}':`, e);
+        }
+    }
+    return changed;
+}
+
+// Manual "지금 클라우드와 강제 동기화" button — for troubleshooting when another device's edit
+// (place, photo, or memory gallery) isn't showing up. Resets the cheap "did anything change"
+// markers so the next check can't short-circuit on a stale cached version, then re-runs all sync
+// paths plus a full per-place photo check that bypasses the photoVersions index. Does NOT touch
+// localMutationTimestamp, so an unconfirmed local edit is still protected.
+window.forceCloudSync = async function() {
+    if (!syncRoomId) {
+        showToast("동기화 룸이 설정되어 있지 않습니다.", "warning");
+        return;
+    }
+    showToast("클라우드와 강제 동기화 중... 🔄", "info");
+    lastSyncedTimestamp = 0;
+    lastKnownPhotosVersion = 0;
+    lastKnownMemoryPhotosVersion = 0;
+    try {
+        await loadFromCloud();
+        await forceResyncAllPlacePhotos();
+        await loadMemoryPhotosFromCloud();
+        await updateDashboardStats();
+        await renderPlacesList();
+        updateMapMarkers();
+        if (currentActiveTab === "gallery") renderGallery();
+        showToast("동기화 확인이 끝났습니다! 💖", "success");
+    } catch (e) {
+        console.error('[Force Sync] Failed:', e);
+        showToast("동기화 중 오류가 발생했습니다: " + e.message, "danger");
+    }
+};
 
 // 13. AI Chatbot Interface
 function checkApiKeyAlert() {
