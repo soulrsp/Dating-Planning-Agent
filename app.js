@@ -2786,7 +2786,7 @@ function renderCommentsBlock(place) {
     const textB = place.commentB ? escapeHtml(place.commentB) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
 
     return `
-        <div class="place-comments-box" style="font-size:0.78rem; margin-top:0.4rem; margin-bottom:0.6rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
+        <div class="place-comments-box" style="font-size:0.78rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
             <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
                 <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
                 <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textA}</div>
@@ -2879,7 +2879,7 @@ async function renderPlacesList() {
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
-                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
+                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
                         <div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateHtml}</div>
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
                             <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
@@ -2962,7 +2962,7 @@ async function renderPlacesList() {
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
-                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); margin-bottom:0.65rem; display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
+                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
                         ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
                             <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
@@ -2976,14 +2976,14 @@ async function renderPlacesList() {
                 let payerName = partnerAName;
                 if (place.payer === "B") payerName = partnerBName;
                 else if (place.payer === "DUTCH") payerName = "반반 더치페이 🤝";
-                
+
                 cardContent += renderCommentsBlock(place);
 
 
                 const photoList = place.photos || (place.photo ? [place.photo] : []);
                 if (photoList.length > 0) {
                     cardContent += `
-                        <div class="card-photos-section" style="margin-top:0.5rem; padding-top:0.4rem; border-top:1px dashed rgba(255,112,150,0.15);">
+                        <div class="card-photos-section" style="padding-top:0.4rem; border-top:1px dashed rgba(255,112,150,0.15);">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <button type="button" class="btn-toggle-card-photos" onclick="toggleCardPhotos(${place.id})" style="font-size:0.72rem; padding:0.2rem 0.55rem; border-radius:10px; background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--color-primary); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
                                     <i data-lucide="image" style="width:13px; height:13px;"></i>
@@ -3109,13 +3109,37 @@ async function updateDashboardStats() {
             dateRow.textContent = dateText;
             dashItemsEl.appendChild(dateRow);
 
+            // "선택한 날짜의 데이트 기록" 카드(renderSelectedDateDetails)와 동일한 카드 양식 —
+            // 배지-이름-코멘트를 같은 스타일로 맞춰서 두 카드가 다른 디자인처럼 보이지 않게 한다.
             nearestItems.forEach(p => {
+                const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+                const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+
+                let commentsHtml = '';
+                if (commentA) {
+                    commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
+                        <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                        <span>${escapeHtml(commentA)}</span>
+                    </div>`;
+                }
+                if (commentB) {
+                    commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
+                        <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                        <span>${escapeHtml(commentB)}</span>
+                    </div>`;
+                }
+
                 const row = document.createElement("div");
-                row.style.cssText = "display:flex; align-items:center; gap:6px; padding:0.45rem 0.7rem; background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.12); border-radius:10px;";
+                row.style.cssText = "display:flex; flex-direction:column; align-items:flex-start; padding:0.75rem 0.9rem; background:rgba(255,101,132,0.04); border:1px solid rgba(255,101,132,0.12); border-radius:12px; margin-bottom:0.5rem; gap:4px; width:100%;";
                 row.innerHTML = `
-                    <span style="font-size:0.72rem; padding:1px 7px; border-radius:6px; background:rgba(255,101,132,0.12); color:var(--color-primary); font-weight:700; flex-shrink:0;">📍 위시</span>
-                    <strong style="font-size:0.9rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
-                    ${p.category ? `<span style="font-size:0.72rem; color:var(--color-text-med); background:rgba(0,0,0,0.04); padding:1px 6px; border-radius:4px;">${escapeHtml(p.category)}</span>` : ""}
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:0.7rem; padding:0.15rem 0.55rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); border:1px solid rgba(255,101,132,0.3); font-weight:700; width:fit-content;">📍 위시리스트</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                        <strong style="font-size:0.95rem; color:var(--color-text-dark);">${escapeHtml(p.name)}</strong>
+                        <span style="font-size:0.75rem; color:var(--color-primary); background:rgba(255,101,132,0.08); padding:1px 6px; border-radius:4px;">${escapeHtml(p.category)}</span>
+                    </div>
+                    ${commentsHtml}
                 `;
                 dashItemsEl.appendChild(row);
             });
@@ -3787,6 +3811,19 @@ async function loadMemoryPhotosFromCloud() {
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) return;
         const cloudMemories = await response.json();
+
+        // No version marker exists yet (data predates this versioning scheme, or a write was
+        // interrupted before the marker was set) — self-heal by writing one now, so every poll
+        // after this one (on any device) has something to compare against instead of unconditionally
+        // re-downloading the whole gallery forever.
+        if (!remoteVersion) {
+            const healedVersion = Date.now();
+            fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/memoryPhotosVersion.json?print=silent`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(healedVersion)
+            }).catch(() => {});
+            setLastKnownMemoryPhotosVersion(healedVersion);
+        }
+
         if (!Array.isArray(cloudMemories) || cloudMemories.length === 0) return;
         if (JSON.stringify(customMemoryPhotos) === JSON.stringify(cloudMemories)) return;
 

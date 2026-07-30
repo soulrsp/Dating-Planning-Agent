@@ -183,13 +183,15 @@
                         <div class="calendar-container card" id="dashboard-calendar-container" style="flex: 1 1 auto; overflow: visible !important; min-height: 280px; padding: 0.85rem 1rem;">
                             <div class="calendar-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap; gap:6px;">
                                 <div>
-                                    <h3 class="card-heading" style="margin-bottom:0;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>우리의 데이트 달력 🗓️</h3>
+                                    <h3 class="card-heading" style="margin-bottom:0;"><i data-lucide="calendar" class="margin-right-sm text-primary"></i>데이트 달력 🗓️</h3>
                                 </div>
-                                <div class="calendar-nav-controls" style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:3px 8px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08);">
-                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-left" style="width:16px; height:16px;"></i></button>
-                                    <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:0.95rem; min-width:105px; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
-                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:16px; height:16px;"></i></button>
-                                    <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.15rem 0.55rem; border-radius:20px; font-size:0.72rem; margin-left:2px;">오늘 🌸</button>
+                                <div class="calendar-nav-controls" style="display:flex; align-items:center; justify-content:space-between; width:100%; gap:6px; background:rgba(255,255,255,0.7); backdrop-filter:blur(10px); padding:3px 8px; border-radius:30px; border:1px solid rgba(255,101,132,0.2); box-shadow:0 4px 15px rgba(255,101,132,0.08); box-sizing:border-box;">
+                                    <button type="button" class="btn btn-outline btn-sm" id="btn-cal-prev" onclick="changeCalendarMonth(-1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary); flex-shrink:0;"><i data-lucide="chevron-left" style="width:16px; height:16px;"></i></button>
+                                    <span class="calendar-current-month" id="calendar-month-title" style="font-weight:800; font-size:0.95rem; text-align:center; color:var(--color-primary); letter-spacing:-0.3px;">2026년 7월</span>
+                                    <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                                        <button type="button" class="btn btn-outline btn-sm" id="btn-cal-next" onclick="changeCalendarMonth(1)" style="border-radius:50%; width:28px; height:28px; padding:0; justify-content:center; border-color:rgba(255,101,132,0.3); color:var(--color-primary);"><i data-lucide="chevron-right" style="width:16px; height:16px;"></i></button>
+                                        <button type="button" class="btn btn-primary btn-sm" id="btn-cal-today" onclick="goTodayCalendar()" style="padding:0.15rem 0.55rem; border-radius:20px; font-size:0.72rem;">오늘 🌸</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -939,7 +941,7 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260729_v314"></script>
+    <script src="app.js?v=20260730_v316"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>

@@ -1969,7 +1969,7 @@ body {
     }
 
     .map-container-wrapper {
-        height: calc(100vh - 370px) !important;
+        height: calc(100vh - 390px) !important;
         min-height: 130px !important;
     }
 
