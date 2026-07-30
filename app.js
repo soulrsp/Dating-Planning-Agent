@@ -1,7 +1,7 @@
 /* -------------------------------------------------------------
  * AURA - Lovelier Couple Planner Logic System
  * Naver Maps JS SDK v3 Integration, Firebase Real-Time Sync,
- * Canvas Photo Compression, & Dutch-Pay Settlement Engine
+ * Canvas Photo Compression
  * ------------------------------------------------------------- */
 
 // 1. Initialize Dexie Database
@@ -52,7 +52,6 @@ let isKakaoPlacesActive = false;
 const mapSearchResultCache = new Map(); // normalizedQuery -> { results, timestamp }
 const MAP_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 let mapSearchGeneration = 0; // bumped on every new search; stale async chains check this before rendering
-let budgetLimit = parseInt(localStorage.getItem("aura_budget_limit")) || 500000;
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
 let syncRoomId = localStorage.getItem("aura_sync_room_id") || "0";
@@ -102,7 +101,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("settings-naver-client-id").value = naverClientId;
     const kakaoInput = document.getElementById("settings-kakao-api-key");
     if (kakaoInput) kakaoInput.value = kakaoApiKey;
-    document.getElementById("settings-budget-limit").value = budgetLimit;
     document.getElementById("settings-partner-a-name").value = partnerAName;
     document.getElementById("settings-partner-b-name").value = partnerBName;
     document.getElementById("settings-sync-room-id").value = syncRoomId;
@@ -428,6 +426,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+
+    // Gallery slider: swipe left/right to move between photos
+    const sliderImgContainer = document.querySelector(".slider-img-container");
+    if (sliderImgContainer) {
+        let touchStartX = 0;
+        let touchStartY = 0;
+        sliderImgContainer.addEventListener("touchstart", (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        sliderImgContainer.addEventListener("touchend", (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            // Require a clear horizontal drag (not a tap, not a vertical scroll) before treating it as a swipe.
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                navigateGallerySlider(dx < 0 ? 1 : -1);
+            }
+        }, { passive: true });
+    }
 });
 
 // 4. Tab Navigation Logic
@@ -484,16 +501,6 @@ function switchTab(tabId) {
 }
 
 function updatePartnerNamesUI() {
-    const optA = document.getElementById("opt-partner-a");
-    const optB = document.getElementById("opt-partner-b");
-    if (optA) { optA.textContent = `${partnerAName}(A)`; optA.value = "A"; }
-    if (optB) { optB.textContent = `${partnerBName}(B)`; optB.value = "B"; }
-    
-    const editOptA = document.getElementById("edit-opt-partner-a");
-    const editOptB = document.getElementById("edit-opt-partner-b");
-    if (editOptA) { editOptA.textContent = partnerAName; }
-    if (editOptB) { editOptB.textContent = partnerBName; }
-
     const lblA = document.getElementById("visit-lbl-comment-a");
     const lblB = document.getElementById("visit-lbl-comment-b");
     if (lblA) lblA.textContent = partnerAName;
@@ -2050,10 +2057,7 @@ window.saveMapSearchResult = async function(encoded) {
             priority: "medium",
             notes: `${data.address || ''} - AURA 네이버 지도 저장 💖`.trim(),
             isVisited: 0,
-            rating: 0,
             review: "",
-            expense: 0,
-            payer: "A",
             peopleCount: 2,
             photo: "",
             createdAt: new Date().toISOString()
@@ -2100,7 +2104,6 @@ window.saveMapSearchResultVisited = async function(encoded) {
             } else {
                 await db.places.update(existing.id, {
                     isVisited: 1,
-                    rating: 5,
                     review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
                     url: existing.url || naverUrl,
                     lat: saveLat,
@@ -2125,10 +2128,7 @@ window.saveMapSearchResultVisited = async function(encoded) {
             priority: "medium",
             notes: `${data.address || ''} - AURA 러브맵 다녀온 곳 📸`.trim(),
             isVisited: 1,
-            rating: 5,
             review: "러브맵을 통해 함께 다녀온 추천 데이트 장소! 📸",
-            expense: 0,
-            payer: "A",
             peopleCount: 2,
             photo: "",
             createdAt: new Date().toISOString()
@@ -2231,10 +2231,7 @@ async function handleAddPlaceSubmit(e) {
             priority,
             notes,
             isVisited: 0,
-            rating: 0,
             review: "",
-            expense: 0,
-            payer: "A",
             peopleCount: 2,
             photo: "",
             // 선택한 방문 예정일을 반영한다. "날짜 미정"이면 null, 아무것도 안 고르면 오늘.
@@ -2258,9 +2255,7 @@ async function openVisitModal(placeId, placeName) {
     document.getElementById("visit-place-id").value = placeId;
     document.getElementById("visit-place-name").textContent = placeName;
     
-    // Customize select option & label names based on settings
-    document.getElementById("opt-partner-a").textContent = partnerAName;
-    document.getElementById("opt-partner-b").textContent = partnerBName;
+    // Customize label names based on settings
     const lblA = document.getElementById("visit-lbl-comment-a");
     if (lblA) lblA.textContent = partnerAName;
     const lblB = document.getElementById("visit-lbl-comment-b");
@@ -2361,10 +2356,6 @@ function compressBase64Image(base64Str, maxWidth = 1024, maxHeight = 1024, quali
 async function handleVisitLogSubmit(e) {
     e.preventDefault();
     const id = parseInt(document.getElementById("visit-place-id").value);
-    const ratingEl = document.querySelector('input[name="rating"]:checked');
-    const rating = ratingEl ? parseInt(ratingEl.value) : 5;
-    const expense = parseInt(document.getElementById("visit-expense").value) || 0;
-    const payer = document.getElementById("visit-payer").value;
 
     const commAEl = document.getElementById("visit-comment-a");
     const commBEl = document.getElementById("visit-comment-b");
@@ -2384,9 +2375,6 @@ async function handleVisitLogSubmit(e) {
 
         const updateObj = {
             isVisited: 1,
-            rating: rating,
-            expense: expense,
-            payer: payer,
             peopleCount: 2,
             commentA: commentA,
             commentB: commentB
@@ -2417,13 +2405,18 @@ async function handleVisitLogSubmit(e) {
 }
 
 // Edit Place Modal Controls
-async function openEditPlaceModal(id) {
+async function openEditPlaceModal(id, fromGallery = false) {
     const place = await db.places.get(id);
     if (!place) return;
 
     document.getElementById("edit-place-id").value = place.id;
     document.getElementById("edit-place-name").value = place.name;
-    
+
+    // 삭제 버튼은 갤러리에서 연 경우에만 노출 — 다녀온곳/위시리스트 카드는 이미 자체 삭제
+    // 버튼이 있어서 여기 또 두면 중복.
+    const deleteBtn = document.getElementById("btn-delete-place-in-edit-modal");
+    if (deleteBtn) deleteBtn.classList.toggle("hidden", !fromGallery);
+
     const categorySelect = document.getElementById("edit-place-category");
     const customInput = document.getElementById("edit-place-custom-category");
     const standardCategories = ["Restaurant", "Cafe", "Bar", "Park", "Museum", "Other"];
@@ -2461,17 +2454,9 @@ async function openEditPlaceModal(id) {
     const commentBEl = document.getElementById("edit-place-comment-b");
     if (commentBEl) commentBEl.value = place.commentB || "";
 
-    document.getElementById("edit-opt-partner-a").textContent = partnerAName;
-    document.getElementById("edit-opt-partner-b").textContent = partnerBName;
-
     const visitedFields = document.getElementById("edit-visited-fields");
     if (place.isVisited === 1) {
         if (visitedFields) visitedFields.style.display = "block";
-        const ratingVal = place.rating || 5;
-        const ratingRadio = document.querySelector(`input[name="edit-rating"][value="${ratingVal}"]`);
-        if (ratingRadio) ratingRadio.checked = true;
-        document.getElementById("edit-place-expense").value = place.expense || 0;
-        document.getElementById("edit-place-payer").value = place.payer || "A";
 
         // Display existing photos for editing
         const photoPreview = document.getElementById("edit-place-photo-preview");
@@ -2594,15 +2579,6 @@ async function handleEditPlaceSubmit(e) {
     };
 
     if (place.isVisited === 1) {
-        const ratingEl = document.querySelector('input[name="edit-rating"]:checked');
-        const rating = ratingEl ? parseInt(ratingEl.value) : 5;
-        const expense = parseInt(document.getElementById("edit-place-expense").value) || 0;
-        const payer = document.getElementById("edit-place-payer").value;
-
-        updatePayload.rating = rating;
-        updatePayload.expense = expense;
-        updatePayload.payer = payer;
-
         const editPhotoImgs = document.querySelectorAll("#edit-place-photo-preview img");
         if (editPhotoImgs.length > 0) {
             const photosBase64 = [];
@@ -2973,10 +2949,6 @@ async function renderPlacesList() {
                     </div>
                 `;
 
-                let payerName = partnerAName;
-                if (place.payer === "B") payerName = partnerBName;
-                else if (place.payer === "DUTCH") payerName = "반반 더치페이 🤝";
-
                 cardContent += renderCommentsBlock(place);
 
 
@@ -3062,21 +3034,18 @@ async function deletePlace(id, name) {
     }
 }
 
-// 11. Dashboard Analytics & Dutch-Pay Settlement Engine
+// 11. Dashboard Analytics
 async function updateDashboardStats() {
     const places = await db.places.toArray();
-    
+
     const wishlistCount = places.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1).length;
     const visitedCount = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).length;
-    const expenseSum = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).reduce((acc, curr) => acc + (curr.expense || 0), 0);
-    
+
     const wishlistEl = document.getElementById("stat-wishlist-count");
     if (wishlistEl) wishlistEl.textContent = wishlistCount;
     const visitedEl = document.getElementById("stat-visited-count");
     if (visitedEl) visitedEl.textContent = visitedCount;
-    const expenseEl = document.getElementById("stat-expense-sum");
-    if (expenseEl) expenseEl.textContent = formatCurrency(expenseSum);
-    
+
     // D-Day update
     // 날짜 미정 항목, 그리고 이미 지난 항목은 "다음 약속" 후보에서 제외 (오늘 포함, 오늘 이후만)
     const dashNowMs = todayStartMs();
@@ -3158,60 +3127,6 @@ async function updateDashboardStats() {
     const nextDdayEl = document.getElementById("next-date-dday");
     if (nextDdayEl) nextDdayEl.textContent = nextDday;
     
-    // Budget Progress fill
-    document.getElementById("budget-spent-text").textContent = formatCurrency(expenseSum);
-    const progressFill = document.getElementById("budget-progress-fill");
-    const progressPercent = Math.min(Math.round((expenseSum / budgetLimit) * 100), 100);
-    
-    if (progressFill) {
-        progressFill.style.width = `${progressPercent}%`;
-        document.getElementById("budget-ratio-text").textContent = `${progressPercent}%`;
-        
-        if (progressPercent >= 90) {
-            progressFill.style.background = "var(--color-danger)";
-        } else if (progressPercent >= 75) {
-            progressFill.style.background = "var(--color-warning)";
-        } else {
-            progressFill.style.background = "linear-gradient(90deg, var(--color-secondary) 0%, var(--color-primary) 100%)";
-        }
-    }
-    
-    // Dutch-Pay Settlement calculation
-    const visitedPlaces = places.filter(p => p.isVisited === 1);
-    let paidByA = 0;
-    let paidByB = 0;
-    visitedPlaces.forEach(p => {
-        const exp = p.expense || 0;
-        if (p.payer === "B") {
-            paidByB += exp;
-        } else if (p.payer === "DUTCH") {
-            paidByA += exp / 2;
-            paidByB += exp / 2;
-        } else {
-            paidByA += exp;
-        }
-    });
-    
-    document.getElementById("dutchpay-paid-a").textContent = formatCurrency(paidByA);
-    document.getElementById("dutchpay-paid-b").textContent = formatCurrency(paidByB);
-    
-    const resultTextEl = document.getElementById("dutchpay-result-text");
-    if (paidByA === 0 && paidByB === 0) {
-        resultTextEl.textContent = "정산할 내역이 없습니다 💖";
-    } else {
-        const total = paidByA + paidByB;
-        const half = total / 2;
-        
-        if (paidByA > paidByB) {
-            const diff = half - paidByB;
-            resultTextEl.innerHTML = `<strong>${partnerBName}</strong> ➔ <strong>${partnerAName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> 송금해 주세요! 💌`;
-        } else if (paidByB > paidByA) {
-            const diff = half - paidByA;
-            resultTextEl.innerHTML = `<strong>${partnerAName}</strong> ➔ <strong>${partnerBName}</strong><br><span style="font-size:1.1rem; color:var(--color-primary);">${formatCurrency(diff)}</span> 송금해 주세요! 💌`;
-        } else {
-            resultTextEl.textContent = "완벽하게 1/N 정산 완료! 💖";
-        }
-    }
 }
 
 // Open & Close API Guide Modal (Gemini, Naver Maps, Naver Search)
@@ -4112,10 +4027,7 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
                 priority: "medium",
                 notes: place.notes,
                 isVisited: 0,
-                rating: 0,
                 review: "",
-                expense: 0,
-                payer: "A",
                 peopleCount: 2,
                 photo: "",
                 createdAt: new Date().toISOString()
@@ -4140,7 +4052,6 @@ async function saveSettings() {
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
     const kakaoInputEl = document.getElementById("settings-kakao-api-key");
     const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
-    const limitVal = parseInt(document.getElementById("settings-budget-limit").value) || 500000;
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
     const syncRoomVal = document.getElementById("settings-sync-room-id").value.trim();
@@ -4149,7 +4060,6 @@ async function saveSettings() {
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
     localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
-    localStorage.setItem("aura_budget_limit", limitVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
     localStorage.setItem("aura_partner_b_name", partnerBVal);
     localStorage.setItem("aura_sync_room_id", syncRoomVal);
@@ -4158,13 +4068,11 @@ async function saveSettings() {
     geminiApiKey = apiKeyVal;
     naverClientId = naverClientIdVal;
     kakaoApiKey = kakaoApiKeyVal;
-    budgetLimit = limitVal;
     partnerAName = partnerAVal;
     partnerBName = partnerBVal;
     syncRoomId = syncRoomVal;
     customFirebaseUrl = firebaseUrVal;
-    
-    document.getElementById("budget-limit-text").textContent = formatCurrency(budgetLimit);
+
     updatePartnerNamesUI();
     
     showToast("AURA 환경 설정이 안전하게 저장되었습니다 💖", "success");
@@ -4811,7 +4719,8 @@ async function renderGallery() {
 
     galleryPlaces.forEach(p => {
         const photos = p.photos || (p.photo ? [p.photo] : []);
-        const coverPhoto = photos[0];
+        const coverIdx = (typeof p.coverPhotoIndex === 'number' && p.coverPhotoIndex >= 0 && p.coverPhotoIndex < photos.length) ? p.coverPhotoIndex : 0;
+        const coverPhoto = photos[coverIdx];
         const photoCount = photos.length;
 
         const card = document.createElement("div");
@@ -4851,7 +4760,7 @@ async function renderGallery() {
                 </div>
                 ${commentsHtml}
                 <div class="gallery-action-bar" style="margin-top:6px;">
-                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id})">
+                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id}, true)">
                         ✏️ 수정/추가
                     </button>
                 </div>
@@ -4898,7 +4807,8 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
         id: place.id,
         name: place.name,
         meta: `${dateStr} · (${place.category})`,
-        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : ""
+        comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : "",
+        coverPhotoIndex: (typeof place.coverPhotoIndex === 'number' && place.coverPhotoIndex >= 0 && place.coverPhotoIndex < activeGalleryPhotos.length) ? place.coverPhotoIndex : 0
     };
 
     updateGallerySliderUI();
@@ -4944,6 +4854,15 @@ function updateGallerySliderUI() {
             thumbsContainer.style.display = "none";
         }
     }
+
+    const coverBtn = document.getElementById("btn-set-cover-photo");
+    if (coverBtn) {
+        const isCover = activePhotoIndex === activePlaceInfo.coverPhotoIndex;
+        coverBtn.title = isCover ? "대표 사진임" : "대표 사진 설정";
+        coverBtn.style.color = isCover ? "#FFD166" : "#fff";
+        coverBtn.disabled = isCover;
+        coverBtn.style.opacity = isCover ? "0.6" : "1";
+    }
 }
 
 window.navigateGallerySlider = function(direction) {
@@ -4957,6 +4876,19 @@ window.selectGallerySliderImage = function(idx) {
         activePhotoIndex = idx;
         updateGallerySliderUI();
     }
+};
+
+// Sets the currently viewed photo as this place's cover — the one shown on its 추억 갤러리 card.
+// Stored as an index into `photos`, not the image itself, so it stays a tiny field in placesData
+// instead of duplicating photo bytes there (see saveToCloud's photo-stripping).
+window.setCoverPhoto = async function() {
+    if (!activePlaceInfo || !activePlaceInfo.id) return;
+    await db.places.update(activePlaceInfo.id, { coverPhotoIndex: activePhotoIndex });
+    activePlaceInfo.coverPhotoIndex = activePhotoIndex;
+    updateGallerySliderUI();
+    triggerSyncUpload();
+    showToast("대표 사진으로 설정했습니다! ⭐", "success");
+    await renderGallery();
 };
 
 window.closeGallerySliderModal = function() {
@@ -4982,6 +4914,16 @@ window.deleteCurrentSliderPhoto = async function() {
         photo: updatedPhotos.length > 0 ? updatedPhotos[0] : ""
     };
 
+    // Keep coverPhotoIndex pointing at the same photo it did before the deletion shifted the array —
+    // otherwise it can silently end up pointing at a different photo than the one the couple picked.
+    if (typeof place.coverPhotoIndex === 'number') {
+        if (place.coverPhotoIndex === activePhotoIndex) {
+            updatePayload.coverPhotoIndex = 0;
+        } else if (place.coverPhotoIndex > activePhotoIndex) {
+            updatePayload.coverPhotoIndex = place.coverPhotoIndex - 1;
+        }
+    }
+
     await db.places.update(place.id, updatePayload);
     if (syncRoomId) {
         await uploadPhotoToCloud(place.id, updatedPhotos);
@@ -4997,11 +4939,12 @@ window.deleteCurrentSliderPhoto = async function() {
             activePhotoIndex = updatedPhotos.length - 1;
         }
         activeGalleryPhotos = updatedPhotos;
+        if ('coverPhotoIndex' in updatePayload) activePlaceInfo.coverPhotoIndex = updatePayload.coverPhotoIndex;
         updateGallerySliderUI();
     }
 
     await renderPlacesList();
-    renderGallery();
+    await renderGallery();
 };
 
 // Single & Place Photo Download Engines

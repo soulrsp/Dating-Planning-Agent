@@ -150,7 +150,6 @@
                         </div>
                     </div>
 
-                    <!-- Map and Budget/Settlement -->
                     <div class="main-grid-row" style="display:flex; flex-direction:column;">
                         <!-- Interactive Map Card -->
                         <div class="card map-card flex-grow">
@@ -260,47 +259,6 @@
                             </div>
                         </div>
 
-                        <!-- Budget & Dutch-pay Settlement Card -->
-                        <div class="card budget-card flex-column">
-                            <div>
-                                <div class="card-header">
-                                    <h3 class="card-heading">예산 대비 지출 현황</h3>
-                                </div>
-                                <div class="budget-chart-container">
-                                    <div class="budget-progress-label">
-                                        <span>현재 데이트 실지출</span>
-                                        <span id="budget-ratio-text">0%</span>
-                                    </div>
-                                    <div class="progress-bar-bg">
-                                        <div class="progress-bar-fill" id="budget-progress-fill" style="width: 0%;"></div>
-                                    </div>
-                                    <div class="budget-values">
-                                        <div>데이트 한도 예산: <span id="budget-limit-text">500,000원</span></div>
-                                        <div>우리가 쓴 총액: <span id="budget-spent-text" class="text-primary font-bold">0원</span></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <hr class="divider">
-
-                            <!-- Dutch-pay Calculator details -->
-                            <div class="settlement-container">
-                                <h4 class="sub-heading"><i data-lucide="calculator" class="margin-right-sm"></i>커플 정산 결과</h4>
-                                <div class="settlement-detail-card" id="dutchpay-settlement-card">
-                                    <div class="settlement-row">
-                                        <span><span id="settle-label-a">SH</span>(A)가 결제한 총액:</span>
-                                        <span id="dutchpay-paid-a">0원</span>
-                                    </div>
-                                    <div class="settlement-row">
-                                        <span><span id="settle-label-b">SA</span>(B)가 결제한 총액:</span>
-                                        <span id="dutchpay-paid-b">0원</span>
-                                    </div>
-                                    <div class="settlement-result" id="dutchpay-result-text">
-                                        정산할 내역이 없습니다 💖
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </section>
@@ -435,11 +393,7 @@
                             <input type="text" id="settings-kakao-api-key" placeholder="카카오 디벨로퍼스 JavaScript 키를 입력하세요">
                             <span class="help-text">등록 시 상호명(가게, 식당, 카페, 브랜드)을 CORS 제한 없이 100% 정밀 탐색합니다.</span>
                         </div>
-                        
-                        <div class="form-group">
-                            <label for="settings-budget-limit">데이트 예산 한도 (원)</label>
-                            <input type="number" id="settings-budget-limit" placeholder="예: 500000" value="500000">
-                        </div>
+
 
                         <div class="form-group-row">
                             <div class="form-group">
@@ -575,16 +529,6 @@
                     <div class="read-only-val" id="visit-place-name">장소명</div>
                 </div>
 
-                <div class="form-group">
-                    <label for="visit-rating">평점 *</label>
-                    <div class="rating-input-row">
-                        <input type="radio" name="rating" id="star5" value="5" checked><label for="star5" title="5점"><i data-lucide="star"></i></label>
-                        <input type="radio" name="rating" id="star4" value="4"><label for="star4" title="4점"><i data-lucide="star"></i></label>
-                        <input type="radio" name="rating" id="star3" value="3"><label for="star3" title="3점"><i data-lucide="star"></i></label>
-                        <input type="radio" name="rating" id="star2" value="2"><label for="star2" title="2점"><i data-lucide="star"></i></label>
-                        <input type="radio" name="rating" id="star1" value="1"><label for="star1" title="1점"><i data-lucide="star"></i></label>
-                    </div>
-                </div>
 
                 <div class="form-group-row" style="margin-top:0.4rem;">
                     <div class="form-group">
@@ -594,21 +538,6 @@
                     <div class="form-group">
                         <label for="visit-comment-b">💬 <span id="visit-lbl-comment-b">딸기</span> 코멘트 작성하기</label>
                         <input type="text" id="visit-comment-b" placeholder="예: 다음에 꼭 또 오고 싶어! ✨">
-                    </div>
-                </div>
-
-                <div class="form-group-row">
-                    <div class="form-group">
-                        <label for="visit-expense">결제한 비용 (원)</label>
-                        <input type="number" id="visit-expense" placeholder="금액" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="visit-payer">누가 결제했나요? *</label>
-                        <select id="visit-payer">
-                            <option value="A" id="opt-partner-a">SH(A)</option>
-                            <option value="B" id="opt-partner-b">SA(B)</option>
-                            <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
-                        </select>
                     </div>
                 </div>
 
@@ -639,7 +568,10 @@
                 <input type="hidden" id="edit-place-id">
                 
                 <div class="form-group">
-                    <label for="edit-place-name">장소명 *</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label for="edit-place-name" style="margin:0;">장소명 *</label>
+                        <button type="button" class="btn btn-outline btn-sm hidden" id="btn-delete-place-in-edit-modal" onclick="deletePlaceFromEditModal()" style="border-color:#EF476F; color:#EF476F; background:rgba(239,71,111,0.06); padding:0.15rem 0.5rem; font-size:0.68rem;">삭제 🗑️</button>
+                    </div>
                     <input type="text" id="edit-place-name" required placeholder="장소 이름">
                 </div>
 
@@ -686,34 +618,12 @@
                 </div>
 
                 <div id="edit-visited-fields">
-                    <div class="form-group">
-                        <label>평점 *</label>
-                        <div class="rating-input-row">
-                            <input type="radio" name="edit-rating" id="edit-star5" value="5"><label for="edit-star5" title="5점"><i data-lucide="star"></i></label>
-                            <input type="radio" name="edit-rating" id="edit-star4" value="4"><label for="edit-star4" title="4점"><i data-lucide="star"></i></label>
-                            <input type="radio" name="edit-rating" id="edit-star3" value="3"><label for="edit-star3" title="3점"><i data-lucide="star"></i></label>
-                            <input type="radio" name="edit-rating" id="edit-star2" value="2"><label for="edit-star2" title="2점"><i data-lucide="star"></i></label>
-                            <input type="radio" name="edit-rating" id="edit-star1" value="1"><label for="edit-star1" title="1점"><i data-lucide="star"></i></label>
-                        </div>
-                    </div>
-
-                    <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="edit-place-expense">결제한 비용 (원)</label>
-                            <input type="number" id="edit-place-expense" placeholder="금액" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-place-payer">누가 결제했나요?</label>
-                            <select id="edit-place-payer">
-                                <option value="A" id="edit-opt-partner-a">SH(A)</option>
-                                <option value="B" id="edit-opt-partner-b">SA(B)</option>
-                                <option value="DUTCH">반반 더치페이 (50:50) 🤝</option>
-                            </select>
-                        </div>
-                    </div>
 
                     <div class="form-group">
-                        <label for="edit-place-photo">커플 추억 사진 추가/수정 (선택, 여러 장 가능)</label>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label for="edit-place-photo" style="margin:0;">사진 추가/수정</label>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('edit-place-photo').click()" style="padding:0.2rem 0.6rem; font-size:0.72rem;">추가/수정</button>
+                        </div>
                         <input type="file" id="edit-place-photo" accept="image/*" multiple style="display: none;">
                         <div class="photo-preview-box" id="edit-place-photo-preview">
                             <span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>
@@ -721,12 +631,9 @@
                     </div>
                 </div>
 
-                <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:0.5rem; flex-wrap:wrap;">
-                    <button type="button" class="btn btn-outline" style="border-color:#EF476F; color:#EF476F; background:rgba(239,71,111,0.06); font-size:0.75rem; padding:0.35rem 0.65rem;" onclick="deletePlaceFromEditModal()">장소 전체 삭제 🗑️</button>
-                    <div style="display:flex; gap:0.4rem;">
-                        <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()">취소</button>
-                        <button type="submit" class="btn btn-primary">수정사항 저장 💖</button>
-                    </div>
+                <div class="modal-footer" style="display:flex; align-items:center; width:100%; gap:0.5rem;">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-edit-modal" onclick="closeEditPlaceModal()" style="flex:1;">취소</button>
+                    <button type="submit" class="btn btn-primary" style="flex:1;">저장 💖</button>
                 </div>
             </form>
         </div>
@@ -773,15 +680,18 @@
     <div class="modal-overlay" id="modal-gallery-slider">
         <div class="gallery-slider-card">
             <div style="display:flex; justify-content:space-between; align-items:center; width:100%; position:absolute; top:12px; left:0; padding:0 16px; z-index:10;">
-                <div style="display:flex; gap:5px; flex-wrap:wrap;">
-                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadPlacePhotosZipFromSlider()">
-                        <i data-lucide="archive" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>전체 사진 다운
+                <div style="display:flex; gap:4px; flex-wrap:nowrap;">
+                    <button class="btn btn-outline" title="전체 사진 다운" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadPlacePhotosZipFromSlider()">
+                        <i data-lucide="archive" style="width:14px; height:14px;"></i>
                     </button>
-                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
-                        <i data-lucide="download" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>사진 다운
+                    <button class="btn btn-outline" title="이 사진 다운" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
+                        <i data-lucide="download" style="width:14px; height:14px;"></i>
                     </button>
-                    <button class="btn btn-outline" style="font-size:0.7rem; padding:0.2rem 0.5rem; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="deleteCurrentSliderPhoto()">
-                        <i data-lucide="trash-2" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:3px;"></i>삭제
+                    <button class="btn btn-outline" id="btn-set-cover-photo" title="대표 사진 설정" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="setCoverPhoto()">
+                        <i data-lucide="star" style="width:14px; height:14px;"></i>
+                    </button>
+                    <button class="btn btn-outline" title="이 사진 삭제" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(225,29,72,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="deleteCurrentSliderPhoto()">
+                        <i data-lucide="trash-2" style="width:14px; height:14px;"></i>
                     </button>
                 </div>
                 <button class="modal-close" style="position:static; background:rgba(0,0,0,0.5); color:#fff;" onclick="closeGallerySliderModal()"><i data-lucide="x"></i></button>
@@ -941,7 +851,7 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260730_v316"></script>
+    <script src="app.js?v=20260730_v327"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
