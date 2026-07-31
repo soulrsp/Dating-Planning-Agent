@@ -2034,10 +2034,15 @@ window.saveMapSearchResult = async function(encoded) {
         let saveLng = data.lng;
         if (data.address) {
             const refined = await refineCoordinatesViaNaverGeocoder(data.address);
-            if (refined) {
+            // Geocoder can mismatch a road name to a same-named road in another city — a refined
+            // result that lands far from the original marker is more likely a bad match than a
+            // genuine precision correction, so discard it and keep the original coordinates.
+            if (refined && calculateDistanceKm(data.lat, data.lng, refined.lat, refined.lng) < 20) {
                 saveLat = refined.lat;
                 saveLng = refined.lng;
                 console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+            } else if (refined) {
+                console.warn(`[Save Refine] Rejected implausible refine for ${data.name}: original (${data.lat},${data.lng}) vs refined (${refined.lat},${refined.lng})`);
             }
         }
 
@@ -2091,10 +2096,15 @@ window.saveMapSearchResultVisited = async function(encoded) {
         let saveLng = data.lng;
         if (data.address) {
             const refined = await refineCoordinatesViaNaverGeocoder(data.address);
-            if (refined) {
+            // Geocoder can mismatch a road name to a same-named road in another city — a refined
+            // result that lands far from the original marker is more likely a bad match than a
+            // genuine precision correction, so discard it and keep the original coordinates.
+            if (refined && calculateDistanceKm(data.lat, data.lng, refined.lat, refined.lng) < 20) {
                 saveLat = refined.lat;
                 saveLng = refined.lng;
                 console.log(`[Save Refine] ${data.name}: (${data.lat},${data.lng}) → Naver Geocoder (${saveLat},${saveLng})`);
+            } else if (refined) {
+                console.warn(`[Save Refine] Rejected implausible refine for ${data.name}: original (${data.lat},${data.lng}) vs refined (${refined.lat},${refined.lng})`);
             }
         }
 

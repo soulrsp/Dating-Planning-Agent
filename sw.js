@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aura-date-planner-v20260730_v330';
+const CACHE_NAME = 'aura-date-planner-v20260731_v331';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
