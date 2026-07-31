@@ -63,7 +63,6 @@ function getFirebaseDbUrl() {
     return customFirebaseUrl ? customFirebaseUrl.replace(/\/$/, "") : DEFAULT_FIREBASE_DB_URL;
 }
 
-let lastSyncedDataString = "";
 let lastSyncedTimestamp = 0;
 // Restored from localStorage: if the tab is closed/reloaded before a save finishes (or its retry),
 // the in-memory guard below would otherwise reset to 0 and let the very next loadFromCloud() pull
@@ -86,7 +85,6 @@ function setLastKnownMemoryPhotosVersion(v) {
     localStorage.setItem('aura_last_memory_photos_version', String(v));
 }
 
-let saveRetryTimeoutId = null;
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
 let isUploading = false;
@@ -161,10 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Cleanup legacy test comments & deduplicate junk places if present
     await cleanJunkData(false);
 
-    // Pull the latest cloud state BEFORE pushing anything on startup. saveToCloud() PATCHes the
-    // whole placesData list wholesale (no server-side merge) — if this device's local IndexedDB
-    // is behind (e.g. it's been idle while edits happened on another device/tab), pushing before
-    // the initial pull finishes would silently erase those not-yet-synced-down cloud records.
+    // Pull the latest cloud state BEFORE pushing anything on startup.
     if (syncRoomId) {
         await loadFromCloud();
     }
@@ -816,6 +811,7 @@ async function updateMapMarkers() {
             place.lat = place.lat / 10.0;
             place.lng = place.lng / 10.0;
             await db.places.update(place.id, { lat: place.lat, lng: place.lng });
+            triggerSyncUpload(place.id);
         }
 
         if (!place.lat || !place.lng || (place.lat > 45 || place.lat < 30 || place.lng > 135 || place.lng < 120)) {
@@ -826,6 +822,7 @@ async function updateMapMarkers() {
                     place.lat = refined.lat;
                     place.lng = refined.lng;
                     await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
+                    triggerSyncUpload(place.id);
                 }
             }
         }
@@ -1134,6 +1131,7 @@ window.resetAllPlaceMapPins = async function() {
     await updateDashboardStats();
     await renderPlacesList();
     updateMapMarkers();
+    if (updatedCount > 0 && syncRoomId) await pushAllLocalPlacesToCloud();
     showToast(`저장된 위시리스트 & 다녀온 곳 핀 ${updatedCount}개를 네이버 API Hub 최신 위치로 100% 업데이트 완료했습니다! 📍✨`, "success");
 };
 
@@ -2048,7 +2046,7 @@ window.saveMapSearchResult = async function(encoded) {
             return;
         }
 
-        await db.places.add({
+        const newPlaceId = await db.places.add({
             name: data.name,
             category: data.category || "Other",
             url: naverUrl,
@@ -2062,14 +2060,14 @@ window.saveMapSearchResult = async function(encoded) {
             photo: "",
             createdAt: new Date().toISOString()
         });
-        
+
         showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
         clearSearchMarkers();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        
-        triggerSyncUpload();
+
+        triggerSyncUpload(newPlaceId);
     } catch(err) {
         showToast("장소 저장 실패: " + err.message, "danger");
     }
@@ -2114,12 +2112,12 @@ window.saveMapSearchResultVisited = async function(encoded) {
                 await updateDashboardStats();
                 await renderPlacesList();
                 updateMapMarkers();
-                triggerSyncUpload();
+                triggerSyncUpload(existing.id);
                 return;
             }
         }
 
-        await db.places.add({
+        const newVisitedId = await db.places.add({
             name: data.name,
             category: data.category || "Restaurant",
             url: naverUrl,
@@ -2133,13 +2131,13 @@ window.saveMapSearchResultVisited = async function(encoded) {
             photo: "",
             createdAt: new Date().toISOString()
         });
-        
+
         showToast(`'${data.name}'을(를) 함께 다녀온 곳에 기록했습니다! 📸`, "success");
         clearSearchMarkers();
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        triggerSyncUpload(newVisitedId);
     } catch(err) {
         showToast("다녀온 곳 저장 실패: " + err.message, "danger");
     }
@@ -2222,7 +2220,7 @@ async function handleAddPlaceSubmit(e) {
     }
 
     try {
-        await db.places.add({
+        const newAddedId = await db.places.add({
             name,
             category,
             url,
@@ -2244,7 +2242,7 @@ async function handleAddPlaceSubmit(e) {
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        triggerSyncUpload(newAddedId);
     } catch (err) {
         showToast("장소 추가 실패: " + err.message, "danger");
     }
@@ -2398,7 +2396,7 @@ async function handleVisitLogSubmit(e) {
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        triggerSyncUpload(id);
     } catch(err) {
         showToast("기록 등록 실패: " + err.message, "danger");
     }
@@ -2526,7 +2524,7 @@ window.deletePlaceFromEditModal = async function() {
     await renderGallery();
     await updateDashboardStats();
     await renderCalendar();
-    if (typeof saveToCloud === "function") saveToCloud();
+    triggerSyncUpload(placeId);
 };
 
 window.quickEditComment = async function(id, partnerKey) {
@@ -2544,7 +2542,7 @@ window.quickEditComment = async function(id, partnerKey) {
         await db.places.update(id, updateObj);
         showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
         await renderPlacesList();
-        triggerSyncUpload();
+        triggerSyncUpload(id);
     }
 };
 
@@ -2603,7 +2601,7 @@ async function handleEditPlaceSubmit(e) {
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        triggerSyncUpload(id);
     } catch(err) {
         showToast("수정 실패: " + err.message, "danger");
     }
@@ -3028,7 +3026,7 @@ async function deletePlace(id, name) {
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        triggerSyncUpload(id);
     } catch(err) {
         showToast("삭제 오류: " + err.message, "danger");
     }
@@ -3225,7 +3223,11 @@ function startCloudSyncLoop() {
     // the guard's protection actually results in the edit reaching the cloud instead of just
     // sitting there un-synced until the user happens to make another edit.
     if (localMutationTimestamp > lastSyncedTimestamp) {
-        saveToCloud();
+        const pendingPlaceIds = JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]');
+        pendingPlaceIds.forEach(id => savePlaceToCloud(id));
+        if (localStorage.getItem('aura_pending_settings')) {
+            saveSettingsToCloud();
+        }
     }
 
     // Run immediately on start
@@ -3234,46 +3236,85 @@ function startCloudSyncLoop() {
     loadMemoryPhotosFromCloud();
 }
 
-async function saveToCloud() {
-    if (!syncRoomId || isUploading) return;
-    isUploading = true;
-    
-    try {
-        const places = await db.places.toArray();
-        const seenNames = new Set();
-        const cleanPlaces = [];
-        places.forEach(p => {
-            const copy = { ...p };
-            sanitizePlaceObject(copy);
-            // Photos sync through their own dedicated path (uploadPhotoToCloud / loadPhotosFromCloud).
-            // Embedding base64 photo data in placesData too made this PATCH balloon past Firebase
-            // Realtime Database's per-value size limit, which is why every save silently failed
-            // with 400 — and since it never succeeded, every fresh app load re-pulled the old stale
-            // cloud snapshot and appeared to "revert" local edits.
-            delete copy.photo;
-            delete copy.photos;
-            const cleanName = (copy.name || "").trim();
-            if (cleanName && cleanName.length >= 2 && cleanName.toLowerCase() !== "undefined" && cleanName.toLowerCase() !== "null") {
-                const nameKey = cleanName.toLowerCase();
-                if (!seenNames.has(nameKey)) {
-                    seenNames.add(nameKey);
-                    cleanPlaces.push(copy);
-                }
-            }
-        });
+// Derives the same per-place cloud key used by uploadPhotoToCloud/photoVersions, so a place's
+// text data and its photos live under consistent, independently-writable paths.
+function placeNameKey(name) {
+    return (name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
+}
 
-        // Save local DB to cloud room (including empty list when user clears/deletes places)
+// Pushes ONE place to its own cloud node (/aura-rooms/{room}/places/{nameKey}), never the whole
+// collection. This is the fix for the "date rolls back overnight" bug: the old saveToCloud() PATCHed
+// a single placesData string containing the ENTIRE local places array on every edit. If a device's
+// local copy was even slightly stale (hadn't pulled a change another device already made to some
+// OTHER place), saving anything at all silently pushed that stale copy of every other place too,
+// clobbering edits the other device had already synced. Writing only the changed place's own path
+// makes that structurally impossible — this device can never overwrite a place it didn't touch.
+async function savePlaceToCloud(placeId, attempt = 1) {
+    if (!syncRoomId) return;
+    const MAX_ATTEMPTS = 4;
+    try {
+        const place = await db.places.get(placeId);
+        if (!place) return;
+
+        const copy = { ...place };
+        sanitizePlaceObject(copy);
+        delete copy.photo;
+        delete copy.photos;
+        delete copy.photoVersion; // local-only bookkeeping for loadPhotosFromCloud's gating
+        delete copy.id; // local Dexie auto-increment id, meaningless (and possibly colliding) across devices
+
+        const nameKey = placeNameKey(copy.name);
+        if (!nameKey) return;
+
+        const ts = Date.now();
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}.json?print=silent`;
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(copy)
+        });
+        if (!response.ok) throw new Error(`place write failed: ${response.status}`);
+
+        // Cheap top-level marker other devices' loadFromCloud() polls to know something changed.
+        await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/timestamp.json?print=silent`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ts)
+        });
+        lastSyncedTimestamp = ts;
+        localStorage.removeItem('aura_pending_mutation_ts');
+        clearPendingPlaceId(placeId);
+    } catch (e) {
+        console.error(`[Place Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}) for place ${placeId}:`, e);
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(() => savePlaceToCloud(placeId, attempt + 1), 3000 * attempt);
+        } else {
+            console.error('[Place Sync] Giving up after max retries — place stayed local-only.');
+        }
+    }
+}
+
+// One-time (or rare) bulk seed: pushes every local place individually, e.g. when the cloud room is
+// completely empty. Still per-place writes underneath — never a wholesale array overwrite.
+async function pushAllLocalPlacesToCloud() {
+    const places = await db.places.toArray();
+    for (const p of places) {
+        await savePlaceToCloud(p.id);
+    }
+}
+
+// Settings-only save — partner names & public client keys. Small, rarely-conflicting scalars, so a
+// wholesale PATCH here is fine; place data must never travel through this path (see savePlaceToCloud).
+async function saveSettingsToCloud(attempt = 1) {
+    if (!syncRoomId) return;
+    const MAX_ATTEMPTS = 4;
+    try {
         const now = Date.now();
         // The sync room is an unauthenticated Firebase path — anyone who knows the room id can read it.
         // Public client keys (Naver Client ID, Kakao JS key) are safe to sync and are domain-restricted.
         // Real secrets are not synced, and are explicitly nulled so PATCH deletes any copy already stored
         // in the room by earlier builds. Enter those per-device in 설정 instead.
         const payload = {
-            placesData: JSON.stringify(cleanPlaces),
-            // memoryPhotos deliberately excluded — it syncs through its own version-gated path
-            // (uploadMemoryPhotosToCloud/loadMemoryPhotosFromCloud) now. It used to be embedded here,
-            // which meant every single placesData edit re-downloaded the entire memory gallery as
-            // base64 on every device's next poll — this was most of the "full room fetch" cost.
             partnerAName: partnerAName,
             partnerBName: partnerBName,
             naverClientId: naverClientId,
@@ -3283,9 +3324,8 @@ async function saveToCloud() {
             geminiApiKey: null,
             timestamp: now
         };
-        
+
         const bodyStr = JSON.stringify(payload);
-        lastSyncedDataString = bodyStr;
         // print=silent — the response body (which Firebase otherwise echoes back in full) is never
         // read below, so there's no reason to pay for downloading it.
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}.json?print=silent`;
@@ -3296,17 +3336,16 @@ async function saveToCloud() {
         });
         if (response.ok) {
             lastSyncedTimestamp = now;
-            // Confirmed on the server now — safe to let a reload skip straight to a fresh pull again.
             localStorage.removeItem('aura_pending_mutation_ts');
+            localStorage.removeItem('aura_pending_settings');
         } else {
-            console.error('Firebase save failed:', response.status);
-            scheduleSaveRetry();
+            throw new Error(`settings write failed: ${response.status}`);
         }
     } catch (e) {
-        console.error('Firebase save error:', e);
-        scheduleSaveRetry();
-    } finally {
-        isUploading = false;
+        console.error(`[Settings Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
+        if (attempt < MAX_ATTEMPTS) {
+            setTimeout(() => saveSettingsToCloud(attempt + 1), 3000 * attempt);
+        }
     }
 }
 
@@ -3314,8 +3353,8 @@ async function saveToCloud() {
 async function loadFromCloud() {
     if (!syncRoomId || isDownloading || isUploading) return;
     // A local edit hasn't been confirmed uploaded yet — pulling now would merge in the cloud's
-    // stale pre-edit copy and silently undo the edit. Stay blocked until saveToCloud() succeeds
-    // (it retries on failure), not just for a fixed window.
+    // stale pre-edit copy and silently undo the edit. Stay blocked until savePlaceToCloud()/
+    // saveSettingsToCloud() succeeds (they retry on failure), not just for a fixed window.
     if (localMutationTimestamp > lastSyncedTimestamp) return;
 
     isDownloading = true;
@@ -3336,8 +3375,10 @@ async function loadFromCloud() {
         // including photos/photoVersions/memoryPhotos (megabytes of base64), even though none of
         // that is read below. This was the real source of the multi-MB "full room" fetches: the
         // per-place/per-gallery version-gating elsewhere never protected this path at all.
+        // `places` is an OBJECT of individual place records ({nameKey: place}), not a single
+        // stringified array — see savePlaceToCloud for why.
         const roomBase = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`;
-        const roomFields = ['placesData', 'partnerAName', 'partnerBName', 'naverClientId', 'kakaoApiKey', 'timestamp'];
+        const roomFields = ['places', 'partnerAName', 'partnerBName', 'naverClientId', 'kakaoApiKey', 'timestamp'];
         const fieldResults = await Promise.all(roomFields.map(f =>
             fetch(`${roomBase}/${f}.json?t=${Date.now()}`, { cache: 'no-store' })
                 .then(r => r.ok ? r.json() : undefined)
@@ -3348,10 +3389,10 @@ async function loadFromCloud() {
 
         const localPlaces = await db.places.toArray();
 
-        if (resData.placesData == null && resData.timestamp == null) {
+        if (resData.places == null && resData.timestamp == null) {
             // Room empty in cloud, initialize cloud with local data
             if (localPlaces.length > 0) {
-                await saveToCloud();
+                await pushAllLocalPlacesToCloud();
             }
             return;
         }
@@ -3388,8 +3429,8 @@ async function loadFromCloud() {
             }
 
             // naverSearchSecret / geminiApiKey are deliberately NOT restored from the room — see the
-            // saveToCloud payload. Secrets pulled from an unauthenticated path would re-plant themselves
-            // in localStorage on every device that opens the room.
+            // saveSettingsToCloud payload. Secrets pulled from an unauthenticated path would re-plant
+            // themselves in localStorage on every device that opens the room.
 
             if (resData.kakaoApiKey && resData.kakaoApiKey !== kakaoApiKey) {
                 kakaoApiKey = resData.kakaoApiKey;
@@ -3403,17 +3444,12 @@ async function loadFromCloud() {
             // from before this fix; it's simply ignored now.)
         }
 
-        if (resData.placesData) {
+        if (resData.places) {
             if (resData.timestamp) {
                 lastSyncedTimestamp = resData.timestamp;
             }
 
-            let fetchedPlaces = [];
-            try {
-                fetchedPlaces = JSON.parse(resData.placesData);
-            } catch(e) {
-                console.error('Failed to parse Firebase placesData:', e);
-            }
+            const fetchedPlaces = Object.values(resData.places);
 
             if (Array.isArray(fetchedPlaces)) {
                 // Filter out any junk/duplicate places directly from fetched cloud data
@@ -3450,7 +3486,7 @@ async function loadFromCloud() {
                 // Safe Cloud Sync Guard: Prevent wiping local DB if cloud returns empty places while local DB has data
                 if (placesToApply.length === 0 && localPlaces.some(p => !p.isDeleted)) {
                     console.warn("[Sync Engine] Cloud returned empty places, but local DB has active data. Pushing local places to cloud instead of clearing local DB.");
-                    await saveToCloud();
+                    await pushAllLocalPlacesToCloud();
                     return;
                 }
 
@@ -3463,14 +3499,20 @@ async function loadFromCloud() {
 
                     if (existing) {
                         // Local tombstone is terminal — never let a stale (pre-delete) cloud copy revive it.
-                        // It stays local-only until saveToCloud() successfully pushes the deletion out.
+                        // It stays local-only until savePlaceToCloud() successfully pushes the deletion out.
                         if (existing.isDeleted === 1 || existing.isVisited === -1) continue;
 
                         const updatePayload = { ...fp };
                         delete updatePayload.id;
-                        // photo/photos are deliberately absent from fp (stripped before placesData was
-                        // stringified — see saveToCloud) and must stay absent from updatePayload too, so
-                        // Dexie's update() leaves them untouched. They used to be explicitly re-added here
+                        // Firebase deletes a key entirely when it's written as null (there's no stored
+                        // "null", only "absent"). savePlaceToCloud() sets createdAt: null for undated
+                        // places, so on the way back down that key is simply missing from fp — re-add it
+                        // explicitly so the diff below (which only compares keys present in updatePayload)
+                        // actually detects and applies "미정" to a device whose local copy still has a date.
+                        if (!('createdAt' in fp)) updatePayload.createdAt = null;
+                        // photo/photos are deliberately absent from fp (stripped before this place's own
+                        // node was written — see savePlaceToCloud) and must stay absent from updatePayload
+                        // too, so Dexie's update() leaves them untouched. They used to be explicitly re-added here
                         // from `existing`, but `existing` is a snapshot taken before this function's own
                         // call, and loadFromCloud()/loadPhotosFromCloud() run concurrently (both fired
                         // unawaited from startCloudSyncLoop) — so this was overwriting a photo
@@ -3515,26 +3557,36 @@ async function loadFromCloud() {
     }
 }
 
-// Standalone trigger to force immediate sync uploads on local edits
-function triggerSyncUpload() {
+// Standalone trigger to force immediate sync uploads on local edits.
+// Pass the changed place's id for any place mutation (add/edit/delete/comment/etc) — that pushes
+// only that place's own cloud node (see savePlaceToCloud). Call with no argument only for
+// settings-only changes (partner names, API keys) — never for place data.
+function triggerSyncUpload(placeId) {
     localMutationTimestamp = Date.now();
     // Survives a reload/close before the upload (or its retry) finishes — see the init comment above.
     localStorage.setItem('aura_pending_mutation_ts', String(localMutationTimestamp));
-    setTimeout(async () => {
-        await saveToCloud();
-    }, 50);
+
+    if (placeId != null) {
+        const pending = JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]');
+        if (!pending.includes(placeId)) {
+            pending.push(placeId);
+            localStorage.setItem('aura_pending_place_ids', JSON.stringify(pending));
+        }
+        setTimeout(() => savePlaceToCloud(placeId), 50);
+    } else {
+        localStorage.setItem('aura_pending_settings', '1');
+        setTimeout(() => saveSettingsToCloud(), 50);
+    }
 }
 
-// Retries a failed saveToCloud() until it succeeds, so loadFromCloud's pending-edit guard
-// (localMutationTimestamp > lastSyncedTimestamp) doesn't stay blocked forever on a flaky network.
-function scheduleSaveRetry() {
-    if (saveRetryTimeoutId) return;
-    saveRetryTimeoutId = setTimeout(async () => {
-        saveRetryTimeoutId = null;
-        if (localMutationTimestamp > lastSyncedTimestamp) {
-            await saveToCloud();
-        }
-    }, 3000);
+// Removes a place id from the "not yet confirmed uploaded" list once its save actually succeeds.
+function clearPendingPlaceId(placeId) {
+    const pending = JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]').filter(id => id !== placeId);
+    if (pending.length > 0) {
+        localStorage.setItem('aura_pending_place_ids', JSON.stringify(pending));
+    } else {
+        localStorage.removeItem('aura_pending_place_ids');
+    }
 }
 
 // ── Firebase Photos REST API sync ──
@@ -4017,8 +4069,9 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
     let savedCount = 0;
     
     try {
+        const newIds = [];
         for(const place of places) {
-            await db.places.add({
+            const newId = await db.places.add({
                 name: place.name,
                 category: place.category || "Other",
                 url: "",
@@ -4032,14 +4085,15 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
                 photo: "",
                 createdAt: new Date().toISOString()
             });
+            newIds.push(newId);
             savedCount++;
         }
-        
+
         showToast(`${savedCount}개의 데이트 코스가 보관함(위시리스트)에 추가되었습니다!`, "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload();
+        newIds.forEach(id => triggerSyncUpload(id));
         switchTab("wishlist");
     } catch(err) {
         showToast("코스 저장 실패: " + err.message, "danger");
@@ -4128,7 +4182,7 @@ function importData(e) {
             await updateDashboardStats();
             await renderPlacesList();
             updateMapMarkers();
-            triggerSyncUpload();
+            if (syncRoomId) await pushAllLocalPlacesToCloud();
         } catch(err) {
             showToast("가져오기 실패: " + err.message, "danger");
         }
@@ -4405,7 +4459,7 @@ async function cleanJunkData(showToastMsg = false) {
             await updateDashboardStats();
             await renderPlacesList();
             updateMapMarkers();
-            triggerSyncUpload();
+            if (syncRoomId) await pushAllLocalPlacesToCloud();
 
             if (showToastMsg) {
                 showToast(`${removedCount}개의 유령/삭제/중복 데이터가 완벽하게 정제 및 클라우드 소멸되었습니다! 🧹`, "success");
@@ -4879,14 +4933,14 @@ window.selectGallerySliderImage = function(idx) {
 };
 
 // Sets the currently viewed photo as this place's cover — the one shown on its 추억 갤러리 card.
-// Stored as an index into `photos`, not the image itself, so it stays a tiny field in placesData
-// instead of duplicating photo bytes there (see saveToCloud's photo-stripping).
+// Stored as an index into `photos`, not the image itself, so it stays a tiny field on the place's
+// own cloud node instead of duplicating photo bytes there (see savePlaceToCloud's photo-stripping).
 window.setCoverPhoto = async function() {
     if (!activePlaceInfo || !activePlaceInfo.id) return;
     await db.places.update(activePlaceInfo.id, { coverPhotoIndex: activePhotoIndex });
     activePlaceInfo.coverPhotoIndex = activePhotoIndex;
     updateGallerySliderUI();
-    triggerSyncUpload();
+    triggerSyncUpload(activePlaceInfo.id);
     showToast("대표 사진으로 설정했습니다! ⭐", "success");
     await renderGallery();
 };
@@ -4928,7 +4982,7 @@ window.deleteCurrentSliderPhoto = async function() {
     if (syncRoomId) {
         await uploadPhotoToCloud(place.id, updatedPhotos);
     }
-    triggerSyncUpload();
+    triggerSyncUpload(place.id);
 
     showToast("추억 사진 1장이 삭제되었습니다! 🗑️", "success");
 
@@ -5171,13 +5225,12 @@ window.deleteCurrentMemoryPhoto = async function() {
         if (owner) {
             const updatedPhotos = (owner.photos || (owner.photo ? [owner.photo] : [])).filter(src => src !== photoToDelete);
             await db.places.update(owner.id, { photos: updatedPhotos, photo: updatedPhotos[0] || null });
-            // Photos sync through their own cloud path, separate from triggerSyncUpload()'s
-            // placesData push — without this, the next loadPhotosFromCloud() poll pulls the old
-            // (still-undeleted) photo list back down and silently undoes this delete.
+            // photo/photos never travel through savePlaceToCloud (see there) — this dedicated path
+            // is the only thing that needs to run. Without it, the next loadPhotosFromCloud() poll
+            // pulls the old (still-undeleted) photo list back down and silently undoes this delete.
             if (syncRoomId) {
                 await uploadPhotoToCloud(owner.id, updatedPhotos);
             }
-            triggerSyncUpload();
         } else {
             showToast("이 사진의 원본 장소를 찾을 수 없어 삭제하지 못했습니다.", "warning");
             return;
