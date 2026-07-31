@@ -54,7 +54,9 @@ const MAP_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 let mapSearchGeneration = 0; // bumped on every new search; stale async chains check this before rendering
 let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
-let syncRoomId = localStorage.getItem("aura_sync_room_id") || "0";
+// Resolved from the URL immediately (not deferred to DOMContentLoaded) because room-scoped state
+// below (memory photos) needs the correct room before it initializes, not after.
+let syncRoomId = new URLSearchParams(window.location.search).get("room") || localStorage.getItem("aura_sync_room_id") || "0";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
 // Cloud Sync Engine variables
@@ -69,20 +71,27 @@ let lastSyncedTimestamp = 0;
 // the still-stale cloud copy over the edit that never made it out — reproducing the "revert on
 // restart" bug even after the upload itself works fine server-side.
 let localMutationTimestamp = parseInt(localStorage.getItem('aura_pending_mutation_ts') || '0', 10) || 0;
+
+// All of these are scoped by room (?room=0 vs ?room=77 must never see each other's cached state,
+// or their gallery/memory widgets bleed together on the same device/browser).
+function memoryPhotosStorageKey() { return `aura_lovely_memories_${syncRoomId}`; }
+function memoryPhotosVersionStorageKey() { return `aura_last_memory_photos_version_${syncRoomId}`; }
+function photosVersionStorageKey() { return `aura_last_photos_version_${syncRoomId}`; }
+
 // Restored from localStorage for the same reason as localMutationTimestamp above: without this,
 // every fresh page load starts back at 0, so the cheap "did anything change" check always looks
 // like "yes" even when the locally cached copy (also in localStorage) is already current — forcing
 // a full re-download of the photo library / memory gallery once per reload for no reason.
-let lastKnownPhotosVersion = parseInt(localStorage.getItem('aura_last_photos_version') || '0', 10) || 0;
-let lastKnownMemoryPhotosVersion = parseInt(localStorage.getItem('aura_last_memory_photos_version') || '0', 10) || 0;
+let lastKnownPhotosVersion = parseInt(localStorage.getItem(photosVersionStorageKey()) || '0', 10) || 0;
+let lastKnownMemoryPhotosVersion = parseInt(localStorage.getItem(memoryPhotosVersionStorageKey()) || '0', 10) || 0;
 
 function setLastKnownPhotosVersion(v) {
     lastKnownPhotosVersion = v;
-    localStorage.setItem('aura_last_photos_version', String(v));
+    localStorage.setItem(photosVersionStorageKey(), String(v));
 }
 function setLastKnownMemoryPhotosVersion(v) {
     lastKnownMemoryPhotosVersion = v;
-    localStorage.setItem('aura_last_memory_photos_version', String(v));
+    localStorage.setItem(memoryPhotosVersionStorageKey(), String(v));
 }
 
 let syncIntervalId = null;
@@ -3795,7 +3804,7 @@ async function loadMemoryPhotosFromCloud() {
         if (JSON.stringify(customMemoryPhotos) === JSON.stringify(cloudMemories)) return;
 
         customMemoryPhotos = cloudMemories;
-        localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+        localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
         await renderLovelyMemoryGallery();
     } catch (e) {
         console.error('[Memory Photos Sync] Load failed:', e);
@@ -4124,8 +4133,19 @@ async function saveSettings() {
     kakaoApiKey = kakaoApiKeyVal;
     partnerAName = partnerAVal;
     partnerBName = partnerBVal;
+    const roomChanged = syncRoomId !== syncRoomVal;
     syncRoomId = syncRoomVal;
     customFirebaseUrl = firebaseUrVal;
+
+    if (roomChanged) {
+        // Memory gallery / photo-version caches are keyed by room (see memoryPhotosStorageKey etc.) —
+        // reload them for the new room now, otherwise the widget keeps showing the old room's photos
+        // until a cloud poll happens to overwrite it.
+        customMemoryPhotos = getStoredMemoryPhotos();
+        lastKnownMemoryPhotosVersion = parseInt(localStorage.getItem(memoryPhotosVersionStorageKey()) || '0', 10) || 0;
+        lastKnownPhotosVersion = parseInt(localStorage.getItem(photosVersionStorageKey()) || '0', 10) || 0;
+        await renderLovelyMemoryGallery();
+    }
 
     updatePartnerNamesUI();
     
@@ -5107,7 +5127,7 @@ const DEFAULT_MEMORY_PHOTOS = [
 ];
 
 function getStoredMemoryPhotos() {
-    const raw = localStorage.getItem("aura_lovely_memories");
+    const raw = localStorage.getItem(memoryPhotosStorageKey());
     if (!raw) return [...DEFAULT_MEMORY_PHOTOS];
     try {
         let parsed = JSON.parse(raw);
@@ -5215,7 +5235,7 @@ window.deleteCurrentMemoryPhoto = async function() {
     const customIdx = customMemoryPhotos.indexOf(photoToDelete);
     if (customIdx !== -1) {
         customMemoryPhotos.splice(customIdx, 1);
-        localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+        localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
         if (syncRoomId) await uploadMemoryPhotosToCloud();
     } else {
         // Not a custom-uploaded memory — it's a photo pulled in from a visited place's own
@@ -5281,7 +5301,7 @@ window.saveMemoryGalleryPhotos = async function() {
         }
         if (newPhotos.length > 0) {
             customMemoryPhotos = [...customMemoryPhotos, ...newPhotos];
-            localStorage.setItem("aura_lovely_memories", JSON.stringify(customMemoryPhotos));
+            localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
             await renderLovelyMemoryGallery();
             if (syncRoomId) await uploadMemoryPhotosToCloud();
             showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
