@@ -65,6 +65,85 @@ function getFirebaseDbUrl() {
     return customFirebaseUrl ? customFirebaseUrl.replace(/\/$/, "") : DEFAULT_FIREBASE_DB_URL;
 }
 
+// --- Auth Gate ---------------------------------------------------------------------------------
+// Requires Google sign-in before the app (or any Firebase read/write) runs. This client-side gate
+// only checks "is this a signed-in Google account" — it does NOT decide which room a person may
+// read/write. That's enforced server-side, per room, by the Realtime Database security rules
+// (configured in the Firebase console): each room's rule lists the specific two emails allowed
+// into that room, so multiple couples can each have their own private ?room=xxx under one project
+// without this file needing to know who's invited to which room. The fetch() patch further down is
+// what actually lets a signed-in request reach those rules — it can still be denied there.
+let currentIdToken = null;
+let resolveAuthGate = null;
+const authGateReady = new Promise(resolve => { resolveAuthGate = resolve; });
+function waitForAuthGate() { return authGateReady; }
+
+(function setupAuthGate() {
+    // The main DOMContentLoaded handler calls lucide.createIcons() too, but only after
+    // waitForAuthGate() resolves — the gate's own icons (shown *before* that) need it now.
+    if (window.lucide) lucide.createIcons();
+
+    const gateEl = document.getElementById("auth-gate");
+    const appEl = document.getElementById("app-container");
+    const errorEl = document.getElementById("auth-gate-error");
+    const signInBtn = document.getElementById("btn-google-signin");
+    const signOutBtn = document.getElementById("btn-google-signout");
+    const emailLabel = document.getElementById("auth-current-email");
+
+    function showGateError(msg) {
+        if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; }
+    }
+
+    if (signInBtn) {
+        signInBtn.addEventListener("click", async () => {
+            signInBtn.disabled = true;
+            if (errorEl) errorEl.style.display = "none";
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                await firebase.auth().signInWithPopup(provider);
+            } catch (e) {
+                showGateError("로그인에 실패했습니다: " + e.message);
+                signInBtn.disabled = false;
+            }
+        });
+    }
+
+    if (signOutBtn) {
+        signOutBtn.addEventListener("click", () => firebase.auth().signOut());
+    }
+
+    firebase.auth().onIdTokenChanged(async (user) => {
+        if (!user) {
+            currentIdToken = null;
+            if (gateEl) gateEl.style.display = "flex";
+            if (appEl) appEl.style.display = "none";
+            if (signInBtn) signInBtn.disabled = false;
+            return;
+        }
+
+        // Any signed-in Google account gets past this gate — whether they can actually read/write
+        // a given ?room=xxx is decided by that room's own database rule, not here (see comment above).
+        currentIdToken = await user.getIdToken();
+        if (emailLabel) emailLabel.textContent = user.email;
+        if (gateEl) gateEl.style.display = "none";
+        if (appEl) appEl.style.display = "";
+        if (resolveAuthGate) { resolveAuthGate(); resolveAuthGate = null; }
+    });
+})();
+
+// Every Firebase Realtime Database REST call in this file must carry the signed-in user's ID token
+// so the database security rules (auth.token.email in the allowlist) authorize it. Patching fetch()
+// here — rather than touching every one of the ~20 call sites below — keeps them all working as-is.
+(function patchFetchForAuth() {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function(url, opts) {
+        if (typeof url === "string" && url.startsWith(getFirebaseDbUrl()) && currentIdToken) {
+            url += (url.includes("?") ? "&" : "?") + "auth=" + encodeURIComponent(currentIdToken);
+        }
+        return nativeFetch(url, opts);
+    };
+})();
+
 let lastSyncedTimestamp = 0;
 // Restored from localStorage: if the tab is closed/reloaded before a save finishes (or its retry),
 // the in-memory guard below would otherwise reset to 0 and let the very next loadFromCloud() pull
@@ -103,6 +182,10 @@ let defaultMapCoords = [37.5665, 126.9780]; // Seoul Central
 
 // 3. Document Loaded Initialization
 document.addEventListener("DOMContentLoaded", async () => {
+    // Block here until a signed-in, allowlisted Google account is confirmed — nothing below (sync
+    // loop, Firebase reads, event wiring) should run for an unauthenticated or disallowed visitor.
+    await waitForAuthGate();
+
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
     document.getElementById("settings-naver-client-id").value = naverClientId;
