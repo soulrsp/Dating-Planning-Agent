@@ -1447,7 +1447,13 @@ async function runInAppMapSearch(query) {
     if (isStale()) return;
 
     if (uniqueResults.length > 0) {
-        mapSearchResultCache.set(cacheKey, { results: uniqueResults, timestamp: Date.now() });
+        // Only cache when a location fix was actually obtained — otherwise every item was written
+        // with distanceKm:Infinity and no sort applied (see the loop above), and caching that would
+        // make every repeat search of the same query replay the no-distance result for the next 10
+        // minutes even after geolocation would have succeeded on a fresh attempt.
+        if (userLoc) {
+            mapSearchResultCache.set(cacheKey, { results: uniqueResults, timestamp: Date.now() });
+        }
         renderMapSearchResults(uniqueResults);
         const proximityNotice = userLoc ? " (내 위치 가까운 순 정렬)" : "";
         showToast(`'${query}' 검색 결과 총 ${uniqueResults.length}건을 찾았습니다!${proximityNotice} 📍`, "success");
