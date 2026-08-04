@@ -3288,6 +3288,37 @@ window.openApiGuideModal = function(type) {
             <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
                 💡 무료 티어로 일 수천 건 이상 사용 가능하며 무제한 데이트 코스를 추천받을 수 있습니다.
             </div>`;
+    } else if (type === 'firebase-rules') {
+        const currentRoom = syncRoomId || "77";
+        const rulesJson = `{
+  "rules": {
+    "aura-rooms": {
+      "${currentRoom}": {
+        ".read": "auth != null && (auth.token.email == '기존 파트너1@gmail.com' || auth.token.email == '기존 파트너2@gmail.com')",
+        ".write": "auth != null && (auth.token.email == '기존 파트너1@gmail.com' || auth.token.email == '기존 파트너2@gmail.com')"
+      },
+      "새로운방번호": {
+        ".read": "auth != null && (auth.token.email == '친구1@gmail.com' || auth.token.email == '친구2@gmail.com')",
+        ".write": "auth != null && (auth.token.email == '친구1@gmail.com' || auth.token.email == '친구2@gmail.com')"
+      }
+    }
+  }
+}`;
+        titleEl.innerHTML = `💌 지인 커플 초대하는 방법`;
+        bodyEl.innerHTML = `
+            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
+                <li style="margin-bottom:0.6rem;"><strong>방 번호 정하기</strong><br>
+                아무 숫자/영문(예: 55)이나 정해서 초대할 커플에게 <code>?room=55</code>가 붙은 링크를 전달할 계획을 세웁니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>Firebase 콘솔 → Realtime Database → 규칙(Rules)</strong><br>
+                아래 문구에서 <strong>기존 방 블록은 지금 콘솔에 있는 실제 이메일로 유지</strong>하고, <code>"새로운방번호"</code> 블록만 정한 방 번호와 초대할 두 명의 Gmail 주소로 바꿔 넣은 뒤 게시(Publish)하세요.</li>
+                <li style="margin-bottom:0.6rem;"><strong>링크 전달</strong><br>
+                <code>https://soulrsp.github.io/Dating-Planning-Agent/?room=55</code> 형태로 전달하면 끝입니다.</li>
+            </ol>
+            <textarea readonly id="firebase-rules-template" style="width:100%; min-height:220px; font-family:monospace; font-size:0.78rem; padding:0.6rem; border-radius:8px; border:1px solid rgba(255,101,132,0.25); background:rgba(255,101,132,0.04); color:var(--color-text-high); resize:vertical; margin-top:0.4rem;">${rulesJson}</textarea>
+            <button type="button" class="btn btn-outline" style="width:100%; justify-content:center; margin-top:0.5rem;" onclick="copyFirebaseRulesTemplate()">📋 복사하기</button>
+            <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
+                💡 위 문구는 예시입니다 — 실제 콘솔에 이미 등록된 기존 방/이메일 내용을 그대로 유지한 채, 새 블록만 추가해서 게시해야 기존 커플 접근이 끊기지 않습니다.
+            </div>`;
     } else {
         titleEl.innerHTML = `🔑 네이버 지도 Client ID 발급 가이드`;
         bodyEl.innerHTML = `
@@ -3302,6 +3333,13 @@ window.openApiGuideModal = function(type) {
     }
 
     modal.classList.add("active");
+};
+
+window.copyFirebaseRulesTemplate = async function() {
+    const el = document.getElementById("firebase-rules-template");
+    if (!el) return;
+    await copyShareLinkToClipboard(el.value);
+    showToast("규칙 문구가 클립보드에 복사되었습니다! 📋", "success");
 };
 
 window.closeApiGuideModal = function() {
