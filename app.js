@@ -2026,8 +2026,35 @@ window.copyNaverMapUrl = function(encoded) {
 };
 
 // Save search result directly to Wishlist (with Naver Geocoder coordinate refinement)
-window.saveMapSearchResult = async function(encoded) {
-    const data = JSON.parse(decodeURIComponent(encoded));
+// Opens a small date picker first so the visit date is set at add time, instead of always
+// stamping "today" and requiring a separate edit afterward to fix it.
+let pendingWishlistQuickSaveData = null;
+window.saveMapSearchResult = function(encoded) {
+    pendingWishlistQuickSaveData = JSON.parse(decodeURIComponent(encoded));
+    const nameEl = document.getElementById("wishlistq-place-name");
+    if (nameEl) nameEl.textContent = pendingWishlistQuickSaveData.name;
+    applyDateFieldState("wishlistq", new Date().toISOString());
+    const modal = document.getElementById("modal-wishlist-quickdate");
+    if (modal) modal.classList.add("active");
+};
+
+window.closeWishlistQuickDateModal = function() {
+    const modal = document.getElementById("modal-wishlist-quickdate");
+    if (modal) modal.classList.remove("active");
+    pendingWishlistQuickSaveData = null;
+};
+
+window.confirmWishlistQuickDate = async function() {
+    const data = pendingWishlistQuickSaveData;
+    const chosenDate = readDateFieldValue("wishlistq");
+    const modal = document.getElementById("modal-wishlist-quickdate");
+    if (modal) modal.classList.remove("active");
+    pendingWishlistQuickSaveData = null;
+    if (!data) return;
+    await finalizeSaveMapSearchResultToWishlist(data, chosenDate);
+};
+
+async function finalizeSaveMapSearchResultToWishlist(data, chosenDate) {
     try {
         // Refine coordinates via Naver Geocoder for building-level precision
         let saveLat = data.lat;
@@ -2047,15 +2074,15 @@ window.saveMapSearchResult = async function(encoded) {
         }
 
         const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
-        // This add always stamps today's date below, so "duplicate" only means an active (non-
-        // tombstoned) entry for this place on the SAME day — a different day is a separate visit
-        // plan and should be allowed, e.g. planning to go to the same cafe again next month.
-        const todayKey = toLocalDateKey(new Date().toISOString());
+        // "Duplicate" only means an active (non-tombstoned) entry for this place on the SAME chosen
+        // date (or both "미정") — a different date is a separate visit plan and should be allowed,
+        // e.g. planning to go to the same cafe again next month.
+        const chosenDateKey = toLocalDateKey(chosenDate);
         const existing = await db.places.where("name").equalsIgnoreCase(data.name)
-            .and(p => p.isDeleted !== 1 && p.isVisited !== -1 && toLocalDateKey(p.createdAt || p.date) === todayKey)
+            .and(p => p.isDeleted !== 1 && p.isVisited !== -1 && toLocalDateKey(p.createdAt || p.date) === chosenDateKey)
             .first();
         if (existing) {
-            showToast(`'${data.name}'은(는) 이미 오늘 날짜로 위시리스트에 존재합니다! 💖`, "info");
+            showToast(`'${data.name}'은(는) 이미 같은 날짜로 위시리스트에 존재합니다! 💖`, "info");
             clearSearchMarkers();
             return;
         }
@@ -2072,7 +2099,7 @@ window.saveMapSearchResult = async function(encoded) {
             review: "",
             peopleCount: 2,
             photo: "",
-            createdAt: new Date().toISOString()
+            createdAt: chosenDate
         });
 
         showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
@@ -2613,6 +2640,8 @@ async function handleEditPlaceSubmit(e) {
         }
     }
 
+    const oldName = place.name;
+
     try {
         await db.places.update(id, updatePayload);
         showToast(`'${name}' 수정사항이 반영되었습니다! 💖`, "success");
@@ -2621,6 +2650,9 @@ async function handleEditPlaceSubmit(e) {
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload(id);
+        if (placeNameKey(name) !== placeNameKey(oldName)) {
+            deleteOrphanedPlaceCloudNode(oldName);
+        }
     } catch(err) {
         showToast("수정 실패: " + err.message, "danger");
     }
@@ -3313,6 +3345,24 @@ async function savePlaceToCloud(placeId, attempt = 1) {
     }
 }
 
+// A place's cloud node is keyed by its name (see placeNameKey), so renaming a place makes
+// savePlaceToCloud() write a brand-new node instead of updating the old one — the old node is
+// orphaned, still holds the pre-rename data, and any later loadFromCloud() resurrects it as a
+// phantom duplicate place (it can no longer name-match anything local, so it looks "new").
+// Call this right after a rename succeeds locally to delete that stale node before it can do that.
+async function deleteOrphanedPlaceCloudNode(oldName) {
+    if (!syncRoomId) return;
+    const nameKey = placeNameKey(oldName);
+    if (!nameKey) return;
+    try {
+        await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}.json?print=silent`, {
+            method: 'DELETE'
+        });
+    } catch (e) {
+        console.error('[Place Sync] Failed to delete orphaned cloud node for rename:', e);
+    }
+}
+
 // One-time (or rare) bulk seed: pushes every local place individually, e.g. when the cloud room is
 // completely empty. Still per-place writes underneath — never a wholesale array overwrite.
 async function pushAllLocalPlacesToCloud() {
@@ -3512,6 +3562,11 @@ async function loadFromCloud() {
                 // Smart Upsert Engine: Upsert places to Dexie DB safely without clearing DB
                 let hasChanges = false;
                 const sessionDeletedNames = new Set(JSON.parse(sessionStorage.getItem('aura_session_deleted') || '[]'));
+                // A save for one place completing bumps lastSyncedTimestamp globally, which can
+                // wrongly satisfy the guard at the top of this function while a DIFFERENT place's
+                // edit is still mid-retry. Re-check the pending list itself (not just the single
+                // timestamp) so an unconfirmed edit can never be clobbered by this pull.
+                const pendingPlaceIdsNow = new Set(JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]'));
                 for (const fp of placesToApply) {
                     const cleanFpName = (fp.name || "").trim().toLowerCase();
                     const existing = localPlaces.find(lp => (lp.name || "").trim().toLowerCase() === cleanFpName);
@@ -3520,6 +3575,9 @@ async function loadFromCloud() {
                         // Local tombstone is terminal — never let a stale (pre-delete) cloud copy revive it.
                         // It stays local-only until savePlaceToCloud() successfully pushes the deletion out.
                         if (existing.isDeleted === 1 || existing.isVisited === -1) continue;
+                        // This place has its own edit still queued/retrying — don't let a cloud copy that
+                        // predates that edit overwrite it out from under the pending upload.
+                        if (pendingPlaceIdsNow.has(existing.id)) continue;
 
                         const updatePayload = { ...fp };
                         delete updatePayload.id;
@@ -4680,6 +4738,7 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
     titleEl.textContent = formattedTitle;
 
     const allDatePlaces = places.filter(p => {
+        if (p.isDeleted === 1 || p.isVisited === -1) return false;
         const pDate = p.createdAt || p.date;
         // 로컬 기준으로 비교해야 KST에서 하루 밀리지 않는다
         return toLocalDateKey(pDate) === dateStr;

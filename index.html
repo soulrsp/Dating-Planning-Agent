@@ -800,6 +800,32 @@
         </div>
     </div>
 
+    <!-- Modal: Wishlist Quick-Add Visit Date (Love Map search result -> Wishlist) -->
+    <div class="modal-overlay" id="modal-wishlist-quickdate">
+        <div class="modal-card" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3>💖 위시리스트에 담기</h3>
+                <button class="modal-close" onclick="closeWishlistQuickDateModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="wishlistq-place-name" style="font-weight:700; font-size:1rem; margin-bottom:0.9rem;"></p>
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <label for="wishlistq-place-date" style="margin:0;">방문 예정 날짜</label>
+                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700;">
+                            <input type="checkbox" id="wishlistq-place-undated" onchange="toggleUndatedDate('wishlistq')"> 📅 날짜 미정
+                        </label>
+                    </div>
+                    <input type="date" id="wishlistq-place-date">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeWishlistQuickDateModal()">취소</button>
+                <button type="button" class="btn btn-primary" onclick="confirmWishlistQuickDate()">보관함에 쏙</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Generic Confirm Dialog (replaces window.confirm — blocked/no-op in standalone PWA display mode) -->
     <div class="modal-overlay" id="modal-confirm">
         <div class="modal-card" style="max-width: 400px;">
@@ -851,7 +877,7 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260731_v331"></script>
+    <script src="app.js?v=20260801_v332"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
