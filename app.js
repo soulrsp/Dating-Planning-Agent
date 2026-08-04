@@ -4803,14 +4803,14 @@ async function renderCalendar() {
             if (visitedPlaces.length > 0) {
                 badgesHtml += `
                     <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.18); color:#74B9FF; border:1px solid rgba(116,185,255,0.35); border-radius:6px; font-size:0.75rem; padding:4px 6px; min-height:24px; font-weight:700; cursor:pointer; width:100%; text-align:center;">
-                        🌸 <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>
+                        <span class="badge-emoji">🌸</span> <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>
                     </button>
                 `;
             }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
                     <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.18); color:var(--color-primary); border:1px solid rgba(255,101,132,0.35); border-radius:6px; font-size:0.75rem; padding:4px 6px; min-height:24px; font-weight:700; cursor:pointer; width:100%; text-align:center;">
-                        💌 <span class="badge-text">위시 (${wishlistPlaces.length})</span>
+                        <span class="badge-emoji">💌</span> <span class="badge-text">위시 (${wishlistPlaces.length})</span>
                     </button>
                 `;
             }

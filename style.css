@@ -2020,10 +2020,7 @@ body {
         padding: 0.75rem 0.85rem !important;
         box-sizing: border-box !important;
         margin: 0 auto !important;
-    }
         border-radius: 18px !important;
-        box-sizing: border-box !important;
-        margin: auto !important;
     }
 
     #modal-edit-place .modal-header {
@@ -2098,31 +2095,36 @@ body {
         gap: 3px !important;
     }
 
+    /* Compact dot mode: emoji/label text nodes are removed from layout entirely (not just visually
+       hidden) so nothing can overflow the circle — the old text-indent/overflow trick left the
+       leading emoji glyph unclipped in some cascade orderings, showing on top of the dot. */
+    .cal-btn-visited .badge-emoji,
+    .cal-btn-wishlist .badge-emoji,
     .cal-btn-visited .badge-text,
     .cal-btn-wishlist .badge-text {
         display: none !important;
     }
 
-    .cal-btn-visited {
+    .cal-btn-visited,
+    .cal-btn-wishlist {
+        display: block !important;
         padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
+        width: 12px !important;
+        height: 12px !important;
+        min-width: 12px !important;
+        min-height: 12px !important;
         border-radius: 50% !important;
-        background: #74B9FF !important;
         border: none !important;
         cursor: pointer;
-        margin-top: 2px;
+        margin: 2px auto 0;
+    }
+
+    .cal-btn-visited {
+        background: #74B9FF !important;
     }
 
     .cal-btn-wishlist {
-        padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
-        border-radius: 50% !important;
         background: #FF6584 !important;
-        border: none !important;
-        cursor: pointer;
-        margin-top: 2px;
     }
 
     .gallery-grid {
@@ -2588,23 +2590,5 @@ body {
     gap: 2px;
     margin-top: 2px;
 }
-@media (max-width: 768px) {
-    .cal-btn-visited, .cal-btn-wishlist {
-        color: transparent !important;
-        text-indent: 100% !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        padding: 0 !important;
-        width: 10px !important;
-        height: 10px !important;
-        min-width: 10px !important;
-        border-radius: 50% !important;
-        border: none !important;
-    }
-    .cal-btn-visited {
-        background: #74B9FF !important;
-    }
-    .cal-btn-wishlist {
-        background: #FF6584 !important;
-    }
-}
+/* Compact circular dot styling for narrow screens now lives in one place — see the
+   @media (max-width: 768px) block near the top of this file. */
