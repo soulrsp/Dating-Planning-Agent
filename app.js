@@ -86,6 +86,7 @@ function waitForAuthGate() { return authGateReady; }
     const gateEl = document.getElementById("auth-gate");
     const appEl = document.getElementById("app-container");
     const errorEl = document.getElementById("auth-gate-error");
+    const messageEl = document.getElementById("auth-gate-message");
     const signInBtn = document.getElementById("btn-google-signin");
     const signOutBtn = document.getElementById("btn-google-signout");
     const emailLabel = document.getElementById("auth-current-email");
@@ -95,12 +96,22 @@ function waitForAuthGate() { return authGateReady; }
     }
 
     // Installed PWAs (opened from a home-screen icon, "standalone" display mode) generally can't
-    // complete signInWithPopup() at all — there's no browser chrome for the popup to open into, so
-    // it silently fails or throws, leaving the user stuck on this gate with no way into the app
-    // (this is what broke "강제 동기화": the button never disappeared, it just became unreachable
-    // behind a login that couldn't complete after reinstalling as a home-screen app). Redirect auth
-    // works in that context, so use it directly there, and fall back to it from popup elsewhere too.
+    // complete signInWithPopup() — there's no browser chrome for a popup to open into.
+    // signInWithRedirect() works around that on Android, but on iOS it doesn't: the WKWebView behind
+    // an "Add to Home Screen" icon hangs forever on Google's "Continue to the app..." page and never
+    // returns (confirmed — this is what broke sign-in after reinstalling). That's an iOS/WebKit
+    // limitation, not something fixable here. Modern iOS shares site storage between Safari and the
+    // home-screen icon for the same origin, so signing in via a normal Safari tab once is the actual
+    // fix — onIdTokenChanged below picks that up automatically the next time the icon is reopened.
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isIOS = /iP(hone|od|ad)/.test(navigator.platform) || (navigator.userAgent.includes('Mac') && navigator.maxTouchPoints > 1);
+
+    if (isStandalone && isIOS && signInBtn) {
+        signInBtn.style.display = "none";
+        if (messageEl) {
+            messageEl.textContent = "iOS 홈 화면 앱에서는 구글 로그인이 끝까지 진행되지 않아요. 사파리 앱을 열어서 이 주소로 한 번 접속해 로그인해주세요 — 그 다음부터는 이 아이콘으로도 자동으로 로그인됩니다.";
+        }
+    }
 
     async function startSignIn() {
         signInBtn.disabled = true;
