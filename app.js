@@ -94,19 +94,46 @@ function waitForAuthGate() { return authGateReady; }
         if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; }
     }
 
-    if (signInBtn) {
-        signInBtn.addEventListener("click", async () => {
-            signInBtn.disabled = true;
-            if (errorEl) errorEl.style.display = "none";
+    // Installed PWAs (opened from a home-screen icon, "standalone" display mode) generally can't
+    // complete signInWithPopup() at all — there's no browser chrome for the popup to open into, so
+    // it silently fails or throws, leaving the user stuck on this gate with no way into the app
+    // (this is what broke "강제 동기화": the button never disappeared, it just became unreachable
+    // behind a login that couldn't complete after reinstalling as a home-screen app). Redirect auth
+    // works in that context, so use it directly there, and fall back to it from popup elsewhere too.
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    async function startSignIn() {
+        signInBtn.disabled = true;
+        if (errorEl) errorEl.style.display = "none";
+        const provider = new firebase.auth.GoogleAuthProvider();
+        if (isStandalone) {
+            await firebase.auth().signInWithRedirect(provider);
+            return;
+        }
+        try {
+            await firebase.auth().signInWithPopup(provider);
+        } catch (e) {
+            // auth/popup-blocked, auth/operation-not-supported-in-this-environment, etc. — retry via
+            // redirect instead of just failing outright.
             try {
-                const provider = new firebase.auth.GoogleAuthProvider();
-                await firebase.auth().signInWithPopup(provider);
-            } catch (e) {
-                showGateError("로그인에 실패했습니다: " + e.message);
+                await firebase.auth().signInWithRedirect(provider);
+            } catch (e2) {
+                showGateError("로그인에 실패했습니다: " + e2.message);
                 signInBtn.disabled = false;
             }
-        });
+        }
     }
+
+    if (signInBtn) {
+        signInBtn.addEventListener("click", startSignIn);
+    }
+
+    // Surface any error from a signInWithRedirect() that just completed (e.g. after returning from
+    // the Google login page) — otherwise a failure there has nowhere to report to.
+    firebase.auth().getRedirectResult().catch((e) => {
+        showGateError("로그인에 실패했습니다: " + e.message);
+        if (signInBtn) signInBtn.disabled = false;
+    });
 
     if (signOutBtn) {
         signOutBtn.addEventListener("click", () => firebase.auth().signOut());
@@ -1015,10 +1042,11 @@ async function updateMapMarkers() {
                 iconAnchor: [7, 7]
             });
             
+            const popupCatBadge = categoryBadgeClassAndStyle(place.category);
             const popupContent = `
                 <div class="map-popup-card" style="font-family:var(--font-body); min-width:140px;">
                     <strong style="font-size: 0.9rem; color: var(--color-text-high);">${place.name}</strong>
-                    <span class="place-category-badge badge-${place.category.toLowerCase()}" style="display:inline-block; margin-top:4px; font-size:0.6rem;">${place.category}</span>
+                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${place.category}</span>
                     <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${place.notes || ''}</p>
                 </div>
             `;
@@ -2915,6 +2943,29 @@ function renderCommentsBlock(place) {
     `;
 }
 
+// Category badges: the 6 built-in categories (Cafe/Restaurant/Bar/Park/Museum/Other) get their
+// look from fixed .badge-{category} CSS classes. A custom, freely-typed category (e.g. "영화관")
+// doesn't match any of those classes, so it fell back to plain unstyled text — this gives it a
+// color too, picked by a stable hash of the category text (not Math.random()) so the same custom
+// category always renders the same color, and from hues spaced away from the 6 built-in ones so
+// it never looks like it's reusing an existing category's color.
+const KNOWN_CATEGORY_KEYS = ['cafe', 'restaurant', 'bar', 'park', 'museum', 'other'];
+const CUSTOM_CATEGORY_HUES = [100, 230, 270, 15, 130, 250];
+function customCategoryBadgeStyle(category) {
+    let hash = 0;
+    for (let i = 0; i < category.length; i++) hash = (hash * 31 + category.charCodeAt(i)) >>> 0;
+    const hue = CUSTOM_CATEGORY_HUES[hash % CUSTOM_CATEGORY_HUES.length];
+    return `background:hsla(${hue},70%,50%,0.15); color:hsl(${hue},60%,38%); border:1px solid hsla(${hue},70%,50%,0.25);`;
+}
+function categoryBadgeClassAndStyle(category) {
+    const cat = category || "Other";
+    const key = cat.toLowerCase();
+    if (KNOWN_CATEGORY_KEYS.includes(key)) {
+        return { cls: `badge-${key}`, style: "" };
+    }
+    return { cls: "", style: customCategoryBadgeStyle(cat) };
+}
+
 // 10. Places Render List
 async function renderPlacesList() {
     const mainContent = document.querySelector(".main-content");
@@ -2973,6 +3024,8 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
 
+                const catBadge = categoryBadgeClassAndStyle(place.category);
+
                 // 방문 예정일 (없으면 "미정"으로 표시)
                 const dateStr = formatDisplayDate(place.createdAt || place.date);
                 const dateHtml = dateStr
@@ -2988,7 +3041,7 @@ async function renderPlacesList() {
                         <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge badge-${place.category.toLowerCase()}">${place.category}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${place.category}</span>
                         <span class="place-priority-dot priority-${place.priority}"></span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
@@ -3058,11 +3111,13 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
                 
+                const catBadge = categoryBadgeClassAndStyle(place.category);
+
                 // Date formatting using robust parser
                 const rawDate = place.createdAt || place.date;
                 const parsedMs = parseAnyDate(rawDate);
                 const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
-                
+
                 // Clean address
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
@@ -3072,7 +3127,7 @@ async function renderPlacesList() {
                         <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge badge-${(place.category || 'other').toLowerCase()}">${place.category}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${place.category}</span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
