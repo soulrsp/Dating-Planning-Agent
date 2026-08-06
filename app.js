@@ -95,6 +95,13 @@ function waitForAuthGate() { return authGateReady; }
         if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; }
     }
 
+    // Explicit, rather than relying on the SDK default — and logged, because "signed in but asked to
+    // log in again every time the app is reopened" on iOS home-screen apps usually means IndexedDB
+    // (what LOCAL persistence is backed by) isn't actually surviving app termination in that
+    // WKWebView, which the SDK doesn't surface anywhere unless you look for it.
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .catch((e) => console.error('[Auth] setPersistence failed — session will not survive reload:', e));
+
     // Installed PWAs (opened from a home-screen icon, "standalone" display mode) generally can't
     // complete signInWithPopup() — there's no browser chrome for a popup to open into.
     // signInWithRedirect() works around that on Android, but on iOS it doesn't: the WKWebView behind
@@ -5095,7 +5102,7 @@ async function renderGallery() {
                     <span>${dateStr}</span>
                 </div>
                 ${commentsHtml}
-                <div class="gallery-action-bar" style="margin-top:6px;">
+                <div class="gallery-action-bar" style="margin-top:auto; padding-top:6px;">
                     <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id}, true)">
                         ✏️ 수정/추가
                     </button>
