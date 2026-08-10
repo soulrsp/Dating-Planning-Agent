@@ -1087,11 +1087,12 @@ async function updateMapMarkers() {
                 iconAnchor: [7, 7]
             });
             
-            const popupCatBadge = categoryBadgeClassAndStyle(place.category);
+            const popupCategoryText = applyCategoryOverride(place.name, place.category);
+            const popupCatBadge = categoryBadgeClassAndStyle(popupCategoryText);
             const popupContent = `
                 <div class="map-popup-card" style="font-family:var(--font-body); min-width:140px;">
                     <strong style="font-size: 0.9rem; color: var(--color-text-high);">${place.name}</strong>
-                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${place.category}</span>
+                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${popupCategoryText}</span>
                     <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${place.notes || ''}</p>
                 </div>
             `;
@@ -2989,6 +2990,20 @@ function renderCommentsBlock(place) {
     `;
 }
 
+// Personal per-place category overrides: some places should always show a specific custom category
+// regardless of what a search engine (Kakao/AI) classified them as — e.g. a family member's home
+// showing up as "Restaurant" from POI data. Matched by a normalized (whitespace-stripped,
+// lowercased) substring of the place name, so "호반써밋유성 그랜드파크 2 BL", "호반써밋그랜드파크2BL아파트",
+// etc. all match the same rule. Add more entries here for other places that need this.
+const PLACE_CATEGORY_OVERRIDES = [
+    { match: "그랜드파크2bl", category: "석한이네" }
+];
+function applyCategoryOverride(name, category) {
+    const norm = (name || "").replace(/\s+/g, "").toLowerCase();
+    const hit = PLACE_CATEGORY_OVERRIDES.find(o => norm.includes(o.match));
+    return hit ? hit.category : category;
+}
+
 // Category badges: the 6 built-in categories (Cafe/Restaurant/Bar/Park/Museum/Other) get their
 // look from fixed .badge-{category} CSS classes. A custom, freely-typed category (e.g. "영화관")
 // doesn't match any of those classes, so it fell back to plain unstyled text — this gives it a
@@ -3070,7 +3085,8 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
 
-                const catBadge = categoryBadgeClassAndStyle(place.category);
+                const displayCategory = applyCategoryOverride(place.name, place.category);
+                const catBadge = categoryBadgeClassAndStyle(displayCategory);
 
                 // 방문 예정일 (없으면 "미정"으로 표시)
                 const dateStr = formatDisplayDate(place.createdAt || place.date);
@@ -3087,7 +3103,7 @@ async function renderPlacesList() {
                         <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${place.category}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${displayCategory}</span>
                         <span class="place-priority-dot priority-${place.priority}"></span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
@@ -3157,7 +3173,8 @@ async function renderPlacesList() {
                 card.className = "place-card card";
                 card.style.position = "relative";
                 
-                const catBadge = categoryBadgeClassAndStyle(place.category);
+                const displayCategory = applyCategoryOverride(place.name, place.category);
+                const catBadge = categoryBadgeClassAndStyle(displayCategory);
 
                 // Date formatting using robust parser
                 const rawDate = place.createdAt || place.date;
@@ -3173,7 +3190,7 @@ async function renderPlacesList() {
                         <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${place.category}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${displayCategory}</span>
                     </div>
                     <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
                     
