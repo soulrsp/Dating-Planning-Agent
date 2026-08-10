@@ -850,6 +850,33 @@ async function searchKakaoPlaces(query, userLat, userLng) {
     return Array.from(byId.values()).map(mapKakaoPlaceItem);
 }
 
+// Kakao's address geocoder resolves both road-name AND 지번(jibun/lot-number) addresses directly.
+// Kakao Places above is a business/POI keyword search — it rarely matches a bare address with no
+// business name. The Naver-based engines only extract road-name addresses (regex requires 로/길/번길)
+// and additionally go dark for the whole session once naverGeocoderDisabled trips (see
+// isNaverGeocoderUsable). A jibun-only address like "충북 옥천군 군서면 금산리 64" (no road name, no
+// business name) fails every one of those, which is what this engine exists to catch.
+async function searchKakaoGeocoder(query) {
+    if (!(await waitForKakaoSdk())) return null;
+    if (!kakao.maps.services.Geocoder) return null;
+    const geocoder = new kakao.maps.services.Geocoder();
+    return new Promise((resolve) => {
+        geocoder.addressSearch(query.trim(), (result, status) => {
+            if (status !== kakao.maps.services.Status.OK || !Array.isArray(result) || result.length === 0) {
+                resolve(null);
+                return;
+            }
+            resolve(result.map(r => ({
+                name: r.address_name,
+                address: r.road_address ? r.road_address.address_name : r.address_name,
+                lat: parseFloat(r.y),
+                lng: parseFloat(r.x),
+                category: "Other"
+            })));
+        });
+    });
+}
+
 function initLeafletMap() {
     isNaverMapActive = false;
     // Clear old container if exists
@@ -1503,6 +1530,7 @@ async function runInAppMapSearch(query) {
     if (combinedResults.length === 0) {
         const engines = [
             ["Kakao Places", searchKakaoPlaces(query, userLat, userLng)],
+            ["Kakao Address Geocoder", searchKakaoGeocoder(query)],
             ["Pure Address & Store Extraction", geocodeAddressCandidates(query).then(hit => hit ? [hit] : [])]
         ];
         if (isNaverMapActive) {
