@@ -120,7 +120,19 @@ function waitForAuthGate() { return authGateReady; }
     // popup and go straight to redirect on mobile web for exactly this reason.
     const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-    if (isStandalone && isIOS && signInBtn) {
+    // Google actively refuses OAuth sign-in inside embedded app webviews (Naver, KakaoTalk,
+    // Instagram, Facebook, Line, ...) — "disallowed_useragent" — no matter which flow (popup/
+    // redirect) is used. That's a Google policy check on the user agent string itself, not
+    // something we can work around client-side; the only fix is opening the link in a real
+    // browser (Safari/Chrome) via the in-app browser's own "다른 브라우저로 열기" menu.
+    const isInAppBrowser = /NAVER\(inapp|KAKAOTALK|Instagram|FBAN|FBAV|Line\//i.test(navigator.userAgent);
+
+    if (isInAppBrowser && signInBtn) {
+        signInBtn.style.display = "none";
+        if (messageEl) {
+            messageEl.textContent = "네이버, 카카오톡 등 앱 내장 브라우저에서는 구글 로그인이 차단돼요. 오른쪽 위 메뉴에서 '다른 브라우저로 열기'(사파리 또는 크롬)를 선택해 다시 열어주세요.";
+        }
+    } else if (isStandalone && isIOS && signInBtn) {
         signInBtn.style.display = "none";
         if (messageEl) {
             messageEl.textContent = "iOS 홈 화면 앱에서는 구글 로그인이 끝까지 진행되지 않아요. 사파리 앱을 열어서 이 주소로 한 번 접속해 로그인해주세요 — 그 다음부터는 이 아이콘으로도 자동으로 로그인됩니다.";
