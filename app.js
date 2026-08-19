@@ -112,6 +112,13 @@ function waitForAuthGate() { return authGateReady; }
     // fix — onIdTokenChanged below picks that up automatically the next time the icon is reopened.
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     const isIOS = /iP(hone|od|ad)/.test(navigator.platform) || (navigator.userAgent.includes('Mac') && navigator.maxTouchPoints > 1);
+    // Mobile browsers (not just installed/standalone ones) handle signInWithPopup() poorly — the
+    // popup window either never opens cleanly or hangs without rejecting. Each such attempt still
+    // spins up a real WKWebView/browser context that doesn't always get torn down promptly, and
+    // repeated taps (because nothing visibly happened) stack more of them up — this is what was
+    // making the whole phone sluggish, not just this page. Firebase's own guidance is to skip
+    // popup and go straight to redirect on mobile web for exactly this reason.
+    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
     if (isStandalone && isIOS && signInBtn) {
         signInBtn.style.display = "none";
@@ -124,8 +131,13 @@ function waitForAuthGate() { return authGateReady; }
         signInBtn.disabled = true;
         if (errorEl) errorEl.style.display = "none";
         const provider = new firebase.auth.GoogleAuthProvider();
-        if (isStandalone) {
-            await firebase.auth().signInWithRedirect(provider);
+        if (isStandalone || isMobileDevice) {
+            try {
+                await firebase.auth().signInWithRedirect(provider);
+            } catch (e) {
+                showGateError("로그인에 실패했습니다: " + e.message);
+                signInBtn.disabled = false;
+            }
             return;
         }
         try {
@@ -5437,13 +5449,11 @@ window.closeDateDetailsModal = function() {
 // ==========================================
 // 14. Dashboard Lovely Memory Gallery Engine
 // ==========================================
-const DEFAULT_MEMORY_PHOTOS = [
-    "images/couple1.jpg",
-    "images/couple2.jpg",
-    "images/couple3.jpg",
-    "images/couple4.jpg",
-    "images/couple5.jpg"
-];
+// Intentionally empty — the app is Firebase-only for photo data now. This used to ship with 5
+// sample couple photos as a placeholder before the user added their own; those files were removed
+// from the repo (privacy), so keeping them here would just inject broken <img> tags into the
+// gallery on every render (see the forEach below and the empty-list fallback further down).
+const DEFAULT_MEMORY_PHOTOS = [];
 
 function getStoredMemoryPhotos() {
     const raw = localStorage.getItem(memoryPhotosStorageKey());
