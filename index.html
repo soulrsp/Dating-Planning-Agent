@@ -5,22 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - 러블리 AI 데이트 플래너</title>
     
-    <!-- Instant PWA Service Worker & Cache Purger (Fixes Unexpected Token '<' SW cache corruption) -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for (var i = 0; i < registrations.length; i++) {
-                    registrations[i].unregister();
-                }
-            });
-        }
-        if (window.caches) {
-            caches.keys().then(function(keys) {
-                keys.forEach(function(k) { caches.delete(k); });
-            });
-        }
-    </script>
-    
     <!-- PWA & Mobile Web Meta Tags -->
     <meta name="theme-color" content="#FF6584">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260802_v341">
+    <link rel="stylesheet" href="style.css?v=20260819_v355">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -914,13 +898,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260806_v354"></script>
+    <script src="app.js?v=20260819_v355"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260728_v312').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260819_v355').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
