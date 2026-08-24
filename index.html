@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260824_v368">
+    <link rel="stylesheet" href="style.css?v=20260824_v369">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -166,12 +166,15 @@
                         <div class="card map-card flex-grow">
                             <div class="card-header">
                                 <h3 class="card-heading">러브 맵</h3>
-                                <div class="map-legend" style="display: flex; gap: 10px;">
+                                <div class="map-legend" style="display: flex; gap: 10px; align-items:center; flex-wrap:wrap;">
+                                    <button type="button" id="btn-back-to-ai-planner" class="btn btn-outline hidden" onclick="backToAIPlannerFromMap()" style="padding:0.2rem 0.6rem; font-size:0.75rem; height:auto; gap:4px;">
+                                        <i data-lucide="arrow-left" style="width:13px;height:13px;"></i> AI 플래너로 돌아가기
+                                    </button>
                                     <span class="badge-wish" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(255,101,132,0.15); color:var(--color-primary); font-weight:700;">📍 위시리스트</span>
                                     <span class="badge-visited" style="font-size:0.75rem; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(116,185,255,0.15); color:#74B9FF; font-weight:700;">📍 다녀온 곳</span>
                                 </div>
                             </div>
-                            
+
                             <!-- Embedded Local Search Inside Map -->
                             <div class="map-search-bar" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
                                 <div style="display:flex; gap:0.4rem; width:100%;">
@@ -692,6 +695,25 @@
     </div>
 
     <!-- Modal: Mobile Smartphone Pair & QR Share -->
+    <div class="modal-overlay" id="modal-course-save-date">
+        <div class="modal-card" style="max-width: 380px;">
+            <div class="modal-header">
+                <h3>📅 방문 예정일 선택</h3>
+                <button class="modal-close" onclick="closeCourseSaveDateModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="course-save-date-input">이 코스의 방문 예정일을 선택해주세요</label>
+                    <input type="date" id="course-save-date-input">
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex; align-items:center; width:100%; gap:0.5rem;">
+                <button type="button" class="btn btn-outline" onclick="closeCourseSaveDateModal()" style="flex:1;">취소</button>
+                <button type="button" class="btn btn-primary" style="flex:1;" onclick="confirmSaveAICourseToWishlist()">저장 💖</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modal-share-room">
         <div class="modal-card" style="max-width: 440px;">
             <div class="modal-header">
@@ -929,13 +951,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260824_v368"></script>
+    <script src="app.js?v=20260824_v369"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260824_v368').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260824_v369').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
