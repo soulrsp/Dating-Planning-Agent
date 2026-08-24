@@ -938,6 +938,12 @@ body {
     fill: var(--color-warning);
 }
 
+.festival-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
 .visited-review-snippet {
     font-style: italic;
     font-size: 0.82rem;
