@@ -3392,7 +3392,7 @@ window.askAIAboutFestival = function(id) {
     if (body) body.style.display = "none";
     if (chevron) chevron.style.transform = "";
 
-    document.getElementById("chat-user-input").value = `${ev.title}(${ev.addr}) 근처로 데이트 코스 추천해줘`;
+    document.getElementById("chat-user-input").value = `${ev.title}(${ev.addr}) 근처로 데이트 코스 추천해줘. 맛집, 근처 걸을만한 곳, 유적지, 유명 장소 등을 종합적으로 추천해줘`;
     document.getElementById("chat-input-form").dispatchEvent(new Event("submit"));
     document.querySelector(".chat-container")?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
@@ -4858,10 +4858,15 @@ function renderAICourseCard(course) {
                     <i data-lucide="coins" style="width:12px; height:12px;"></i>
                     <span>예상 비용: ${formatCurrency(place.estimatedCost)}</span>
                 </div>
-                ${hasCoords ? `
-                <button type="button" class="btn btn-outline" style="margin-top:0.4rem; padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewCoursePlaceOnMap('${uniqueCourseId}', ${index})">
-                    <i data-lucide="map-pin" style="width:12px;height:12px;"></i> 지도에서 보기
-                </button>` : ""}
+                <div style="display:flex; gap:0.4rem; margin-top:0.4rem; flex-wrap:wrap;">
+                    ${hasCoords ? `
+                    <button type="button" class="btn btn-outline" style="padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewCoursePlaceOnMap('${uniqueCourseId}', ${index})">
+                        <i data-lucide="map-pin" style="width:12px;height:12px;"></i> 지도에서 보기
+                    </button>` : ""}
+                    <button type="button" class="btn btn-outline" style="padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="openSinglePlaceSaveDateModal('${uniqueCourseId}', ${index})">
+                        <i data-lucide="heart-plus" style="width:12px;height:12px;"></i> 위시리스트 추가
+                    </button>
+                </div>
             </div>
         `;
     });
@@ -4973,10 +4978,12 @@ window.backToAIPlannerFromMap = function() {
     switchTab("ai-planner");
 };
 
-let pendingCourseSaveId = null;
+// Holds whatever set of AI-course places the open date modal is about to save — either the full
+// course (openCourseSaveDateModal) or a single place (openSinglePlaceSaveDateModal). Both flows share
+// the same modal/confirm handler since saving is otherwise identical either way.
+let pendingSavePlaces = null;
 
-window.openCourseSaveDateModal = function(courseId) {
-    pendingCourseSaveId = courseId;
+function openCourseDateModalCommon() {
     const dateInput = document.getElementById("course-save-date-input");
     if (dateInput) {
         const today = new Date();
@@ -4987,17 +4994,31 @@ window.openCourseSaveDateModal = function(courseId) {
     }
     const modal = document.getElementById("modal-course-save-date");
     if (modal) modal.classList.add("active");
+}
+
+window.openCourseSaveDateModal = function(courseId) {
+    const places = aiCoursePlacesStore[courseId];
+    if (!places) return;
+    pendingSavePlaces = places;
+    openCourseDateModalCommon();
+};
+
+window.openSinglePlaceSaveDateModal = function(courseId, idx) {
+    const places = aiCoursePlacesStore[courseId];
+    const place = places && places[idx];
+    if (!place) return;
+    pendingSavePlaces = [place];
+    openCourseDateModalCommon();
 };
 
 window.closeCourseSaveDateModal = function() {
     const modal = document.getElementById("modal-course-save-date");
     if (modal) modal.classList.remove("active");
-    pendingCourseSaveId = null;
+    pendingSavePlaces = null;
 };
 
 window.confirmSaveAICourseToWishlist = async function() {
-    const courseId = pendingCourseSaveId;
-    const places = aiCoursePlacesStore[courseId];
+    const places = pendingSavePlaces;
     if (!places) { closeCourseSaveDateModal(); return; }
 
     const dateInput = document.getElementById("course-save-date-input");
@@ -5029,7 +5050,10 @@ window.confirmSaveAICourseToWishlist = async function() {
             savedCount++;
         }
 
-        showToast(`${savedCount}개의 데이트 코스가 보관함(위시리스트)에 추가되었습니다!`, "success");
+        const successMsg = places.length === 1
+            ? `'${places[0].name}'을(를) 위시리스트에 담았습니다! 💖`
+            : `${savedCount}개의 데이트 코스가 보관함(위시리스트)에 추가되었습니다!`;
+        showToast(successMsg, "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
