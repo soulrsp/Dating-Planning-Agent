@@ -1967,7 +1967,13 @@ let cachedGeminiModelList = null;
 async function getAvailableGeminiModels() {
     if (cachedGeminiModelList) return cachedGeminiModelList;
     try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+        // fetch() has no default timeout — without this, a stalled response here would hang forever
+        // and block every downstream candidate model from ever being tried, since this is awaited
+        // before the retry loop even starts.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         const data = await res.json();
         cachedGeminiModelList = (data.models || [])
             .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
@@ -1975,6 +1981,7 @@ async function getAvailableGeminiModels() {
             // Keep to the cheap/fast "flash" family and exclude non-text variants (vision/tts/image/embedding).
             .filter(n => /flash/i.test(n) && !/vision|embed|tts|image/i.test(n));
     } catch (e) {
+        console.warn("[Gemini API] 모델 목록 조회 실패, 고정 후보 목록만 사용:", e.message);
         cachedGeminiModelList = [];
     }
     return cachedGeminiModelList;
@@ -2006,11 +2013,29 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
                 requestBody.generationConfig = { responseMimeType: "application/json" };
             }
 
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(requestBody)
-            });
+            // Same reasoning as the timeout in getAvailableGeminiModels() above: a stalled response
+            // from one candidate model must not freeze the whole chat forever — it needs to time out
+            // and fall through to the next candidate instead.
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(requestBody),
+                    signal: controller.signal
+                });
+            } catch (fetchErr) {
+                if (fetchErr.name === "AbortError") {
+                    console.warn(`[Gemini API] Model ${modelName} timed out, trying next candidate...`);
+                    lastError = new Error(`${modelName} 응답 시간 초과`);
+                    continue;
+                }
+                throw fetchErr;
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!response.ok) {
                 const errJson = await response.json().catch(() => ({}));
