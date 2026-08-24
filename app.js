@@ -3450,6 +3450,9 @@ window.viewFestivalOnMap = function(id) {
     const mapEl = document.getElementById("map");
     if (mapEl) mapEl.scrollIntoView({ behavior: "smooth", block: "center" });
 
+    const backBtn = document.getElementById("btn-back-to-ai-planner");
+    if (backBtn) backBtn.classList.remove("hidden");
+
     setTimeout(() => {
         if (festivalTempMarker) {
             if (festivalTempMarker.setMap) festivalTempMarker.setMap(null);
@@ -4730,6 +4733,7 @@ async function handleChatSubmit(e) {
                         category: "Park",
                         lat: 37.5612,
                         lng: 126.9248,
+                        address: "서울특별시 마포구 연남동 경의선숲길",
                         notes: "손잡고 조용히 대화하며 산책하기 좋은 오솔길 🌿",
                         estimatedCost: 0
                     },
@@ -4738,6 +4742,7 @@ async function handleChatSubmit(e) {
                         category: "Cafe",
                         lat: 37.5618,
                         lng: 126.9255,
+                        address: "서울특별시 마포구 연희로1길 인근",
                         notes: "달콤한 아인슈페너 커피와 시그니처 디저트가 일품인 카페 ☕",
                         estimatedCost: 18000
                     },
@@ -4746,6 +4751,7 @@ async function handleChatSubmit(e) {
                         category: "Restaurant",
                         lat: 37.5624,
                         lng: 126.9262,
+                        address: "서울특별시 마포구 성미산로 인근",
                         notes: "분위기 좋은 일식 명란 크림 파스타 & 와인 다이닝 🍝🍷",
                         estimatedCost: 45000
                     }
@@ -4801,6 +4807,7 @@ JSON Schema format:
       "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other",
       "lat": float (estimations inside Korea, e.g., 37.5612),
       "lng": float (estimations inside Korea, e.g., 126.9248),
+      "address": "Best-estimate real Korean street address of the place only (e.g. 서울특별시 마포구 동교로 123) — no descriptive text",
       "notes": "Menu suggestion, aesthetic atmosphere details, why it fits",
       "estimatedCost": integer (KRW cost per couple, e.g. 20000)
     }
@@ -4824,15 +4831,22 @@ function cleanAndParseJSON(rawText) {
     return JSON.parse(cleanText.trim());
 }
 
+// Course places keyed by their card's uniqueCourseId — looked up by both the per-place "지도에서
+// 보기" buttons and the save-to-wishlist flow, instead of round-tripping the whole array through an
+// encodeURIComponent(JSON.stringify(...)) onclick attribute.
+const aiCoursePlacesStore = {};
+
 function renderAICourseCard(course) {
     const container = document.getElementById("chat-messages-box");
     const bubbleWrapper = document.createElement("div");
     bubbleWrapper.className = "message message-bot";
-    
+
     const uniqueCourseId = "course-" + Date.now();
-    
+    aiCoursePlacesStore[uniqueCourseId] = course.places;
+
     let placesHtml = "";
     course.places.forEach((place, index) => {
+        const hasCoords = typeof place.lat === "number" && typeof place.lng === "number";
         placesHtml += `
             <div class="itinerary-step">
                 <div class="itinerary-step-header">
@@ -4844,6 +4858,10 @@ function renderAICourseCard(course) {
                     <i data-lucide="coins" style="width:12px; height:12px;"></i>
                     <span>예상 비용: ${formatCurrency(place.estimatedCost)}</span>
                 </div>
+                ${hasCoords ? `
+                <button type="button" class="btn btn-outline" style="margin-top:0.4rem; padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewCoursePlaceOnMap('${uniqueCourseId}', ${index})">
+                    <i data-lucide="map-pin" style="width:12px;height:12px;"></i> 지도에서 보기
+                </button>` : ""}
             </div>
         `;
     });
@@ -4852,7 +4870,7 @@ function renderAICourseCard(course) {
         <div class="msg-bubble" style="width: 100%;">
             <div style="margin-bottom: 0.5rem;">🌸 <strong>AI 플래너가 추천하는 데이트 코스</strong></div>
             <div>${course.description}</div>
-            
+
             <div class="itinerary-card" id="${uniqueCourseId}">
                 <div class="itinerary-card-title">
                     <i data-lucide="heart"></i>
@@ -4865,23 +4883,129 @@ function renderAICourseCard(course) {
                     <span>추천 데이트 코스 장소: ${course.places.length}곳</span>
                 </div>
                 <div style="margin-top:0.5rem;">
-                    <button class="btn btn-primary" style="width:100%; justify-content:center; padding:0.5rem;" onclick="saveAICourseToWishlist('${encodeURIComponent(JSON.stringify(course.places))}')">
+                    <button class="btn btn-primary" style="width:100%; justify-content:center; padding:0.5rem;" onclick="openCourseSaveDateModal('${uniqueCourseId}')">
                         <i data-lucide="folder-heart"></i> 이 코스 전체 보관함에 저장
                     </button>
                 </div>
             </div>
         </div>
     `;
-    
+
     container.appendChild(bubbleWrapper);
     container.scrollTop = container.scrollHeight;
     lucide.createIcons();
 }
 
-window.saveAICourseToWishlist = async function(encodedPlaces) {
-    const places = JSON.parse(decodeURIComponent(encodedPlaces));
+// Separate from naverMarkers[]/leafletMarkersGroup and from festivalTempMarker so a course-place pin
+// isn't wiped by updateMapMarkers() and doesn't fight the festival panel's own temp marker.
+let aiCourseTempMarker = null;
+
+window.viewCoursePlaceOnMap = function(courseId, idx) {
+    const places = aiCoursePlacesStore[courseId];
+    const place = places && places[idx];
+    if (!place || typeof place.lat !== "number" || typeof place.lng !== "number") return;
+
+    switchTab("dashboard");
+    const mapEl = document.getElementById("map");
+    if (mapEl) mapEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const backBtn = document.getElementById("btn-back-to-ai-planner");
+    if (backBtn) backBtn.classList.remove("hidden");
+
+    setTimeout(() => {
+        if (aiCourseTempMarker) {
+            if (aiCourseTempMarker.setMap) aiCourseTempMarker.setMap(null);
+            else aiCourseTempMarker.remove();
+            aiCourseTempMarker = null;
+        }
+
+        const popupHtml = `
+            <div style="padding:10px; font-family:var(--font-body); min-width:160px; max-width:220px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
+                <strong style="font-size:0.9rem; color:var(--color-text-high);">${place.name}</strong>
+                <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${place.category || ""}</div>
+                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${place.address || ""}</p>
+            </div>
+        `;
+
+        if (isNaverMapActive && map) {
+            const pos = new naver.maps.LatLng(place.lat, place.lng);
+            const marker = new naver.maps.Marker({
+                position: pos,
+                map: map,
+                icon: {
+                    content: `<div style="background-color:#FF6584; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 2px 8px rgba(255,101,132,0.45); transform:translate(-8px, -8px);"></div>`,
+                    anchor: new naver.maps.Point(8, 8)
+                }
+            });
+            const infowindow = new naver.maps.InfoWindow({
+                content: popupHtml,
+                borderWidth: 0,
+                backgroundColor: "transparent",
+                pixelOffset: new naver.maps.Point(0, -8)
+            });
+            if (activeInfoWindow) activeInfoWindow.close();
+            infowindow.open(map, marker);
+            activeInfoWindow = infowindow;
+            map.setCenter(pos);
+            map.setZoom(16);
+            aiCourseTempMarker = marker;
+        } else if (map) {
+            const customIcon = L.divIcon({
+                className: 'custom-map-marker',
+                html: `<div style="background-color:#FF6584; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 8px rgba(255,101,132,0.45);"></div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+            const marker = L.marker([place.lat, place.lng], { icon: customIcon }).addTo(map).bindPopup(popupHtml).openPopup();
+            map.setView([place.lat, place.lng], 16);
+            aiCourseTempMarker = marker;
+        }
+
+        showToast(`'${place.name}' 위치로 러브 맵이 이동했습니다! 📍`, "success");
+    }, 300);
+};
+
+// "뒤로가기" — returns to the AI 플래너 tab without losing the chat history, since switchTab()
+// only toggles a CSS class and never tears down #chat-messages-box's DOM.
+window.backToAIPlannerFromMap = function() {
+    const backBtn = document.getElementById("btn-back-to-ai-planner");
+    if (backBtn) backBtn.classList.add("hidden");
+    switchTab("ai-planner");
+};
+
+let pendingCourseSaveId = null;
+
+window.openCourseSaveDateModal = function(courseId) {
+    pendingCourseSaveId = courseId;
+    const dateInput = document.getElementById("course-save-date-input");
+    if (dateInput) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        dateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+    const modal = document.getElementById("modal-course-save-date");
+    if (modal) modal.classList.add("active");
+};
+
+window.closeCourseSaveDateModal = function() {
+    const modal = document.getElementById("modal-course-save-date");
+    if (modal) modal.classList.remove("active");
+    pendingCourseSaveId = null;
+};
+
+window.confirmSaveAICourseToWishlist = async function() {
+    const courseId = pendingCourseSaveId;
+    const places = aiCoursePlacesStore[courseId];
+    if (!places) { closeCourseSaveDateModal(); return; }
+
+    const dateInput = document.getElementById("course-save-date-input");
+    const chosenDate = dateInputToStored(dateInput ? dateInput.value : "") || new Date().toISOString();
+
+    closeCourseSaveDateModal();
+
     let savedCount = 0;
-    
     try {
         const newIds = [];
         for(const place of places) {
@@ -4892,12 +5016,14 @@ window.saveAICourseToWishlist = async function(encodedPlaces) {
                 lat: place.lat || (37.5665 + (Math.random() - 0.5) * 0.02),
                 lng: place.lng || (126.9780 + (Math.random() - 0.5) * 0.02),
                 priority: "medium",
-                notes: place.notes,
+                // notes is what wishlist/visited cards render as "주소" everywhere else in the app —
+                // it must hold only the address, not the AI's atmosphere description (place.notes).
+                notes: place.address || "",
                 isVisited: 0,
                 review: "",
                 peopleCount: 2,
                 photo: "",
-                createdAt: new Date().toISOString()
+                createdAt: chosenDate
             });
             newIds.push(newId);
             savedCount++;
