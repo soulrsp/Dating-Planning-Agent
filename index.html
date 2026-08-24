@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260819_v355">
+    <link rel="stylesheet" href="style.css?v=20260824_v356">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -329,6 +329,25 @@
                         <span>AI 플래너를 사용하려면 설정 탭에서 <strong>Gemini API Key</strong>를 입력해 주세요 🌸</span>
                     </div>
 
+                    <!-- Daejeon-area Festival/Event Feed (TourAPI, shared cloud cache, refreshed ~daily) -->
+                    <div class="card" id="festival-panel" style="margin-bottom: 1.2rem;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.9rem;">
+                            <h3 class="card-heading" style="margin:0; display:flex; align-items:center; gap:6px;">
+                                <i data-lucide="party-popper" class="text-primary" style="width:20px;height:20px;"></i>
+                                대전 주변 축제·행사
+                            </h3>
+                            <span id="festival-updated-at" style="font-size:0.72rem; color:var(--color-text-med);"></span>
+                        </div>
+                        <div class="festival-list" id="festival-list">
+                            <div class="card" style="text-align:center; padding:1.5rem; color:var(--color-text-med); font-size:0.85rem;">
+                                축제/행사 정보를 불러오는 중이에요...
+                            </div>
+                        </div>
+                        <div style="text-align:center; margin-top:1rem;" id="festival-load-more-wrap">
+                            <button id="festival-load-more-btn" class="btn btn-outline" style="padding:0.4rem 1.2rem; font-size:0.78rem; border-radius:20px; display:none;" onclick="showMoreFestivals()">더보기</button>
+                        </div>
+                    </div>
+
                     <div class="chat-container">
                         <div class="chat-header">
                             <div class="bot-info">
@@ -401,6 +420,16 @@
                             <span class="help-text">등록 시 상호명(가게, 식당, 카페, 브랜드)을 CORS 제한 없이 100% 정밀 탐색합니다.</span>
                         </div>
 
+                        <div class="form-group">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <label for="settings-tourapi-key" style="margin:0;">문화축제 정보 API Key (공공데이터포털)</label>
+                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('tourapi')">
+                                    ❓ 가이드 / 발급방법
+                                </button>
+                            </div>
+                            <input type="password" id="settings-tourapi-key" placeholder="공공데이터포털 TourAPI 인증키를 입력하세요">
+                            <span class="help-text">AI플래너 탭의 '대전 주변 축제·행사' 표를 채우는 데 사용됩니다. 이 키는 다른 커플과 공유되지 않고 이 기기에만 저장됩니다.</span>
+                        </div>
 
                         <div class="form-group-row">
                             <div class="form-group">
@@ -898,13 +927,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260819_v355"></script>
+    <script src="app.js?v=20260824_v356"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260819_v355').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260824_v356').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
