@@ -1110,11 +1110,22 @@ body {
 
 .message {
     display: flex;
-    max-width: 75%;
+    max-width: 88%;
 }
 
+/* Bot replies carry long AI-generated text and the multi-place itinerary card — a structured result
+   like that reads as a panel, not a chat bubble, so it should use the full chat column width rather
+   than leaving a chunk of empty space beside it. User messages stay narrower so they still read as
+   chat bubbles. */
 .message-bot {
-    align-self: flex-start;
+    max-width: 100%;
+}
+
+/* align-self: stretch (not flex-start) so the bubble actually fills its max-width instead of
+   shrinking to its content — flex-start was quietly undoing the widened max-width above, since a
+   flex item without stretch sizes to content regardless of how large max-width allows it to grow. */
+.message-bot {
+    align-self: stretch;
 }
 
 .message-user {
@@ -1769,6 +1780,18 @@ body {
         position: relative !important;
         margin: 0 !important;
         padding: 0 !important;
+    }
+
+    /* Even narrower viewports need the chat bubbles to use nearly the full column, and less side
+       padding on the messages area leaves more room for the text itself. */
+    .message {
+        max-width: 94%;
+    }
+    .message-bot {
+        max-width: 100%;
+    }
+    .chat-messages {
+        padding: 1rem 0.6rem;
     }
 
     /* Hide Desktop Sidebar on Mobile */
