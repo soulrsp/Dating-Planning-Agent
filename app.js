@@ -544,13 +544,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // AI Chatbot planner
     document.getElementById("chat-input-form").addEventListener("submit", handleChatSubmit);
-    document.querySelectorAll(".chip-btn").forEach(chip => {
-        chip.addEventListener("click", () => {
-            const prompt = chip.getAttribute("data-prompt");
-            document.getElementById("chat-user-input").value = prompt;
-            document.getElementById("chat-input-form").dispatchEvent(new Event("submit"));
-        });
-    });
 
     // Settings actions
     document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
