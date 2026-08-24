@@ -3073,7 +3073,7 @@ function categoryBadgeClassAndStyle(category) {
 // genuinely in 대전/세종/충남/충북 (address text confirms it) whose areacode field was simply blank,
 // so filtering by ?areaCode= silently drops most real results. Matching against the addr1 text itself
 // is what actually works.
-const FESTIVAL_AREA_KEYWORDS = ["대전", "세종", "충남", "충북", "충청남도", "충청북도"];
+const FESTIVAL_AREA_KEYWORDS = ["대전", "세종", "충남", "충북", "충청남도", "충청북도", "전북", "전라북도"];
 const FESTIVAL_MAX_ITEMS = 60; // caps both TourAPI list size and the number of detail (overview) calls
 const FESTIVAL_MAX_PAGES = 5; // 5 x 100 rows — comfortably covers the ~200-300 nationwide totalCount seen in testing
 const TOUR_API_BASE = "https://apis.data.go.kr/B551011/KorService2";
@@ -3159,9 +3159,21 @@ async function fetchFestivalsFromTourAPI() {
         if (pageItems.length < commonParams.numOfRows) break;
     }
 
+    // "상시운영" / year-round programs (often 90+ days) would otherwise permanently camp at the top of
+    // a start-date sort since their start date is always the earliest — excluding them keeps the list
+    // to genuine, time-boxed festivals.
+    const FESTIVAL_MAX_DURATION_DAYS = 90;
+    function festivalDurationDays(item) {
+        const start = parseYyyymmdd(item.eventstartdate);
+        const end = parseYyyymmdd(item.eventenddate);
+        if (!start || !end) return 0;
+        return Math.round((end - start) / 86400000);
+    }
+
     const merged = new Map();
     allItems
         .filter(item => FESTIVAL_AREA_KEYWORDS.some(kw => (item.addr1 || "").includes(kw)))
+        .filter(item => festivalDurationDays(item) <= FESTIVAL_MAX_DURATION_DAYS)
         .forEach(item => { if (!merged.has(item.contentid)) merged.set(item.contentid, item); });
 
     const sorted = Array.from(merged.values())
@@ -3241,10 +3253,22 @@ function formatRelativeTimeAgo(ms) {
     return `${Math.floor(diffHour / 24)}일 전`;
 }
 
+window.toggleFestivalPanel = function() {
+    const body = document.getElementById("festival-panel-body");
+    const chevron = document.getElementById("festival-panel-chevron");
+    if (!body) return;
+    const isOpen = body.style.display !== "none";
+    body.style.display = isOpen ? "none" : "block";
+    if (chevron) chevron.style.transform = isOpen ? "" : "rotate(180deg)";
+};
+
 function renderFestivalList() {
     const listEl = document.getElementById("festival-list");
     const loadMoreBtn = document.getElementById("festival-load-more-btn");
+    const countBadge = document.getElementById("festival-count-badge");
     if (!listEl) return;
+
+    if (countBadge) countBadge.textContent = festivalItems.length > 0 ? `${festivalItems.length}건` : "";
 
     if (festivalItems.length === 0) {
         listEl.innerHTML = tourApiKey
@@ -3255,6 +3279,8 @@ function renderFestivalList() {
     }
 
     const badge = categoryBadgeClassAndStyle("축제·행사");
+    // festivalItems is already sorted by startDate ascending in fetchFestivalsFromTourAPI, so the
+    // nearest-in-time event (an ongoing one, or else the soonest upcoming one) is always first here.
     const visible = festivalItems.slice(0, festivalVisibleCount);
 
     listEl.innerHTML = visible.map(ev => `
@@ -3269,6 +3295,9 @@ function renderFestivalList() {
             </div>
             ${ev.overview ? `<p class="place-notes">${ev.overview}</p>` : ""}
             <div class="place-actions">
+                <button class="btn btn-outline" onclick="askAIAboutFestival('${ev.id}')">
+                    <i data-lucide="sparkles"></i>AI에게 물어보기
+                </button>
                 <button class="btn btn-outline" onclick="addFestivalToWishlist('${ev.id}')">
                     <i data-lucide="heart-plus"></i>위시리스트에 담기
                 </button>
@@ -3283,6 +3312,20 @@ function renderFestivalList() {
 window.showMoreFestivals = function() {
     festivalVisibleCount += 20;
     renderFestivalList();
+};
+
+window.askAIAboutFestival = function(id) {
+    const ev = festivalItems.find(f => String(f.id) === String(id));
+    if (!ev) return;
+
+    const body = document.getElementById("festival-panel-body");
+    const chevron = document.getElementById("festival-panel-chevron");
+    if (body) body.style.display = "none";
+    if (chevron) chevron.style.transform = "";
+
+    document.getElementById("chat-user-input").value = `${ev.title}(${ev.addr}) 근처로 데이트 코스 추천해줘`;
+    document.getElementById("chat-input-form").dispatchEvent(new Event("submit"));
+    document.querySelector(".chat-container")?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 window.addFestivalToWishlist = async function(id) {
