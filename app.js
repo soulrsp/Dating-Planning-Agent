@@ -1951,21 +1951,45 @@ function searchNaverGeocoder(query, userLat, userLng) {
     });
 }
 
-// Dynamic Gemini Model Candidate List (Auto-fallback engine)
+// Static fallback list — Google periodically retires model versions (this list 404'd in full once
+// already), so it's a last resort. getAvailableGeminiModels() below queries the account's actually-
+// available models first, which is what keeps this working without needing a code update every time
+// Google ships a new model generation.
 const GEMINI_CANDIDATE_MODELS = [
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-exp"
+    "gemini-1.5-flash"
 ];
+
+let cachedGeminiModelList = null;
+async function getAvailableGeminiModels() {
+    if (cachedGeminiModelList) return cachedGeminiModelList;
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+        const data = await res.json();
+        cachedGeminiModelList = (data.models || [])
+            .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+            .map(m => m.name.replace(/^models\//, ""))
+            // Keep to the cheap/fast "flash" family and exclude non-text variants (vision/tts/image/embedding).
+            .filter(n => /flash/i.test(n) && !/vision|embed|tts|image/i.test(n));
+    } catch (e) {
+        cachedGeminiModelList = [];
+    }
+    return cachedGeminiModelList;
+}
 
 // Core robust Gemini API Caller with automatic model fallback
 async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = true) {
     if (!geminiApiKey) throw new Error("Gemini API Key가 등록되지 않았습니다.");
 
     let lastError = null;
-    
-    for (const modelName of GEMINI_CANDIDATE_MODELS) {
+
+    const discovered = await getAvailableGeminiModels();
+    const candidateModels = [...new Set([...discovered, ...GEMINI_CANDIDATE_MODELS])];
+
+    for (const modelName of candidateModels) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
             const parts = [];
@@ -3073,7 +3097,10 @@ function categoryBadgeClassAndStyle(category) {
 // genuinely in 대전/세종/충남/충북 (address text confirms it) whose areacode field was simply blank,
 // so filtering by ?areaCode= silently drops most real results. Matching against the addr1 text itself
 // is what actually works.
-const FESTIVAL_AREA_KEYWORDS = ["대전", "세종", "충남", "충북", "충청남도", "충청북도", "전북", "전라북도"];
+// Must match the START of addr1 (the official 시/도 name is always the first token of a Korean
+// address) — a plain .includes() check let "서울특별시 중구 세종대로 99" match "세종" because that's
+// also a common Seoul street name (named after King Sejong), pulling in unrelated Seoul events.
+const FESTIVAL_AREA_PREFIXES = ["대전광역시", "세종특별자치시", "충청남도", "충청북도", "전북특별자치도", "전라북도"];
 const FESTIVAL_MAX_ITEMS = 60; // caps both TourAPI list size and the number of detail (overview) calls
 const FESTIVAL_MAX_PAGES = 5; // 5 x 100 rows — comfortably covers the ~200-300 nationwide totalCount seen in testing
 const TOUR_API_BASE = "https://apis.data.go.kr/B551011/KorService2";
@@ -3143,7 +3170,7 @@ async function fetchFestivalsFromTourAPI() {
         numOfRows: 100, arrange: "A", eventStartDate: today
     };
 
-    // Nationwide, unfiltered by area — see the comment above FESTIVAL_AREA_KEYWORDS for why areaCode
+    // Nationwide, unfiltered by area — see the comment above FESTIVAL_AREA_PREFIXES for why areaCode
     // can't be trusted. Paginate until a short page (fewer than numOfRows) signals the last page.
     const allItems = [];
     for (let page = 1; page <= FESTIVAL_MAX_PAGES; page++) {
@@ -3172,7 +3199,7 @@ async function fetchFestivalsFromTourAPI() {
 
     const merged = new Map();
     allItems
-        .filter(item => FESTIVAL_AREA_KEYWORDS.some(kw => (item.addr1 || "").includes(kw)))
+        .filter(item => FESTIVAL_AREA_PREFIXES.some(prefix => (item.addr1 || "").startsWith(prefix)))
         .filter(item => festivalDurationDays(item) <= FESTIVAL_MAX_DURATION_DAYS)
         .forEach(item => { if (!merged.has(item.contentid)) merged.set(item.contentid, item); });
 
@@ -3293,7 +3320,11 @@ function renderFestivalList() {
             <div class="place-meta-item">
                 <i data-lucide="map-pin"></i><span>${ev.addr || "위치 정보 없음"}</span>
             </div>
-            ${ev.overview ? `<p class="place-notes">${ev.overview}</p>` : ""}
+            ${ev.overview ? `
+            <button type="button" class="festival-desc-toggle" onclick="toggleFestivalDesc(this)" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.78rem; color:var(--color-text-med);">
+                <i data-lucide="chevron-right" style="width:14px;height:14px; transition:transform 0.2s;"></i><span>설명 보기</span>
+            </button>
+            <p class="place-notes" style="display:none;">${ev.overview}</p>` : ""}
             <div class="place-actions">
                 <button class="btn btn-outline" onclick="askAIAboutFestival('${ev.id}')">
                     <i data-lucide="sparkles"></i>AI에게 물어보기
@@ -3308,6 +3339,16 @@ function renderFestivalList() {
     if (loadMoreBtn) loadMoreBtn.style.display = festivalVisibleCount < festivalItems.length ? "inline-flex" : "none";
     if (window.lucide) lucide.createIcons();
 }
+
+window.toggleFestivalDesc = function(btnEl) {
+    const notesEl = btnEl.nextElementSibling;
+    const icon = btnEl.querySelector("i, svg"); // lucide.createIcons() replaces <i> with an inline <svg>
+    const label = btnEl.querySelector("span");
+    const isOpen = notesEl.style.display !== "none";
+    notesEl.style.display = isOpen ? "none" : "block";
+    if (label) label.textContent = isOpen ? "설명 보기" : "설명 접기";
+    if (icon) icon.style.transform = isOpen ? "" : "rotate(90deg)";
+};
 
 window.showMoreFestivals = function() {
     festivalVisibleCount += 20;
