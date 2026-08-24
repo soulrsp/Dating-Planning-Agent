@@ -48,6 +48,11 @@ if (localStorage.getItem("aura_naver_search_secret") !== null) {
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
 let isKakaoPlacesActive = false;
 
+// TourAPI key is a personal, quota-limited data.go.kr credential (unlike naverClientId/kakaoApiKey
+// above) — like geminiApiKey, it stays local-only and is never synced through room settings, so one
+// person's daily quota never leaks to or gets burned by other couples using this app.
+let tourApiKey = localStorage.getItem("aura_tourapi_key") || "";
+
 // Map Search Performance Layer: in-session result cache and stale-result cancellation
 const mapSearchResultCache = new Map(); // normalizedQuery -> { results, timestamp }
 const MAP_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -260,6 +265,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("settings-naver-client-id").value = naverClientId;
     const kakaoInput = document.getElementById("settings-kakao-api-key");
     if (kakaoInput) kakaoInput.value = kakaoApiKey;
+    const tourApiInput = document.getElementById("settings-tourapi-key");
+    if (tourApiInput) tourApiInput.value = tourApiKey;
     document.getElementById("settings-partner-a-name").value = partnerAName;
     document.getElementById("settings-partner-b-name").value = partnerBName;
     document.getElementById("settings-sync-room-id").value = syncRoomId;
@@ -640,6 +647,11 @@ function switchTab(tabId) {
         renderCalendar();
     } else if (tabId === "gallery") {
         renderGallery();
+    } else if (tabId === "ai-planner") {
+        if (!festivalLoadedThisSession) {
+            festivalLoadedThisSession = true;
+            loadFestivalData();
+        }
     } else if (tabId === "settings") {
         const gemKeyEl = document.getElementById("settings-gemini-key");
         if (gemKeyEl) gemKeyEl.value = geminiApiKey;
@@ -3056,6 +3068,249 @@ function categoryBadgeClassAndStyle(category) {
     return { cls: "", style: customCategoryBadgeStyle(cat) };
 }
 
+// 9b. Daejeon-area Festival/Event Feed (TourAPI, shared Firebase cache — see below)
+// TourAPI region codes covering "대전 + 인근" per the user's chosen scope.
+const FESTIVAL_AREA_CODES = [3, 8, 33, 34]; // 대전, 세종, 충북, 충남
+const FESTIVAL_MAX_ITEMS = 60; // caps both TourAPI list size and the number of detail (overview) calls
+const TOUR_API_BASE = "https://apis.data.go.kr/B551011/KorService2";
+
+let festivalItems = [];
+let festivalVisibleCount = 20;
+let festivalLoadedThisSession = false;
+
+// Users may paste either the "Encoding" or "Decoding" key from data.go.kr's mypage — normalize to
+// the raw decoded form and let encodeURIComponent() encode it exactly once. Double-encoding (pasting
+// the already-%-encoded key straight into a query string another layer re-encodes) is the single most
+// common cause of TourAPI's SERVICE_KEY_IS_NOT_REGISTERED_ERROR for first-time integrators.
+function encodedTourApiKey() {
+    let key = tourApiKey.trim();
+    try {
+        if (key.includes("%")) key = decodeURIComponent(key);
+    } catch (e) { /* not actually percent-encoded — use as-is */ }
+    return encodeURIComponent(key);
+}
+
+function toYyyymmdd(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}${m}${d}`;
+}
+
+function parseYyyymmdd(str) {
+    if (!str || str.length !== 8) return null;
+    return new Date(parseInt(str.slice(0, 4), 10), parseInt(str.slice(4, 6), 10) - 1, parseInt(str.slice(6, 8), 10));
+}
+
+function formatFestivalDateRange(startStr, endStr) {
+    const fmt = (d) => d ? `${d.getMonth() + 1}/${d.getDate()}` : "?";
+    const start = parseYyyymmdd(startStr);
+    const end = parseYyyymmdd(endStr);
+    const todayKey = toYyyymmdd(new Date());
+    if (startStr && startStr <= todayKey) {
+        return `진행중 · ~${fmt(end)}`;
+    }
+    return `${fmt(start)} ~ ${fmt(end)}`;
+}
+
+// TourAPI returns items.item as "" (empty string) when a call has zero results, and as a bare object
+// (not wrapped in an array) when there's exactly one — both break a plain .map()/.forEach() if not
+// normalized first.
+function normalizeTourApiItems(items) {
+    if (!items || !items.item) return [];
+    return Array.isArray(items.item) ? items.item : [items.item];
+}
+
+async function tourApiFetch(path, params) {
+    const qs = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+    const url = `${TOUR_API_BASE}/${path}?serviceKey=${encodedTourApiKey()}&${qs}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data?.response?.header?.resultCode !== "0000") {
+        throw new Error(data?.response?.header?.resultMsg || "TourAPI 요청 실패");
+    }
+    return data.response.body;
+}
+
+async function fetchFestivalsFromTourAPI() {
+    const today = toYyyymmdd(new Date());
+    const commonParams = {
+        MobileOS: "ETC", MobileApp: "AURA", _type: "json",
+        numOfRows: 100, pageNo: 1, arrange: "A", eventStartDate: today
+    };
+
+    const perAreaResults = await Promise.all(
+        FESTIVAL_AREA_CODES.map(areaCode =>
+            tourApiFetch("searchFestival2", { ...commonParams, areaCode })
+                .then(body => normalizeTourApiItems(body.items))
+                .catch(e => { console.warn(`[Festival] areaCode ${areaCode} 조회 실패:`, e.message); return []; })
+        )
+    );
+
+    const merged = new Map();
+    perAreaResults.flat().forEach(item => {
+        if (!merged.has(item.contentid)) merged.set(item.contentid, item);
+    });
+
+    const sorted = Array.from(merged.values())
+        .sort((a, b) => (a.eventstartdate || "").localeCompare(b.eventstartdate || ""))
+        .slice(0, FESTIVAL_MAX_ITEMS);
+
+    // Description text isn't in the list response — a second call per item is needed for the overview.
+    const withOverview = await Promise.all(sorted.map(async (item) => {
+        let overview = "";
+        try {
+            const body = await tourApiFetch("detailCommon2", { MobileOS: "ETC", MobileApp: "AURA", _type: "json", contentId: item.contentid });
+            const detail = normalizeTourApiItems(body.items)[0];
+            overview = (detail?.overview || "").replace(/<[^>]*>/g, "").trim();
+        } catch (e) { /* keep going without a description rather than failing the whole item */ }
+
+        return {
+            id: item.contentid,
+            title: item.title,
+            startDate: item.eventstartdate,
+            endDate: item.eventenddate,
+            addr: [item.addr1, item.addr2].filter(Boolean).join(" "),
+            lat: parseFloat(item.mapy) || null,
+            lng: parseFloat(item.mapx) || null,
+            overview: overview.length > 150 ? overview.slice(0, 150) + "..." : overview
+        };
+    }));
+
+    return withOverview;
+}
+
+async function loadFestivalData(forceRefresh = false) {
+    const listEl = document.getElementById("festival-list");
+    const updatedAtEl = document.getElementById("festival-updated-at");
+    if (!listEl) return;
+
+    try {
+        const cacheRes = await fetch(`${getFirebaseDbUrl()}/festival-cache/daejeon.json`);
+        const cache = await cacheRes.json();
+        const isStale = forceRefresh || !cache || !cache.fetchedAt ||
+            toYyyymmdd(new Date(cache.fetchedAt)) !== toYyyymmdd(new Date());
+
+        if (isStale && tourApiKey) {
+            listEl.innerHTML = `<div class="card" style="text-align:center; padding:1.5rem; color:var(--color-text-med); font-size:0.85rem;">축제/행사 정보를 새로 불러오는 중이에요...</div>`;
+            try {
+                festivalItems = await fetchFestivalsFromTourAPI();
+                await fetch(`${getFirebaseDbUrl()}/festival-cache/daejeon.json`, {
+                    method: "PUT",
+                    body: JSON.stringify({ fetchedAt: Date.now(), items: festivalItems })
+                });
+            } catch (e) {
+                console.error("[Festival] TourAPI 조회 실패, 기존 캐시로 대체:", e);
+                festivalItems = cache?.items || [];
+            }
+        } else {
+            festivalItems = cache?.items || [];
+        }
+
+        festivalVisibleCount = 20;
+        renderFestivalList();
+
+        if (updatedAtEl) {
+            const fetchedAt = (isStale && tourApiKey && festivalItems.length) ? Date.now() : cache?.fetchedAt;
+            updatedAtEl.textContent = fetchedAt ? formatRelativeTimeAgo(fetchedAt) + " 업데이트됨" : "";
+        }
+    } catch (e) {
+        console.error("[Festival] 로드 실패:", e);
+        listEl.innerHTML = `<div class="card" style="text-align:center; padding:1.5rem; color:var(--color-text-med); font-size:0.85rem;">축제/행사 정보를 불러오지 못했어요.</div>`;
+    }
+}
+
+function formatRelativeTimeAgo(ms) {
+    const diffMin = Math.floor((Date.now() - ms) / 60000);
+    if (diffMin < 1) return "방금";
+    if (diffMin < 60) return `${diffMin}분 전`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}시간 전`;
+    return `${Math.floor(diffHour / 24)}일 전`;
+}
+
+function renderFestivalList() {
+    const listEl = document.getElementById("festival-list");
+    const loadMoreBtn = document.getElementById("festival-load-more-btn");
+    if (!listEl) return;
+
+    if (festivalItems.length === 0) {
+        listEl.innerHTML = tourApiKey
+            ? `<div class="card" style="text-align:center; padding:1.5rem; color:var(--color-text-med); font-size:0.85rem;">현재 등록된 축제/행사 정보가 없어요.</div>`
+            : `<div class="card" style="text-align:center; padding:1.5rem; color:var(--color-text-med); font-size:0.85rem;">설정 탭에서 <strong>문화축제 정보 API Key</strong>를 등록해주세요 🌸</div>`;
+        if (loadMoreBtn) loadMoreBtn.style.display = "none";
+        return;
+    }
+
+    const badge = categoryBadgeClassAndStyle("축제·행사");
+    const visible = festivalItems.slice(0, festivalVisibleCount);
+
+    listEl.innerHTML = visible.map(ev => `
+        <div class="place-card">
+            <div class="place-card-header">
+                <span class="place-category-badge ${badge.cls}" style="${badge.style}">축제·행사</span>
+                <span style="font-size:0.75rem; font-weight:700; color:var(--color-primary);">${formatFestivalDateRange(ev.startDate, ev.endDate)}</span>
+            </div>
+            <h4 class="place-title" style="font-size:1.05rem;">${ev.title}</h4>
+            <div class="place-meta-item">
+                <i data-lucide="map-pin"></i><span>${ev.addr || "위치 정보 없음"}</span>
+            </div>
+            ${ev.overview ? `<p class="place-notes">${ev.overview}</p>` : ""}
+            <div class="place-actions">
+                <button class="btn btn-outline" onclick="addFestivalToWishlist('${ev.id}')">
+                    <i data-lucide="heart-plus"></i>위시리스트에 담기
+                </button>
+            </div>
+        </div>
+    `).join("");
+
+    if (loadMoreBtn) loadMoreBtn.style.display = festivalVisibleCount < festivalItems.length ? "inline-flex" : "none";
+    if (window.lucide) lucide.createIcons();
+}
+
+window.showMoreFestivals = function() {
+    festivalVisibleCount += 20;
+    renderFestivalList();
+};
+
+window.addFestivalToWishlist = async function(id) {
+    const ev = festivalItems.find(f => String(f.id) === String(id));
+    if (!ev) return;
+
+    const startDate = parseYyyymmdd(ev.startDate) || new Date();
+    const existing = await db.places.where("name").equalsIgnoreCase(ev.title)
+        .and(p => p.isDeleted !== 1 && p.isVisited !== -1 && toLocalDateKey(p.createdAt || p.date) === toLocalDateKey(startDate))
+        .first();
+    if (existing) {
+        showToast(`'${ev.title}'은(는) 이미 위시리스트에 있어요! 💖`, "info");
+        return;
+    }
+
+    const mapUrl = `https://map.naver.com/v5/search/${encodeURIComponent(ev.title)}?c=${ev.lat || defaultMapCoords[0]},${ev.lng || defaultMapCoords[1]},15,0,0,0,dh`;
+    const notes = [ev.overview, ev.addr ? `위치: ${ev.addr}` : ""].filter(Boolean).join(" / ");
+
+    const newPlaceId = await db.places.add({
+        name: ev.title,
+        category: "축제·행사",
+        url: mapUrl,
+        lat: ev.lat || defaultMapCoords[0],
+        lng: ev.lng || defaultMapCoords[1],
+        priority: "medium",
+        notes: notes,
+        isVisited: 0,
+        review: "",
+        peopleCount: 2,
+        photo: "",
+        createdAt: startDate
+    });
+
+    showToast(`'${ev.title}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
+    await updateDashboardStats();
+    await renderPlacesList();
+    updateMapMarkers();
+    triggerSyncUpload(newPlaceId);
+};
+
 // 10. Places Render List
 async function renderPlacesList() {
     const mainContent = document.querySelector(".main-content");
@@ -3465,6 +3720,20 @@ window.openApiGuideModal = function(type) {
             <button type="button" class="btn btn-outline" style="width:100%; justify-content:center; margin-top:0.5rem;" onclick="copyFirebaseRulesTemplate()">📋 복사하기</button>
             <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
                 💡 위 문구는 예시입니다 — 실제 콘솔에 이미 등록된 기존 방/이메일 내용을 그대로 유지한 채, 새 블록만 추가해서 게시해야 기존 커플 접근이 끊기지 않습니다.
+            </div>`;
+    } else if (type === 'tourapi') {
+        titleEl.innerHTML = `🔑 문화축제 정보 API Key 발급 가이드`;
+        bodyEl.innerHTML = `
+            <ol style="padding-left:1.2rem; margin-top:0.5rem;">
+                <li style="margin-bottom:0.6rem;"><strong>공공데이터포털 접속 및 회원가입</strong><br>
+                <a href="https://www.data.go.kr" target="_blank" style="color:var(--color-primary); text-decoration:underline;">data.go.kr</a>에서 회원가입 후 로그인합니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>"한국관광공사_국문 관광정보 서비스_GW" 검색 후 활용신청</strong><br>
+                오픈 API 탭에서 검색해 [활용신청] → 활용 목적을 간단히 작성하면 보통 즉시~1일 내 자동 승인됩니다. 무료입니다.</li>
+                <li style="margin-bottom:0.6rem;"><strong>마이페이지 → 인증키 복사</strong><br>
+                승인 후 마이페이지에서 발급된 "일반 인증키(Encoding)" 또는 "(Decoding)" 값을 복사해 아래 '문화축제 정보 API Key' 란에 붙여넣으세요. 둘 중 어느 쪽을 넣어도 동작합니다.</li>
+            </ol>
+            <div style="background:rgba(255,101,132,0.08); padding:0.6rem; border-radius:6px; margin-top:0.6rem; font-size:0.8rem; color:var(--color-primary);">
+                💡 이 키는 개인 발급키라 다른 커플과 공유되지 않고 이 기기의 localStorage에만 저장됩니다. 하루 1회 정도만 호출하므로 무료 할당량으로 충분합니다.
             </div>`;
     } else {
         titleEl.innerHTML = `🔑 네이버 지도 Client ID 발급 가이드`;
@@ -4457,6 +4726,8 @@ async function saveSettings() {
     const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
     const kakaoInputEl = document.getElementById("settings-kakao-api-key");
     const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
+    const tourApiInputEl = document.getElementById("settings-tourapi-key");
+    const tourApiKeyVal = tourApiInputEl ? tourApiInputEl.value.trim() : tourApiKey;
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
     const syncRoomVal = document.getElementById("settings-sync-room-id").value.trim();
@@ -4465,6 +4736,7 @@ async function saveSettings() {
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
     localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
+    localStorage.setItem("aura_tourapi_key", tourApiKeyVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
     localStorage.setItem("aura_partner_b_name", partnerBVal);
     localStorage.setItem("aura_sync_room_id", syncRoomVal);
@@ -4473,6 +4745,8 @@ async function saveSettings() {
     geminiApiKey = apiKeyVal;
     naverClientId = naverClientIdVal;
     kakaoApiKey = kakaoApiKeyVal;
+    const tourApiKeyChanged = tourApiKey !== tourApiKeyVal;
+    tourApiKey = tourApiKeyVal;
     partnerAName = partnerAVal;
     partnerBName = partnerBVal;
     const roomChanged = syncRoomId !== syncRoomVal;
@@ -4490,7 +4764,11 @@ async function saveSettings() {
     }
 
     updatePartnerNamesUI();
-    
+
+    if (tourApiKeyChanged && tourApiKey) {
+        loadFestivalData(true);
+    }
+
     showToast("AURA 환경 설정이 안전하게 저장되었습니다 💖", "success");
     checkApiKeyAlert();
     await updateDashboardStats();
