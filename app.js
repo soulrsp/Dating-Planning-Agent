@@ -3360,12 +3360,12 @@ function renderFestivalList() {
                 <i data-lucide="chevron-right" style="width:14px;height:14px; transition:transform 0.2s;"></i><span>설명 보기</span>
             </button>
             <p class="place-notes" style="display:none;">${ev.overview}</p>` : ""}
-            <div class="place-actions">
-                <button class="btn btn-outline" onclick="askAIAboutFestival('${ev.id}')">
-                    <i data-lucide="sparkles"></i>AI에게<br>물어보기
+            <div class="place-actions" style="flex-wrap:nowrap;">
+                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="askAIAboutFestival('${ev.id}')">
+                    <i data-lucide="sparkles" style="width:14px;height:14px; flex-shrink:0;"></i>AI에게 물어보기
                 </button>
-                <button class="btn btn-outline" onclick="addFestivalToWishlist('${ev.id}')">
-                    <i data-lucide="heart-plus"></i>위시리스트 담기
+                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="addFestivalToWishlist('${ev.id}')">
+                    <i data-lucide="heart-plus" style="width:14px;height:14px; flex-shrink:0;"></i>위시리스트 담기
                 </button>
             </div>
         </div>
