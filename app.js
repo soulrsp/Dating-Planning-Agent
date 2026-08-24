@@ -2015,11 +2015,15 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             if (!response.ok) {
                 const errJson = await response.json().catch(() => ({}));
                 const errMsg = errJson.error?.message || `HTTP ${response.status}`;
-                // 429/quota errors are per-model, not per-key — a model being exhausted doesn't mean
-                // the others are too, so fall through to the next candidate instead of giving up.
+                // 429/quota and 503/overload errors are per-model, not per-key — a model being
+                // exhausted or momentarily overloaded doesn't mean the others are too, so fall through
+                // to the next candidate instead of giving up. "High demand" / UNAVAILABLE is Google's
+                // wording for a temporarily overloaded model — same failure class as 429, just no
+                // formal quota involved.
                 const isUnavailable = response.status === 404 || errMsg.includes("not found") || errMsg.includes("not supported");
                 const isQuotaExceeded = response.status === 429 || errMsg.toLowerCase().includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED");
-                if (isUnavailable || isQuotaExceeded) {
+                const isOverloaded = response.status === 503 || errMsg.toLowerCase().includes("overloaded") || errMsg.toLowerCase().includes("high demand") || errMsg.includes("UNAVAILABLE");
+                if (isUnavailable || isQuotaExceeded || isOverloaded) {
                     console.warn(`[Gemini API] Model ${modelName} unavailable (${errMsg}), trying next candidate...`);
                     lastError = new Error(errMsg);
                     continue;
