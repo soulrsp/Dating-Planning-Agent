@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260824_v366">
+    <link rel="stylesheet" href="style.css?v=20260824_v368">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -377,14 +377,6 @@
                                     예: "홍대 예쁜 카페랑 아기자기한 밥집 코스 짜줘", "익선동 한옥 뷰 추천해줘" 등 마음껏 말씀하세요!
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Quick suggestion chips -->
-                        <div class="suggestion-chips">
-                            <button class="chip-btn" data-prompt="연남동 핑크빛 감성의 아기자기한 카페 & 식당 코스 짜줘">🌸 핑크빛 연남동</button>
-                            <button class="chip-btn" data-prompt="혜화역 근처 연극보고 가기 좋은 데이트 코스 제안해줘">🎭 대학로 문화 데이트</button>
-                            <button class="chip-btn" data-prompt="비 오는 날 가기 좋은 예쁜 실내 식물원/미술관 코스 짜줘">☔ 촉촉한 실내 코스</button>
-                            <button class="chip-btn" data-prompt="커플이 1박 2일로 가기 좋은 가평 힐링 스팟 추천해줘">🚗 힐링 여행 코스</button>
                         </div>
 
                         <!-- Message Input Form -->
@@ -937,13 +929,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260824_v366"></script>
+    <script src="app.js?v=20260824_v368"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260824_v366').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260824_v368').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
