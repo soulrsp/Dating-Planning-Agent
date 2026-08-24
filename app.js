@@ -3346,8 +3346,14 @@ function renderFestivalList() {
                 <span style="font-size:0.75rem; font-weight:700; color:var(--color-primary);">${formatFestivalDateRange(ev.startDate, ev.endDate)}</span>
             </div>
             <h4 class="place-title" style="font-size:1.05rem;">${ev.title}</h4>
-            <div class="place-meta-item">
-                <i data-lucide="map-pin"></i><span>${ev.addr || "위치 정보 없음"}</span>
+            <div class="place-meta-item" style="justify-content:space-between; gap:6px;">
+                <span style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
+                    <i data-lucide="map-pin" style="flex-shrink:0;"></i><span>${ev.addr || "위치 정보 없음"}</span>
+                </span>
+                ${(ev.lat && ev.lng) ? `
+                <button type="button" class="btn btn-outline" style="flex-shrink:0; padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewFestivalOnMap('${ev.id}')">
+                    지도에서 보기
+                </button>` : ""}
             </div>
             ${ev.overview ? `
             <button type="button" class="festival-desc-toggle" onclick="toggleFestivalDesc(this)" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.78rem; color:var(--color-text-med);">
@@ -3356,10 +3362,10 @@ function renderFestivalList() {
             <p class="place-notes" style="display:none;">${ev.overview}</p>` : ""}
             <div class="place-actions">
                 <button class="btn btn-outline" onclick="askAIAboutFestival('${ev.id}')">
-                    <i data-lucide="sparkles"></i>AI에게 물어보기
+                    <i data-lucide="sparkles"></i>AI에게<br>물어보기
                 </button>
                 <button class="btn btn-outline" onclick="addFestivalToWishlist('${ev.id}')">
-                    <i data-lucide="heart-plus"></i>위시리스트에 담기
+                    <i data-lucide="heart-plus"></i>위시리스트 담기
                 </button>
             </div>
         </div>
@@ -3412,7 +3418,9 @@ window.addFestivalToWishlist = async function(id) {
     }
 
     const mapUrl = `https://map.naver.com/v5/search/${encodeURIComponent(ev.title)}?c=${ev.lat || defaultMapCoords[0]},${ev.lng || defaultMapCoords[1]},15,0,0,0,dh`;
-    const notes = [ev.overview, ev.addr ? `위치: ${ev.addr}` : ""].filter(Boolean).join(" / ");
+    // notes is what wishlist/visited cards render as "주소" everywhere else in the app (see
+    // cleanAddress in renderPlacesList) — it must hold only the address, not the festival description.
+    const notes = ev.addr || "";
 
     const newPlaceId = await db.places.add({
         name: ev.title,
@@ -3434,6 +3442,72 @@ window.addFestivalToWishlist = async function(id) {
     await renderPlacesList();
     updateMapMarkers();
     triggerSyncUpload(newPlaceId);
+};
+
+// Separate from naverMarkers[]/leafletMarkersGroup (which only ever reflect db.places) so a festival
+// pin isn't wiped by the next updateMapMarkers() refresh, and so clicking a second festival replaces
+// the first pin instead of stacking markers that were never saved anywhere.
+let festivalTempMarker = null;
+
+window.viewFestivalOnMap = function(id) {
+    const ev = festivalItems.find(f => String(f.id) === String(id));
+    if (!ev || !ev.lat || !ev.lng) return;
+
+    switchTab("dashboard");
+    const mapEl = document.getElementById("map");
+    if (mapEl) mapEl.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    setTimeout(() => {
+        if (festivalTempMarker) {
+            if (festivalTempMarker.setMap) festivalTempMarker.setMap(null);
+            else festivalTempMarker.remove();
+            festivalTempMarker = null;
+        }
+
+        const popupHtml = `
+            <div style="padding:10px; font-family:var(--font-body); min-width:160px; max-width:220px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
+                <strong style="font-size:0.9rem; color:var(--color-text-high);">${ev.title}</strong>
+                <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">축제·행사</div>
+                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${ev.addr || ""}</p>
+            </div>
+        `;
+
+        if (isNaverMapActive && map) {
+            const pos = new naver.maps.LatLng(ev.lat, ev.lng);
+            const marker = new naver.maps.Marker({
+                position: pos,
+                map: map,
+                icon: {
+                    content: `<div style="background-color:#B5179E; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow:0 2px 8px rgba(181,23,158,0.45); transform:translate(-8px, -8px);"></div>`,
+                    anchor: new naver.maps.Point(8, 8)
+                }
+            });
+            const infowindow = new naver.maps.InfoWindow({
+                content: popupHtml,
+                borderWidth: 0,
+                backgroundColor: "transparent",
+                pixelOffset: new naver.maps.Point(0, -8)
+            });
+            if (activeInfoWindow) activeInfoWindow.close();
+            infowindow.open(map, marker);
+            activeInfoWindow = infowindow;
+            map.setCenter(pos);
+            map.setZoom(16);
+            festivalTempMarker = marker;
+        } else if (map) {
+            const customIcon = L.divIcon({
+                className: 'custom-map-marker',
+                html: `<div style="background-color:#B5179E; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow:0 0 8px rgba(181,23,158,0.45);"></div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+            const marker = L.marker([ev.lat, ev.lng], { icon: customIcon }).addTo(map).bindPopup(popupHtml).openPopup();
+            map.setView([ev.lat, ev.lng], 16);
+            festivalTempMarker = marker;
+        }
+
+        showToast(`'${ev.title}' 위치로 러브 맵이 이동했습니다! 📍`, "success");
+    }, 300);
 };
 
 // 10. Places Render List
@@ -4719,7 +4793,9 @@ function removeChatBubble(id) {
 
 async function callGeminiAPI(userPrompt) {
     const systemInstruction = `You are a professional local Date Course AI Planner.
-Your task is to plan a lovely and romantic date itinerary (2-3 places) inside Seoul/South Korea based on the user's requested region, vibe, and budget.
+Your task is to plan a lovely and romantic date itinerary of 8 to 10 places inside South Korea based on the user's requested region, vibe, and budget.
+Include a genuine mix of categories across the list — restaurants, cafes, walkable parks/streets, and (when relevant to the request) nearby events/festivals — rather than repeating one category.
+Order the places in a sensible visiting sequence (e.g. a walk, then a meal, then a cafe, then an evening spot).
 Return your output strictly as a structured JSON object. Do not include markdown tags.
 
 JSON Schema format:
