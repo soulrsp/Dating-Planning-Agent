@@ -3069,9 +3069,13 @@ function categoryBadgeClassAndStyle(category) {
 }
 
 // 9b. Daejeon-area Festival/Event Feed (TourAPI, shared Firebase cache — see below)
-// TourAPI region codes covering "대전 + 인근" per the user's chosen scope.
-const FESTIVAL_AREA_CODES = [3, 8, 33, 34]; // 대전, 세종, 충북, 충남
+// TourAPI's own areaCode metadata is unreliable — a direct check found 43 currently-running festivals
+// genuinely in 대전/세종/충남/충북 (address text confirms it) whose areacode field was simply blank,
+// so filtering by ?areaCode= silently drops most real results. Matching against the addr1 text itself
+// is what actually works.
+const FESTIVAL_AREA_KEYWORDS = ["대전", "세종", "충남", "충북", "충청남도", "충청북도"];
 const FESTIVAL_MAX_ITEMS = 60; // caps both TourAPI list size and the number of detail (overview) calls
+const FESTIVAL_MAX_PAGES = 5; // 5 x 100 rows — comfortably covers the ~200-300 nationwide totalCount seen in testing
 const TOUR_API_BASE = "https://apis.data.go.kr/B551011/KorService2";
 
 let festivalItems = [];
@@ -3136,21 +3140,29 @@ async function fetchFestivalsFromTourAPI() {
     const today = toYyyymmdd(new Date());
     const commonParams = {
         MobileOS: "ETC", MobileApp: "AURA", _type: "json",
-        numOfRows: 100, pageNo: 1, arrange: "A", eventStartDate: today
+        numOfRows: 100, arrange: "A", eventStartDate: today
     };
 
-    const perAreaResults = await Promise.all(
-        FESTIVAL_AREA_CODES.map(areaCode =>
-            tourApiFetch("searchFestival2", { ...commonParams, areaCode })
-                .then(body => normalizeTourApiItems(body.items))
-                .catch(e => { console.warn(`[Festival] areaCode ${areaCode} 조회 실패:`, e.message); return []; })
-        )
-    );
+    // Nationwide, unfiltered by area — see the comment above FESTIVAL_AREA_KEYWORDS for why areaCode
+    // can't be trusted. Paginate until a short page (fewer than numOfRows) signals the last page.
+    const allItems = [];
+    for (let page = 1; page <= FESTIVAL_MAX_PAGES; page++) {
+        let pageItems;
+        try {
+            const body = await tourApiFetch("searchFestival2", { ...commonParams, pageNo: page });
+            pageItems = normalizeTourApiItems(body.items);
+        } catch (e) {
+            console.warn(`[Festival] page ${page} 조회 실패:`, e.message);
+            break;
+        }
+        allItems.push(...pageItems);
+        if (pageItems.length < commonParams.numOfRows) break;
+    }
 
     const merged = new Map();
-    perAreaResults.flat().forEach(item => {
-        if (!merged.has(item.contentid)) merged.set(item.contentid, item);
-    });
+    allItems
+        .filter(item => FESTIVAL_AREA_KEYWORDS.some(kw => (item.addr1 || "").includes(kw)))
+        .forEach(item => { if (!merged.has(item.contentid)) merged.set(item.contentid, item); });
 
     const sorted = Array.from(merged.values())
         .sort((a, b) => (a.eventstartdate || "").localeCompare(b.eventstartdate || ""))
