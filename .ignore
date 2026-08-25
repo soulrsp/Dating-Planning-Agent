@@ -1,0 +1,14 @@
+# Keeps code search focused on the live app files.
+#
+# Read by ripgrep (and therefore by Claude Code's search tools) regardless of whether this
+# directory is a git repository — unlike .gitignore, which ripgrep only honours inside a repo.
+# This project keeps full snapshots of app.js/index.html under backup/, so without this file every
+# search returns each hit 3+ times and burns context on duplicate results.
+#
+# To search these anyway, name the path explicitly (e.g. grep with path: "backup/...").
+
+backup/
+archive/
+txt debug/
+secrets/
+diff_output.txt

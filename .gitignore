@@ -1,0 +1,28 @@
+# API keys and secrets — never commit
+secrets/
+*.key
+*.pem
+.env
+.env.*
+API 모음.txt
+
+# Debug captures (console logs can contain keys in request URLs)
+txt debug/
+*debug*.txt
+
+# One-off migration scripts and diffs
+archive/
+
+# Local rollback snapshots
+backup/
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+
+# Python venv / local Claude Code settings
+.venv/
+.claude/settings.local.json
