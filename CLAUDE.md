@@ -7,9 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AURA — a Korean couple's date-planner PWA. Static site, no backend, no build step, no bundler.
 Three files carry almost the entire app: [`app.js`](app.js) (~6300 lines), [`index.html`](index.html)
 (~960 lines), [`style.css`](style.css) (~2600 lines), plus a tiny [`sw.js`](sw.js) service worker.
-Deployed manually (not via CI) to GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/` —
-**this repo is not itself a git repository**, so there is nothing to commit/push from here; the user
-copies the files to the actual GitHub repo and uploads by hand.
+Deployed (not via CI) to GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/`. This
+directory is a git repository tracking `origin/main` at `github.com/soulrsp/Dating-Planning-Agent` —
+Claude Code can commit and push directly here (with the user's confirmation per its normal push-safety
+rules); a push to `main` deploys to GitHub Pages. **Never commit `API 모음.txt`** (real Naver/Gemini/
+Supabase secrets in plaintext) — it's already in `.gitignore`, but double-check before any `git add`
+that touches the repo root.
 
 Persistence is entirely Firebase Realtime Database (REST polling, not the SDK's live listeners) plus
 Dexie.js (IndexedDB) as the local cache. There is no server-side code anywhere.
@@ -140,6 +143,6 @@ other text — or it will display as a garbled "address" everywhere that place i
 ## Search noise
 
 `backup/` and `archive/` hold full historical snapshots of `app.js`/`index.html` and are excluded from
-this repo's default search via `.ignore` (ripgrep respects this even though the repo isn't a git repo,
-unlike `.gitignore`) — searches here return the live files only, not every past version. Search
-`backup/`/`archive/` explicitly by path if you actually need old revisions.
+this repo's default search via `.ignore` and `.gitignore` — searches here return the live files only,
+not every past version. Search `backup/`/`archive/` explicitly by path if you actually need old
+revisions.
