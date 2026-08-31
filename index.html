@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260824_v371">
+    <link rel="stylesheet" href="style.css?v=20260825_v372">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -527,7 +527,11 @@
                             <input type="checkbox" id="add-place-undated" onchange="toggleUndatedDate('add')"> 📅 날짜 미정
                         </label>
                     </div>
-                    <input type="date" id="add-place-date">
+                    <input type="date" id="add-place-date" oninput="syncDateRangeMinFromStart('add')">
+                    <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700; margin-top:6px;">
+                        <input type="checkbox" id="add-place-range" onchange="toggleDateRange('add')"> 🗓️ 여러 날짜(기간)로 등록
+                    </label>
+                    <input type="date" id="add-place-end-date" style="display:none; margin-top:4px;">
                 </div>
 
                 <div class="form-group">
@@ -651,7 +655,11 @@
                                 <input type="checkbox" id="edit-place-undated" onchange="toggleUndatedDate('edit')"> 📅 날짜 미정
                             </label>
                         </div>
-                        <input type="date" id="edit-place-date" required>
+                        <input type="date" id="edit-place-date" required oninput="syncDateRangeMinFromStart('edit')">
+                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700; margin-top:6px;">
+                            <input type="checkbox" id="edit-place-range" onchange="toggleDateRange('edit')"> 🗓️ 여러 날짜(기간)로 방문
+                        </label>
+                        <input type="date" id="edit-place-end-date" style="display:none; margin-top:4px;">
                     </div>
                 </div>
 
@@ -890,7 +898,11 @@
                             <input type="checkbox" id="wishlistq-place-undated" onchange="toggleUndatedDate('wishlistq')"> 📅 날짜 미정
                         </label>
                     </div>
-                    <input type="date" id="wishlistq-place-date">
+                    <input type="date" id="wishlistq-place-date" oninput="syncDateRangeMinFromStart('wishlistq')">
+                    <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700; margin-top:6px;">
+                        <input type="checkbox" id="wishlistq-place-range" onchange="toggleDateRange('wishlistq')"> 🗓️ 여러 날짜(기간)로 등록
+                    </label>
+                    <input type="date" id="wishlistq-place-end-date" style="display:none; margin-top:4px;">
                 </div>
             </div>
             <div class="modal-footer">
@@ -951,13 +963,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260824_v371"></script>
+    <script src="app.js?v=20260825_v372"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260824_v371').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260825_v372').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

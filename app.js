@@ -2293,14 +2293,19 @@ window.closeWishlistQuickDateModal = function() {
 window.confirmWishlistQuickDate = async function() {
     const data = pendingWishlistQuickSaveData;
     const chosenDate = readDateFieldValue("wishlistq");
+    const chosenEndDate = readEndDateFieldValue("wishlistq");
+    if (!isValidDateRange(chosenDate, chosenEndDate)) {
+        showToast("종료일은 시작일보다 빠를 수 없습니다.", "danger");
+        return;
+    }
     const modal = document.getElementById("modal-wishlist-quickdate");
     if (modal) modal.classList.remove("active");
     pendingWishlistQuickSaveData = null;
     if (!data) return;
-    await finalizeSaveMapSearchResultToWishlist(data, chosenDate);
+    await finalizeSaveMapSearchResultToWishlist(data, chosenDate, chosenEndDate);
 };
 
-async function finalizeSaveMapSearchResultToWishlist(data, chosenDate) {
+async function finalizeSaveMapSearchResultToWishlist(data, chosenDate, chosenEndDate) {
     try {
         // Refine coordinates via Naver Geocoder for building-level precision
         let saveLat = data.lat;
@@ -2345,7 +2350,8 @@ async function finalizeSaveMapSearchResultToWishlist(data, chosenDate) {
             review: "",
             peopleCount: 2,
             photo: "",
-            createdAt: chosenDate
+            createdAt: chosenDate,
+            endDate: chosenEndDate || null
         });
 
         showToast(`'${data.name}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
@@ -2505,6 +2511,12 @@ async function handleAddPlaceSubmit(e) {
     const undatedAddEl = document.getElementById("add-place-undated");
     const undatedAdd = undatedAddEl ? undatedAddEl.checked : false;
     const pickedDate = readDateFieldValue("add");
+    const pickedEndDate = readEndDateFieldValue("add");
+
+    if (!isValidDateRange(pickedDate, pickedEndDate)) {
+        showToast("종료일은 시작일보다 빠를 수 없습니다.", "danger");
+        return;
+    }
 
     if (isNaN(lat) || isNaN(lng)) {
         lat = 37.5665 + (Math.random() - 0.5) * 0.03;
@@ -2526,7 +2538,9 @@ async function handleAddPlaceSubmit(e) {
             photo: "",
             // 선택한 방문 예정일을 반영한다. "날짜 미정"이면 null, 아무것도 안 고르면 오늘.
             // 예전엔 입력한 날짜를 무시하고 항상 오늘로 저장했다.
-            createdAt: undatedAdd ? null : (pickedDate || new Date().toISOString())
+            createdAt: undatedAdd ? null : (pickedDate || new Date().toISOString()),
+            // 기간(여러 날짜)으로 등록하지 않았으면 null = 당일 하루만 (디폴트)
+            endDate: undatedAdd ? null : pickedEndDate
         });
 
         showToast(`${name} 장소가 저장되었습니다 🌸`, "success");
@@ -2727,7 +2741,7 @@ async function openEditPlaceModal(id, fromGallery = false) {
     
     // 방문 예정일 + "날짜 미정" 체크박스 상태를 저장된 값에 맞춰 세팅
     // 예전엔 값이 없을 때 오늘 날짜를 채워넣어 미정 상태를 표현할 수 없었다.
-    applyDateFieldState("edit", place.createdAt || place.date);
+    applyDateFieldState("edit", place.createdAt || place.date, place.endDate);
 
     // Clean address from notes
     const cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -2858,12 +2872,20 @@ async function handleEditPlaceSubmit(e) {
     // "날짜 미정"이면 null로 확실히 지운다.
     // 예전엔 기존 createdAt으로 되돌아가서 "미정"으로 바꿀 수가 없었다.
     const updatedDate = readDateFieldValue("edit");
+    const updatedEndDate = readEndDateFieldValue("edit");
+
+    if (!isValidDateRange(updatedDate, updatedEndDate)) {
+        showToast("종료일은 시작일보다 빠를 수 없습니다.", "danger");
+        return;
+    }
 
     let updatePayload = {
         name: name,
         category: category,
         notes: addressVal,
         createdAt: updatedDate,
+        // 기간(여러 날짜) 체크를 해제하면 null로 확실히 지워서 다시 당일 하루로 되돌린다.
+        endDate: updatedEndDate,
         commentA: commentAEl ? commentAEl.value.trim() : (place.commentA || ""),
         commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
     };
@@ -2988,13 +3010,22 @@ window.toggleUndatedDate = function(mode) {
 };
 
 // 모달의 날짜 입력 + 미정 체크박스를 저장된 값에 맞춰 세팅
-function applyDateFieldState(mode, storedValue) {
+function applyDateFieldState(mode, storedValue, storedEndValue) {
     const dateKey = toLocalDateKey(storedValue);
     const checkbox = document.getElementById(`${mode}-place-undated`);
     const dateInput = document.getElementById(`${mode}-place-date`);
     if (dateInput) dateInput.value = dateKey;
     if (checkbox) checkbox.checked = !dateKey;
     window.toggleUndatedDate(mode);
+
+    // 종료일이 시작일과 다르게 저장돼 있을 때만 "기간" 모드로 되돌린다 — 그 외엔 항상 당일(디폴트).
+    const endKey = toLocalDateKey(storedEndValue);
+    const rangeCheckbox = document.getElementById(`${mode}-place-range`);
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    const hasRange = !!(endKey && endKey !== dateKey);
+    if (rangeCheckbox) rangeCheckbox.checked = hasRange;
+    if (endInput) endInput.value = hasRange ? endKey : "";
+    window.toggleDateRange(mode);
 }
 
 // 모달에서 저장할 날짜 값을 읽는다. "미정"이면 null
@@ -3003,6 +3034,76 @@ function readDateFieldValue(mode) {
     if (checkbox && checkbox.checked) return null;
     const dateInput = document.getElementById(`${mode}-place-date`);
     return dateInputToStored(dateInput ? dateInput.value : "");
+}
+
+// 🗓️ "여러 날짜(기간)로 등록" 체크박스 (추가/수정/지도검색 담기 모달 공용)
+window.toggleDateRange = function(mode) {
+    const checkbox = document.getElementById(`${mode}-place-range`);
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    const startInput = document.getElementById(`${mode}-place-date`);
+    if (!checkbox || !endInput) return;
+
+    if (checkbox.checked) {
+        endInput.style.display = "";
+        endInput.min = startInput ? startInput.value : "";
+        if (!endInput.value || (startInput && startInput.value && endInput.value < startInput.value)) {
+            endInput.value = startInput ? startInput.value : "";
+        }
+    } else {
+        endInput.style.display = "none";
+        endInput.value = "";
+    }
+};
+
+// 시작일이 바뀌면 종료일의 최솟값도 함께 밀어준다 (종료일이 시작일보다 빨라지는 것을 UI에서부터 방지)
+window.syncDateRangeMinFromStart = function(mode) {
+    const startInput = document.getElementById(`${mode}-place-date`);
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    if (!startInput || !endInput) return;
+    endInput.min = startInput.value || "";
+    if (endInput.value && startInput.value && endInput.value < startInput.value) {
+        endInput.value = startInput.value;
+    }
+};
+
+// 모달에서 저장할 종료일 값을 읽는다. "미정"이거나 "기간" 미체크(디폴트=당일)면 null
+function readEndDateFieldValue(mode) {
+    const undatedCheckbox = document.getElementById(`${mode}-place-undated`);
+    if (undatedCheckbox && undatedCheckbox.checked) return null;
+    const rangeCheckbox = document.getElementById(`${mode}-place-range`);
+    if (!rangeCheckbox || !rangeCheckbox.checked) return null;
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    return dateInputToStored(endInput ? endInput.value : "");
+}
+
+// 종료일이 시작일보다 빠르면 false (저장을 막고 안내해야 함)
+function isValidDateRange(startVal, endVal) {
+    if (!endVal) return true;
+    const startKey = toLocalDateKey(startVal);
+    const endKey = toLocalDateKey(endVal);
+    if (!startKey || !endKey) return true;
+    return endKey >= startKey;
+}
+
+// 저장된 시작/종료일 → 화면 표시용 문자열. 기간이면 "YYYY. MM. DD ~ YYYY. MM. DD", 아니면 단일 날짜.
+function formatDisplayDateRange(startVal, endVal) {
+    const startStr = formatDisplayDate(startVal);
+    if (!startStr) return "";
+    const startKey = toLocalDateKey(startVal);
+    const endKey = toLocalDateKey(endVal);
+    if (!endKey || endKey === startKey) return startStr;
+    const endStr = formatDisplayDate(endVal);
+    return endStr ? `${startStr} ~ ${endStr}` : startStr;
+}
+
+// 캘린더 등에서 특정 날짜(dateKey, "YYYY-MM-DD")가 이 장소의 방문 기간(시작~종료, 종료 없으면 당일)에
+// 포함되는지 확인. "YYYY-MM-DD" 문자열은 사전식 비교가 곧 날짜 순 비교와 같아서 별도 파싱 없이 비교 가능.
+function isDateKeyInPlaceRange(place, dateKey) {
+    const startMs = parseAnyDate(place.createdAt || place.date);
+    if (startMs <= 0) return false;
+    const startKey = toLocalDateKey(startMs);
+    const endKey = toLocalDateKey(place.endDate) || startKey;
+    return dateKey >= startKey && dateKey <= endKey;
 }
 
 // Switch to Dashboard and pan/zoom Naver Love Map to place coordinates
@@ -3402,6 +3503,8 @@ window.addFestivalToWishlist = async function(id) {
     if (!ev) return;
 
     const startDate = parseYyyymmdd(ev.startDate) || new Date();
+    // TourAPI 축제는 기간이 있는 행사가 많으므로, 있으면 그대로 방문 기간(종료일)에 반영한다.
+    const festivalEndDate = parseYyyymmdd(ev.endDate);
     const existing = await db.places.where("name").equalsIgnoreCase(ev.title)
         .and(p => p.isDeleted !== 1 && p.isVisited !== -1 && toLocalDateKey(p.createdAt || p.date) === toLocalDateKey(startDate))
         .first();
@@ -3427,7 +3530,8 @@ window.addFestivalToWishlist = async function(id) {
         review: "",
         peopleCount: 2,
         photo: "",
-        createdAt: startDate
+        createdAt: startDate,
+        endDate: (festivalEndDate && festivalEndDate.getTime() !== startDate.getTime()) ? festivalEndDate.toISOString() : null
     });
 
     showToast(`'${ev.title}'을 데이트 위시리스트에 담았습니다! 💖`, "success");
@@ -3568,7 +3672,7 @@ async function renderPlacesList() {
                 const catBadge = categoryBadgeClassAndStyle(displayCategory);
 
                 // 방문 예정일 (없으면 "미정"으로 표시)
-                const dateStr = formatDisplayDate(place.createdAt || place.date);
+                const dateStr = formatDisplayDateRange(place.createdAt || place.date, place.endDate);
                 const dateHtml = dateStr
                     ? dateStr
                     : `<span style="color:var(--color-text-med); opacity:0.8; font-weight:600;">미정</span>`;
@@ -3655,10 +3759,9 @@ async function renderPlacesList() {
                 const displayCategory = applyCategoryOverride(place.name, place.notes, place.category);
                 const catBadge = categoryBadgeClassAndStyle(displayCategory);
 
-                // Date formatting using robust parser
+                // Date formatting using robust parser (기간으로 등록된 경우 "시작일 ~ 종료일" 표시)
                 const rawDate = place.createdAt || place.date;
-                const parsedMs = parseAnyDate(rawDate);
-                const dateStr = parsedMs > 0 ? new Date(parsedMs).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }) : "";
+                const dateStr = formatDisplayDateRange(rawDate, place.endDate);
 
                 // Clean address
                 let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -4325,6 +4428,10 @@ async function loadFromCloud() {
                         // explicitly so the diff below (which only compares keys present in updatePayload)
                         // actually detects and applies "미정" to a device whose local copy still has a date.
                         if (!('createdAt' in fp)) updatePayload.createdAt = null;
+                        // Same null-drop issue for endDate: turning a range back into a single day sets
+                        // endDate: null locally, Firebase drops the key on write, so it's absent from fp
+                        // here too — re-add it explicitly or other devices keep showing the stale range.
+                        if (!('endDate' in fp)) updatePayload.endDate = null;
                         // photo/photos are deliberately absent from fp (stripped before this place's own
                         // node was written — see savePlaceToCloud) and must stay absent from updatePayload
                         // too, so Dexie's update() leaves them untouched. They used to be explicitly re-added here
@@ -5557,10 +5664,9 @@ async function renderCalendar() {
         });
 
         // Match places with date & group by type (Visited vs Wishlist)
+        // 기간(여러 날짜)으로 등록된 장소는 그 기간에 속한 모든 날짜 칸에 표시한다.
         const datePlaces = places.filter(p => {
-            const pDate = p.createdAt || p.date;
-            // 로컬 기준으로 비교해야 KST에서 하루 밀리지 않는다
-            return toLocalDateKey(pDate) === fullDateStr;
+            return isDateKeyInPlaceRange(p, fullDateStr);
         });
 
         const visitedPlaces = datePlaces.filter(p => p.isVisited === 1 || p.isVisited === "1" || p.isVisited === true || p.isVisited === "true");
@@ -5635,9 +5741,8 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
 
     const allDatePlaces = places.filter(p => {
         if (p.isDeleted === 1 || p.isVisited === -1) return false;
-        const pDate = p.createdAt || p.date;
-        // 로컬 기준으로 비교해야 KST에서 하루 밀리지 않는다
-        return toLocalDateKey(pDate) === dateStr;
+        // 기간(여러 날짜)으로 등록된 장소는 그 기간에 속한 모든 날짜에서 상세 목록에도 함께 나온다.
+        return isDateKeyInPlaceRange(p, dateStr);
     });
 
     const datePlaces = allDatePlaces.filter(p => {
@@ -5765,7 +5870,7 @@ async function renderGallery() {
         const card = document.createElement("div");
         card.className = "gallery-card";
 
-        const dateStr = formatDisplayDate(p.createdAt || p.date);
+        const dateStr = formatDisplayDateRange(p.createdAt || p.date, p.endDate);
 
         const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
         const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
@@ -5840,8 +5945,8 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
 
     activePhotoIndex = Math.max(0, Math.min(initialIdx, activeGalleryPhotos.length - 1));
     
-    const dateStr = formatDisplayDate(place.createdAt || place.date);
-    
+    const dateStr = formatDisplayDateRange(place.createdAt || place.date, place.endDate);
+
     activePlaceInfo = {
         id: place.id,
         name: place.name,
