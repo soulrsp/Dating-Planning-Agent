@@ -1860,6 +1860,19 @@ body {
         cursor: pointer;
     }
 
+    .mobile-diet-link {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--color-primary);
+        background: rgba(255, 101, 132, 0.08);
+        border: 1px solid rgba(255, 101, 132, 0.3);
+        padding: 0.25rem 0.65rem;
+        border-radius: 10px;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
     /* Show Mobile Bottom Navigation Bar */
     .mobile-bottom-nav {
         display: flex;
