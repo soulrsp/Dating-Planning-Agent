@@ -3159,15 +3159,15 @@ function renderCommentsBlock(place) {
 
     return `
         <div class="place-comments-box" style="font-size:0.78rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
-            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
-                <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textA}</div>
-                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
+            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${partnerAName}</span>
+                <div style="flex-grow:1; min-width:0; white-space:pre-wrap; word-break:break-word; line-height:1.4;">${textA}</div>
+                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0; margin-top:2px;"></i>
             </div>
-            <div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
-                <div style="flex-grow:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${textB}</div>
-                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0;"></i>
+            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${partnerBName}</span>
+                <div style="flex-grow:1; min-width:0; white-space:pre-wrap; word-break:break-word; line-height:1.4;">${textB}</div>
+                <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0; margin-top:2px;"></i>
             </div>
         </div>
     `;
