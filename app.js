@@ -3792,6 +3792,9 @@ async function renderPlacesList() {
 
                 const photoList = place.photos || (place.photo ? [place.photo] : []);
                 if (photoList.length > 0) {
+                    // Show the cover photo first (leftmost) so it matches what's set as the representative photo.
+                    const coverIdx = (typeof place.coverPhotoIndex === 'number' && place.coverPhotoIndex >= 0 && place.coverPhotoIndex < photoList.length) ? place.coverPhotoIndex : 0;
+                    const orderedIndices = coverIdx > 0 ? [coverIdx, ...photoList.map((_, i) => i).filter(i => i !== coverIdx)] : photoList.map((_, i) => i);
                     cardContent += `
                         <div class="card-photos-section" style="padding-top:0.4rem; border-top:1px dashed rgba(255,112,150,0.15);">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -3801,8 +3804,8 @@ async function renderPlacesList() {
                                 </button>
                             </div>
                             <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
-                                ${photoList.map((pSrc, pIdx) => `
-                                    <img src="${pSrc}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+                                ${orderedIndices.map(pIdx => `
+                                    <img src="${photoList[pIdx]}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
                                 `).join('')}
                             </div>
                         </div>
