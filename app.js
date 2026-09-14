@@ -3032,6 +3032,11 @@ window.toggleUndatedDate = function(mode) {
         dateInput.disabled = true;   // disabled면 required 검증도 건너뛴다
         dateInput.style.opacity = "0.45";
         if (endInput) {
+            // 종료칸도 함께 비워서 "미정"인데 뒷칸만 예전 날짜가 남아있는 것처럼 보이지 않게 한다.
+            // 되돌릴 때 쓰려고 값과 "직접 수정했었는지" 상태를 함께 보관.
+            if (endInput.value) endInput.dataset.prevValue = endInput.value;
+            endInput.dataset.prevUserEdited = endInput.dataset.userEdited === "1" ? "1" : "0";
+            endInput.value = "";
             endInput.disabled = true;
             endInput.style.opacity = "0.45";
         }
@@ -3044,7 +3049,11 @@ window.toggleUndatedDate = function(mode) {
         if (endInput) {
             endInput.disabled = false;
             endInput.style.opacity = "";
-            if (endInput.dataset.userEdited !== "1") {
+            if (endInput.dataset.prevUserEdited === "1") {
+                endInput.dataset.userEdited = "1";
+                endInput.value = endInput.dataset.prevValue || dateInput.value || "";
+            } else {
+                delete endInput.dataset.userEdited;
                 endInput.value = dateInput.value || "";
             }
         }

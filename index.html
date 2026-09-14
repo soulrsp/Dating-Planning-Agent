@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20260914_v378">
+    <link rel="stylesheet" href="style.css?v=20260915_v379">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -528,11 +528,12 @@
                             <input type="checkbox" id="add-place-undated" onchange="toggleUndatedDate('add')"> 📅 날짜 미정
                         </label>
                     </div>
-                    <input type="date" id="add-place-date" oninput="syncDateRangeMinFromStart('add')">
-                    <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700; margin-top:6px;">
-                        <input type="checkbox" id="add-place-range" onchange="toggleDateRange('add')"> 🗓️ 여러 날짜(기간)로 등록
-                    </label>
-                    <input type="date" id="add-place-end-date" style="display:none; margin-top:4px;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                        <input type="date" id="add-place-date" oninput="handleDateRangeStartInput('add')" style="flex:1; min-width:0;">
+                        <span style="color:var(--color-text-med); font-weight:700; flex-shrink:0;">~</span>
+                        <input type="date" id="add-place-end-date" oninput="handleDateRangeEndInput('add')" style="flex:1; min-width:0;">
+                    </div>
+                    <p style="font-size:0.68rem; color:var(--color-text-low); margin:4px 0 0;">뒷칸은 기본적으로 앞칸과 같은 날짜예요. 뒷칸만 다르게 바꾸면 자동으로 여러 날짜(기간)로 등록돼요.</p>
                 </div>
 
                 <div class="form-group">
@@ -656,11 +657,12 @@
                                 <input type="checkbox" id="edit-place-undated" onchange="toggleUndatedDate('edit')"> 📅 날짜 미정
                             </label>
                         </div>
-                        <input type="date" id="edit-place-date" required oninput="syncDateRangeMinFromStart('edit')">
-                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700; margin-top:6px;">
-                            <input type="checkbox" id="edit-place-range" onchange="toggleDateRange('edit')"> 🗓️ 여러 날짜(기간)로 방문
-                        </label>
-                        <input type="date" id="edit-place-end-date" style="display:none; margin-top:4px;">
+                        <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                            <input type="date" id="edit-place-date" required oninput="handleDateRangeStartInput('edit')" style="flex:1; min-width:0;">
+                            <span style="color:var(--color-text-med); font-weight:700; flex-shrink:0;">~</span>
+                            <input type="date" id="edit-place-end-date" oninput="handleDateRangeEndInput('edit')" style="flex:1; min-width:0;">
+                        </div>
+                        <p style="font-size:0.68rem; color:var(--color-text-low); margin:4px 0 0;">뒷칸은 기본적으로 앞칸과 같은 날짜예요. 뒷칸만 다르게 바꾸면 자동으로 여러 날짜(기간)로 등록돼요.</p>
                     </div>
                 </div>
 
@@ -965,13 +967,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20260914_v378"></script>
+    <script src="app.js?v=20260915_v379"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20260914_v378').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20260915_v379').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
