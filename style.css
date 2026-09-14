@@ -1329,6 +1329,16 @@ body {
     background: white;
 }
 
+/* input[type=date]'s own left padding + the native calendar-picker icon on the right already eat
+   into its content box, so the generous 1rem side padding above left the formatted date text
+   (e.g. "2026. 09. 14.") clipped by a few characters on narrower modals/screens — most visible in
+   the 위시리스트 담기 modal's now-two-column date row. Give date inputs less horizontal padding and
+   let them shrink in a flex row instead of enforcing the same padding as a full-width text input. */
+.form-group input[type="date"] {
+    padding: 0.65rem 0.5rem;
+    min-width: 0;
+}
+
 .form-group-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

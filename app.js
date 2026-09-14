@@ -3020,17 +3020,33 @@ window.toggleUndatedDate = function(mode) {
     const dateInput = document.getElementById(`${mode}-place-date`);
     if (!checkbox || !dateInput) return;
 
+    // 체크박스 없이 시작~종료 두 칸을 항상 보여주는 모달(위시리스트 담기)에서는 "미정"일 때
+    // 종료칸도 함께 비활성화한다 — 시작일이 없는데 종료일만 활성 상태로 남는 건 앞뒤가 안 맞는다.
+    const rangeCheckbox = document.getElementById(`${mode}-place-range`);
+    const endInput = !rangeCheckbox ? document.getElementById(`${mode}-place-end-date`) : null;
+
     if (checkbox.checked) {
         // 되돌릴 때 쓰려고 기존 값 보관
         if (dateInput.value) dateInput.dataset.prevValue = dateInput.value;
         dateInput.value = "";
         dateInput.disabled = true;   // disabled면 required 검증도 건너뛴다
         dateInput.style.opacity = "0.45";
+        if (endInput) {
+            endInput.disabled = true;
+            endInput.style.opacity = "0.45";
+        }
     } else {
         dateInput.disabled = false;
         dateInput.style.opacity = "";
         if (!dateInput.value) {
             dateInput.value = dateInput.dataset.prevValue || toLocalDateKey(Date.now());
+        }
+        if (endInput) {
+            endInput.disabled = false;
+            endInput.style.opacity = "";
+            if (endInput.dataset.userEdited !== "1") {
+                endInput.value = dateInput.value || "";
+            }
         }
     }
 };
@@ -3049,9 +3065,25 @@ function applyDateFieldState(mode, storedValue, storedEndValue) {
     const rangeCheckbox = document.getElementById(`${mode}-place-range`);
     const endInput = document.getElementById(`${mode}-place-end-date`);
     const hasRange = !!(endKey && endKey !== dateKey);
-    if (rangeCheckbox) rangeCheckbox.checked = hasRange;
-    if (endInput) endInput.value = hasRange ? endKey : "";
-    window.toggleDateRange(mode);
+
+    if (rangeCheckbox) {
+        // "여러 날짜(기간)로 등록" 체크박스가 있는 모달(추가/수정) — 기존 방식 그대로.
+        rangeCheckbox.checked = hasRange;
+        if (endInput) endInput.value = hasRange ? endKey : "";
+        window.toggleDateRange(mode);
+    } else if (endInput) {
+        // 체크박스 없이 시작~종료 두 칸을 항상 보여주는 모달(위시리스트 담기) — 종료칸은 기본적으로
+        // 시작칸과 동기화돼 있다가, 사용자가 직접 종료칸을 건드리면(handleDateRangeEndInput) 그때부터만
+        // "기간"으로 갈라진다. 여기서 이미 저장된 기간을 불러올 때도 그 갈라진 상태를 표시해야 하므로
+        // dataset.userEdited를 함께 맞춰준다.
+        endInput.min = dateKey || "";
+        endInput.value = hasRange ? endKey : (dateKey || "");
+        if (hasRange) {
+            endInput.dataset.userEdited = "1";
+        } else {
+            delete endInput.dataset.userEdited;
+        }
+    }
 }
 
 // 모달에서 저장할 날짜 값을 읽는다. "미정"이면 null
@@ -3092,14 +3124,52 @@ window.syncDateRangeMinFromStart = function(mode) {
     }
 };
 
-// 모달에서 저장할 종료일 값을 읽는다. "미정"이거나 "기간" 미체크(디폴트=당일)면 null
+// 체크박스 없이 시작~종료 두 칸을 항상 보여주는 모달(위시리스트 담기) 전용.
+// 종료칸을 사용자가 아직 직접 건드리지 않았다면(dataset.userEdited 없음) 시작칸과 계속 동기화된
+// "당일" 상태를 유지한다. 이미 사용자가 종료칸을 따로 지정했다면(handleDateRangeEndInput) 더는
+// 건드리지 않고, 종료일이 새 시작일보다 빨라지는 경우에만 시작일까지 끌어올린다.
+window.handleDateRangeStartInput = function(mode) {
+    const startInput = document.getElementById(`${mode}-place-date`);
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    if (!startInput || !endInput) return;
+    endInput.min = startInput.value || "";
+    if (endInput.dataset.userEdited !== "1") {
+        endInput.value = startInput.value || "";
+    } else if (endInput.value && startInput.value && endInput.value < startInput.value) {
+        endInput.value = startInput.value;
+    }
+};
+
+// 종료칸을 사용자가 직접 수정한 순간 — 이제부터는 시작칸이 바뀌어도 더 이상 따라가지 않고
+// "여러 날짜(기간)"로 취급된다 (읽기는 readEndDateFieldValue에서 시작일과 다른지로 판단).
+window.handleDateRangeEndInput = function(mode) {
+    const endInput = document.getElementById(`${mode}-place-end-date`);
+    if (!endInput) return;
+    endInput.dataset.userEdited = "1";
+};
+
+// 모달에서 저장할 종료일 값을 읽는다. "미정"이면 null.
+// 체크박스가 있는 모달(추가/수정)은 체크 안 하면 항상 null(당일).
+// 체크박스 없는 모달(위시리스트 담기)은 종료일이 시작일과 실제로 다를 때만 "기간"으로 저장한다.
 function readEndDateFieldValue(mode) {
     const undatedCheckbox = document.getElementById(`${mode}-place-undated`);
     if (undatedCheckbox && undatedCheckbox.checked) return null;
-    const rangeCheckbox = document.getElementById(`${mode}-place-range`);
-    if (!rangeCheckbox || !rangeCheckbox.checked) return null;
     const endInput = document.getElementById(`${mode}-place-end-date`);
-    return dateInputToStored(endInput ? endInput.value : "");
+    if (!endInput) return null;
+
+    const rangeCheckbox = document.getElementById(`${mode}-place-range`);
+    if (rangeCheckbox) {
+        if (!rangeCheckbox.checked) return null;
+        return dateInputToStored(endInput.value);
+    }
+
+    const endVal = dateInputToStored(endInput.value);
+    if (!endVal) return null;
+    const startVal = readDateFieldValue(mode);
+    const endKey = toLocalDateKey(endVal);
+    const startKey = toLocalDateKey(startVal);
+    if (!endKey || !startKey || endKey === startKey) return null;
+    return endVal;
 }
 
 // 종료일이 시작일보다 빠르면 false (저장을 막고 안내해야 함)
@@ -6030,7 +6100,7 @@ async function renderGallery() {
         }
 
         card.innerHTML = `
-            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">
+            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, ${coverIdx})" style="cursor:pointer;">
                 <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
                 <div class="gallery-img-overlay">
                     <span>🔍 추억 갤러리 감상하기</span>
@@ -6038,7 +6108,7 @@ async function renderGallery() {
                 ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3); pointer-events:none;">🖼️ ${photoCount}장</span>` : ''}
             </div>
             <div class="gallery-card-body">
-                <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, 0)" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
+                <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, ${coverIdx})" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
                 <div class="gallery-place-meta">
                     <span>${dateStr}</span>
                 </div>
