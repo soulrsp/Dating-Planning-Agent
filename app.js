@@ -2579,7 +2579,40 @@ async function openVisitModal(placeId, placeName) {
 function closeVisitModal() {
     document.getElementById("modal-visit-log").classList.remove("active");
     document.getElementById("form-visit-log").reset();
+    revokePhotoPreviewObjectUrls(document.getElementById("visit-photo-preview"));
     document.getElementById("visit-photo-preview").innerHTML = `<span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>`;
+}
+
+// Builds one preview thumbnail. Uses URL.createObjectURL(file) rather than
+// FileReader.readAsDataURL — reading a full-resolution phone-camera photo (often several MB) as
+// base64 just to show a 60px thumbnail forced the browser to decode/paint each huge inline <img>
+// one at a time as its async FileReader happened to resolve, which is what caused the screen to
+// visibly flicker several/dozen times while picking photos (and the flicker kept going into
+// whatever the user clicked next — save or cancel — since those FileReaders were still trickling
+// in). createObjectURL is synchronous and just points at the original blob without copying/encoding
+// it, so every preview appears in one paint instead of stuttering in one-by-one. The object URL is
+// revoked once compression reads it at submit time, or when the modal is closed without saving —
+// see compressBase64Image and closeVisitModal/closeEditPlaceModal.
+function appendPhotoPreview(container, file) {
+    const objectUrl = URL.createObjectURL(file);
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
+    wrapper.dataset.objectUrl = objectUrl;
+    wrapper.innerHTML = `
+        <img src="${objectUrl}" alt="Preview" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
+        <button type="button" onclick="URL.revokeObjectURL(this.parentElement.dataset.objectUrl); this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
+    `;
+    container.appendChild(wrapper);
+}
+
+// Revokes every still-outstanding object URL in a photo preview container — call when a modal
+// closes without the photos being read/compressed (e.g. cancel), so a batch of newly picked photos
+// doesn't leak their blob URLs for the rest of the session.
+function revokePhotoPreviewObjectUrls(container) {
+    if (!container) return;
+    container.querySelectorAll('[data-object-url]').forEach(el => {
+        try { URL.revokeObjectURL(el.dataset.objectUrl); } catch (e) { /* already revoked */ }
+    });
 }
 
 function handlePhotoUploadPreview(e) {
@@ -2587,24 +2620,12 @@ function handlePhotoUploadPreview(e) {
     const previewContainer = document.getElementById("visit-photo-preview");
     if (!previewContainer) return;
     if (!files || files.length === 0) return;
-    
+
     // Remove placeholder span if present
     const span = previewContainer.querySelector("span");
     if (span) span.remove();
 
-    Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const wrapper = document.createElement("div");
-            wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
-            wrapper.innerHTML = `
-                <img src="${event.target.result}" alt="Preview" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
-                <button type="button" onclick="this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
-            `;
-            previewContainer.appendChild(wrapper);
-        };
-        reader.readAsDataURL(file);
-    });
+    Array.from(files).forEach(file => appendPhotoPreview(previewContainer, file));
 }
 
 function handleEditPhotoUploadPreview(e) {
@@ -2612,32 +2633,24 @@ function handleEditPhotoUploadPreview(e) {
     const previewContainer = document.getElementById("edit-place-photo-preview");
     if (!previewContainer) return;
     if (!files || files.length === 0) return;
-    
+
     // Remove placeholder span if present
     const span = previewContainer.querySelector("span");
     if (span) span.remove();
 
-    Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const wrapper = document.createElement("div");
-            wrapper.style.cssText = "position:relative; display:inline-block; margin:3px;";
-            wrapper.innerHTML = `
-                <img src="${event.target.result}" alt="Preview" style="width:60px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,101,132,0.3);">
-                <button type="button" onclick="this.parentElement.remove(); event.stopPropagation();" style="position:absolute; top:-5px; right:-5px; background:#FF4757; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 2px 4px rgba(0,0,0,0.2);">✕</button>
-            `;
-            previewContainer.appendChild(wrapper);
-        };
-        reader.readAsDataURL(file);
-    });
+    Array.from(files).forEach(file => appendPhotoPreview(previewContainer, file));
 }
 
 // 9. Photo Compressor Logic (High Quality Preserving Pipeline, max 2560px, 90% quality)
+// Accepts either a data: URL (an already-stored photo, re-shown by openEditPlaceModal) or a blob:
+// object URL (a freshly picked file — see appendPhotoPreview). Either way the result is always a
+// data: URL, since blob: URLs are only valid for this page session and can't be stored/synced.
 function compressBase64Image(base64Str, maxWidth = 1024, maxHeight = 1024, quality = 0.75) {
     return new Promise((resolve) => {
         if (!base64Str) return resolve("");
-        if (!base64Str.startsWith("data:image")) return resolve(base64Str);
-        
+        const isBlobUrl = base64Str.startsWith("blob:");
+        if (!base64Str.startsWith("data:image") && !isBlobUrl) return resolve(base64Str);
+
         const img = new Image();
         img.onload = () => {
             let w = img.width, h = img.height;
@@ -2653,9 +2666,14 @@ function compressBase64Image(base64Str, maxWidth = 1024, maxHeight = 1024, quali
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, w, h);
+            if (isBlobUrl) URL.revokeObjectURL(base64Str);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
-        img.onerror = () => resolve(base64Str);
+        img.onerror = () => {
+            if (isBlobUrl) URL.revokeObjectURL(base64Str);
+            // A blob: URL is meaningless once this page session ends — never store one.
+            resolve(isBlobUrl ? "" : base64Str);
+        };
         img.src = base64Str;
     });
 }
@@ -2809,6 +2827,7 @@ function closeEditPlaceModal() {
     }
     const photoPreview = document.getElementById("edit-place-photo-preview");
     if (photoPreview) {
+        revokePhotoPreviewObjectUrls(photoPreview);
         photoPreview.innerHTML = `<span>여기를 클릭해 이미지를 선택/수정하세요. (여러 장 선택 가능) 📸</span>`;
     }
 }
