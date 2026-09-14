@@ -2555,6 +2555,9 @@ async function handleAddPlaceSubmit(e) {
 }
 
 async function openVisitModal(placeId, placeName) {
+    // Pull the partner's latest comment in first — otherwise adding photos here re-saves whatever
+    // stale comment this device last synced, silently erasing anything the partner wrote since.
+    await refreshSinglePlaceFromCloud(placeId);
     const place = await db.places.get(placeId);
     document.getElementById("visit-place-id").value = placeId;
     document.getElementById("visit-place-name").textContent = placeName;
@@ -2710,6 +2713,10 @@ async function handleVisitLogSubmit(e) {
 
 // Edit Place Modal Controls
 async function openEditPlaceModal(id, fromGallery = false) {
+    // Pull the partner's latest comment in first — otherwise saving this modal (even just to add
+    // photos) re-saves whatever stale comment this device last synced, silently erasing anything
+    // the partner wrote since.
+    await refreshSinglePlaceFromCloud(id);
     const place = await db.places.get(id);
     if (!place) return;
 
@@ -4189,6 +4196,53 @@ async function savePlaceToCloud(placeId, attempt = 1) {
     }
 }
 
+// Pulls just ONE place's text fields (comments/notes/category/etc — never photo/photos, same
+// separation as savePlaceToCloud) fresh from its own cloud node, right before an edit/visit modal
+// opens and pre-fills its form from the local copy. Without this, editing a place purely to add
+// photos — while the local copy is a poll interval or two behind the partner's latest comment —
+// re-submits that stale commentA/commentB back into the form's payload and silently overwrites the
+// partner's newer comment on save. A single small per-place GET here closes that window.
+async function refreshSinglePlaceFromCloud(placeId) {
+    if (!syncRoomId) return;
+    try {
+        const place = await db.places.get(placeId);
+        if (!place || place.isDeleted === 1 || place.isVisited === -1) return;
+        // This place has its own edit still queued/retrying — a cloud copy that predates that edit
+        // must not overwrite the local copy out from under it (same guard loadFromCloud() uses).
+        const pendingPlaceIdsNow = new Set(JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]'));
+        if (pendingPlaceIdsNow.has(placeId)) return;
+
+        const nameKey = placeNameKey(place.name);
+        if (!nameKey) return;
+        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}.json?t=${Date.now()}`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) return;
+        const cloudPlace = await resp.json();
+        if (!cloudPlace) return;
+
+        sanitizePlaceObject(cloudPlace);
+        const updatePayload = { ...cloudPlace };
+        delete updatePayload.id;
+        delete updatePayload.photo;
+        delete updatePayload.photos;
+        delete updatePayload.photoVersion;
+        // Same null-drop handling as loadFromCloud() — Firebase omits a key entirely when it was
+        // written as null, so re-add it explicitly or a cleared date/range never overwrites locally.
+        if (!('createdAt' in cloudPlace)) updatePayload.createdAt = null;
+        if (!('endDate' in cloudPlace)) updatePayload.endDate = null;
+
+        let isDifferent = false;
+        for (const key of Object.keys(updatePayload)) {
+            if (JSON.stringify(place[key]) !== JSON.stringify(updatePayload[key])) { isDifferent = true; break; }
+        }
+        if (isDifferent) {
+            await db.places.update(placeId, updatePayload);
+        }
+    } catch (e) {
+        console.error('[Place Sync] Pre-edit refresh failed (continuing with local copy):', e);
+    }
+}
+
 // A place's cloud node is keyed by its name (see placeNameKey), so renaming a place makes
 // savePlaceToCloud() write a brand-new node instead of updating the old one — the old node is
 // orphaned, still holds the pre-rename data, and any later loadFromCloud() resurrects it as a
@@ -4514,6 +4568,33 @@ function clearPendingPlaceId(placeId) {
     }
 }
 
+// Same "not yet confirmed uploaded" tracking as aura_pending_place_ids, but for PHOTO uploads
+// specifically — kept separate because photos sync on their own path/version marker
+// (uploadPhotoToCloud/loadPhotosFromCloud), independent of the place-text save above. Without this,
+// a large photo upload (e.g. 20 photos) that's still retrying in the background had no way to stop
+// loadPhotosFromCloud()'s next poll from pulling the still-stale cloud copy and overwriting the
+// photos this device just added but hasn't confirmed out yet — the exact "photos vanish after
+// reopening the app" bug. Persisted to localStorage for the same reload-survival reason as
+// aura_pending_place_ids/aura_pending_mutation_ts.
+function markPendingPhotoPlaceId(placeId) {
+    const pending = JSON.parse(localStorage.getItem('aura_pending_photo_place_ids') || '[]');
+    if (!pending.includes(placeId)) {
+        pending.push(placeId);
+        localStorage.setItem('aura_pending_photo_place_ids', JSON.stringify(pending));
+    }
+}
+function clearPendingPhotoPlaceId(placeId) {
+    const pending = JSON.parse(localStorage.getItem('aura_pending_photo_place_ids') || '[]').filter(id => id !== placeId);
+    if (pending.length > 0) {
+        localStorage.setItem('aura_pending_photo_place_ids', JSON.stringify(pending));
+    } else {
+        localStorage.removeItem('aura_pending_photo_place_ids');
+    }
+}
+function getPendingPhotoPlaceIds() {
+    return new Set(JSON.parse(localStorage.getItem('aura_pending_photo_place_ids') || '[]'));
+}
+
 // ── Firebase Photos REST API sync ──
 // A failed attempt retries a few times with a short delay — this used to fail silently and
 // permanently on any hiccup (a 401 during the rules lockdown, a 400 from the old oversized-payload
@@ -4522,6 +4603,11 @@ function clearPendingPlaceId(placeId) {
 async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1) {
     if (!syncRoomId) return;
     const MAX_ATTEMPTS = 4;
+    // Only numeric place ids participate in the pending-photo guard (see markPendingPhotoPlaceId) —
+    // every real call site passes one; a bare name string (no local place row) has nothing for
+    // loadPhotosFromCloud() to protect anyway.
+    const placeId = typeof placeIdOrName === 'number' ? placeIdOrName : null;
+    if (placeId != null && attempt === 1) markPendingPhotoPlaceId(placeId);
     try {
         let placeKey = placeIdOrName;
         if (typeof placeIdOrName === 'number') {
@@ -4533,13 +4619,15 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
 
         const ts = Date.now();
         // print=silent — Firebase otherwise echoes the written value back in the response, which
-        // for a PUT of image data means downloading the photo a second time for nothing.
+        // for a PUT of image data means downloading the photo a second time for nothing. We verify
+        // the write with our own read-back below instead (see "double-check" comment further down).
         const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(placeKey)}.json?print=silent`;
 
         // No photos left (last one deleted) — clear the cloud node instead of no-op'ing, otherwise
         // the stale non-empty entry survives and the next loadPhotosFromCloud() poll restores it.
+        const isDelete = !base64ImagesArray || base64ImagesArray.length === 0;
         let mainOk;
-        if (!base64ImagesArray || base64ImagesArray.length === 0) {
+        if (isDelete) {
             const r = await fetch(url, { method: 'DELETE' });
             mainOk = r.ok;
         } else {
@@ -4557,6 +4645,21 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
         }
 
         if (!mainOk) throw new Error('photo write failed');
+
+        // Double-check the write actually landed instead of trusting a 200 alone — Firebase can
+        // return ok on a request that got truncated/rejected server-side for size, and a large
+        // multi-photo PUT (e.g. ~20 photos on one place) is exactly the payload most likely to hit
+        // that. Read the node back and confirm the photo count round-tripped before declaring success;
+        // a mismatch is treated as a failed attempt and retried like any other failure.
+        if (!isDelete) {
+            const verifyResp = await fetch(`${url.split('?')[0]}?t=${Date.now()}`, { cache: 'no-store' });
+            if (!verifyResp.ok) throw new Error('photo verify fetch failed');
+            const verifyData = await verifyResp.json();
+            const verifyCount = verifyData && Array.isArray(verifyData.imgList) ? verifyData.imgList.length : 0;
+            if (!verifyData || verifyData.ts !== ts || verifyCount !== base64ImagesArray.length) {
+                throw new Error(`photo verify mismatch (expected ${base64ImagesArray.length}, got ${verifyCount})`);
+            }
+        }
 
         // Per-place version index (just a number, no image bytes) so other devices can tell WHICH
         // place changed without downloading every place's photos to find out — lets
@@ -4578,12 +4681,19 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
         // This device already has the change it just made — remember the version now so its own
         // next poll doesn't immediately re-download the photo library it just uploaded.
         setLastKnownPhotosVersion(ts);
+        if (placeId != null) clearPendingPhotoPlaceId(placeId);
     } catch (e) {
         console.error(`[Photo Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
         if (attempt < MAX_ATTEMPTS) {
             setTimeout(() => uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt + 1), 3000 * attempt);
         } else {
             console.error('[Photo Sync] Giving up after max retries — photo stayed local-only.');
+            // Surface this instead of failing silently — a couple otherwise has no way to know a
+            // photo upload never made it to the cloud until it's already gone after a reload.
+            // The pending-photo flag stays set (not cleared here) so loadPhotosFromCloud() keeps
+            // refusing to overwrite this place's local photos with the stale cloud copy, and this
+            // device's own next successful edit/retry gets another chance to push it out.
+            showToast("사진 동기화에 실패했어요. 인터넷 연결을 확인 후 다시 시도해주세요 😢", "danger");
         }
     }
 }
@@ -4616,8 +4726,15 @@ async function loadPhotosFromCloud() {
 
         const places = await db.places.toArray();
         let changed = false;
+        // A place with a photo upload still in flight/retrying (see uploadPhotoToCloud) must never
+        // be overwritten by this pull — its local photos are newer than whatever the cloud has right
+        // now, even though the coarse localMutationTimestamp/lastSyncedTimestamp guard above may have
+        // already been satisfied by an unrelated, already-confirmed place-text save.
+        const pendingPhotoPlaceIdsNow = getPendingPhotoPlaceIds();
 
         for (const place of places) {
+            if (pendingPhotoPlaceIdsNow.has(place.id)) continue;
+
             const cleanName = (place.name || "").trim().toLowerCase();
             const nameKey = cleanName.replace(/[/\\?%*:|"<>. ]/g, "_");
             const encodedKey = encodeURIComponent(nameKey);
@@ -4737,8 +4854,10 @@ async function forceResyncAllPlacePhotos() {
     if (!syncRoomId) return;
     const places = await db.places.toArray();
     let changed = false;
+    const pendingPhotoPlaceIdsNow = getPendingPhotoPlaceIds();
     for (const place of places) {
         if (place.isDeleted === 1 || place.isVisited === -1) continue;
+        if (pendingPhotoPlaceIdsNow.has(place.id)) continue;
         const nameKey = (place.name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
         if (!nameKey) continue;
         try {
@@ -5479,26 +5598,25 @@ async function copyShareLinkToClipboard(text) {
     }
 }
 
+// One-time junk-data guard against two specific spam phrases that got into old data
+// ("이선아의 위시리스트 충족", "물멍하기 좋은 카페 선아 바보") — scrubbed here so they can't resurface
+// via a cloud sync. This USED to match the bare substrings "선아"/"바보" too, which silently blanked
+// any real, legitimate comment that happened to mention "선아" (one of the two partners' own names)
+// — e.g. every future sync of a comment like "선아가 만든 라구파스타 진짜 맛있었어" got wiped to "" both
+// in the cloud and, on the next pull, locally too. Match only the exact known junk phrases now.
 function sanitizePlaceObject(p) {
     if (!p) return p;
-    const cleanStr = (str) => {
+    const stripJunkPhrases = (str) => {
         if (typeof str !== 'string' || !str) return str;
-        if (str.includes("이선아") || str.includes("선아") || str.includes("위시리스트 충족") || str.includes("바보")) {
-            return "";
-        }
-        return str;
+        return str.replace(/이선아의 위시리스트 충족!?/gi, "")
+                  .replace(/물멍하기 좋은 카페 선아 바보/gi, "")
+                  .trim();
     };
-    p.review = cleanStr(p.review);
-    p.commentA = cleanStr(p.commentA);
-    p.commentB = cleanStr(p.commentB);
+    p.review = stripJunkPhrases(p.review);
+    p.commentA = stripJunkPhrases(p.commentA);
+    p.commentB = stripJunkPhrases(p.commentB);
     if (p.notes && typeof p.notes === 'string') {
-        if (p.notes.includes("이선아") || p.notes.includes("선아") || p.notes.includes("위시리스트 충족") || p.notes.includes("바보")) {
-            p.notes = p.notes.replace(/이선아의 위시리스트 충족!?/gi, "")
-                             .replace(/물멍하기 좋은 카페 선아 바보/gi, "")
-                             .replace(/선아/gi, "")
-                             .replace(/바보/gi, "")
-                             .trim();
-        }
+        p.notes = stripJunkPhrases(p.notes);
     }
     return p;
 }
