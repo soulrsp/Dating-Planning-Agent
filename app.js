@@ -3922,8 +3922,14 @@ async function renderPlacesList() {
             });
         }
     }
-    
+
     lucide.createIcons();
+
+    // The dashboard's "우리의 러블리 메모리" widget also shows every visited place's photos, but it
+    // used to render only at startup/its own upload — so a photo added, deleted, or synced in from
+    // the partner's device never showed up there until a full reload. Anything that re-renders the
+    // place list has (or may have) changed those photos, so refresh the widget alongside it.
+    renderLovelyMemoryGallery();
 
     // Preserve scroll position
     if (mainContent && savedScrollTop > 0) {
@@ -4935,7 +4941,7 @@ async function loadMemoryPhotosFromCloud() {
         if (JSON.stringify(customMemoryPhotos) === JSON.stringify(cloudMemories)) return;
 
         customMemoryPhotos = cloudMemories;
-        localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
+        persistMemoryPhotosLocally();
         await renderLovelyMemoryGallery();
     } catch (e) {
         console.error('[Memory Photos Sync] Load failed:', e);
@@ -6033,6 +6039,7 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
 }
 
 async function renderGallery() {
+    renderLovelyMemoryGallery();
     const mainContent = document.querySelector(".main-content");
     const savedScrollTop = mainContent ? mainContent.scrollTop : 0;
     const savedWindowY = window.scrollY || document.documentElement.scrollTop;
@@ -6433,6 +6440,19 @@ function getStoredMemoryPhotos() {
 }
 
 let customMemoryPhotos = getStoredMemoryPhotos();
+
+// localStorage is capped (~5MB) and these are base64 photos, so a setItem can throw
+// QuotaExceededError. Every caller used to call setItem bare, so when it threw, the render/upload
+// step right after it never ran and the widget silently froze on the old photos. The in-memory list
+// and the cloud copy stay authoritative; the local cache is only a startup convenience.
+function persistMemoryPhotosLocally() {
+    try {
+        localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
+    } catch (e) {
+        console.warn('[Memory Photos] Could not cache locally (storage full?) — continuing:', e);
+    }
+}
+
 let activeMemoryPhotosList = [];
 let activeMemoryPhotoIndex = 0;
 
@@ -6522,7 +6542,7 @@ window.deleteCurrentMemoryPhoto = async function() {
     const customIdx = customMemoryPhotos.indexOf(photoToDelete);
     if (customIdx !== -1) {
         customMemoryPhotos.splice(customIdx, 1);
-        localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
+        persistMemoryPhotosLocally();
         if (syncRoomId) await uploadMemoryPhotosToCloud();
     } else {
         // Not a custom-uploaded memory — it's a photo pulled in from a visited place's own
@@ -6588,7 +6608,7 @@ window.saveMemoryGalleryPhotos = async function() {
         }
         if (newPhotos.length > 0) {
             customMemoryPhotos = [...customMemoryPhotos, ...newPhotos];
-            localStorage.setItem(memoryPhotosStorageKey(), JSON.stringify(customMemoryPhotos));
+            persistMemoryPhotosLocally();
             await renderLovelyMemoryGallery();
             if (syncRoomId) await uploadMemoryPhotosToCloud();
             showToast(`우리의 러블리 메모리에 ${newPhotos.length}장의 사진이 누적 추가되었습니다! (총 ${customMemoryPhotos.length}장) 💖`, "success");
