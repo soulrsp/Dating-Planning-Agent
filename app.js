@@ -332,6 +332,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadFromCloud();
     }
 
+    // One-time data fix: "석한이네" → "칼립소의 섬" (see migrateRenamedCategory) — runs after the
+    // cloud pull above so it migrates the freshest copy of each place, not a stale local one.
+    await migrateRenamedCategory("석한이네", "칼립소의 섬");
+
     // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
     if (syncRoomId && (naverClientId || geminiApiKey)) {
         setTimeout(() => triggerSyncUpload(), 300);
@@ -3285,7 +3289,7 @@ function renderCommentsBlock(place) {
 // matches on either one, so any place named like the apartment complex OR located on its street
 // gets caught, even under a completely different name. Add more entries here for other places.
 const PLACE_CATEGORY_OVERRIDES = [
-    { nameMatch: "그랜드파크2bl", addressMatch: "용성로21", category: "석한이네" }
+    { nameMatch: "그랜드파크2bl", addressMatch: "용성로21", category: "칼립소의 섬" }
 ];
 function applyCategoryOverride(name, address, category) {
     const normName = (name || "").replace(/\s+/g, "").toLowerCase();
@@ -3295,6 +3299,23 @@ function applyCategoryOverride(name, address, category) {
         (o.addressMatch && normAddr.includes(o.addressMatch))
     );
     return hit ? hit.category : category;
+}
+
+// One-time-per-place data fix: the "석한이네" category was renamed to "칼립소의 섬" (see
+// PLACE_CATEGORY_OVERRIDES above). The override function only patches what a few render call sites
+// show live — several others (gallery cards, calendar day details, the AI planner save, the map
+// popup summary line) read place.category directly and would keep showing the old name forever.
+// Actually rewriting the stored field is what makes the rename permanent instead of a display-only
+// mask. Idempotent — once every matching place is migrated there's nothing left to touch — so it's
+// safe to run on every startup, same as cleanJunkData().
+async function migrateRenamedCategory(oldCategory, newCategory) {
+    const places = await db.places.toArray();
+    for (const p of places) {
+        if (p.category === oldCategory && p.isDeleted !== 1) {
+            await db.places.update(p.id, { category: newCategory });
+            if (syncRoomId) triggerSyncUpload(p.id);
+        }
+    }
 }
 
 // Category badges: the 6 built-in categories (Cafe/Restaurant/Bar/Park/Museum/Other) get their
