@@ -2920,10 +2920,15 @@ async function handleEditPlaceSubmit(e) {
         commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
     };
 
+    // Photos are read here but NOT uploaded yet — uploadPhotoToCloud(id, ...) re-reads
+    // db.places.get(id) to derive the cloud key from the place's CURRENT name, so calling it before
+    // the rename below is applied to Dexie would upload under the stale pre-rename name. Uploaded
+    // after db.places.update() instead (see below), once "id" actually resolves to the new name.
+    let photosBase64 = null;
     if (place.isVisited === 1) {
         const editPhotoImgs = document.querySelectorAll("#edit-place-photo-preview img");
         if (editPhotoImgs.length > 0) {
-            const photosBase64 = [];
+            photosBase64 = [];
             for (let i = 0; i < editPhotoImgs.length; i++) {
                 const compressed = await compressBase64Image(editPhotoImgs[i].src);
                 if (compressed) photosBase64.push(compressed);
@@ -2931,14 +2936,12 @@ async function handleEditPlaceSubmit(e) {
             if (photosBase64.length > 0) {
                 updatePayload.photo = photosBase64[0];
                 updatePayload.photos = photosBase64;
-                if (syncRoomId) {
-                    await uploadPhotoToCloud(id, photosBase64);
-                }
             }
         }
     }
 
     const oldName = place.name;
+    const nameChanged = placeNameKey(name) !== placeNameKey(oldName);
 
     try {
         await db.places.update(id, updatePayload);
@@ -2948,7 +2951,15 @@ async function handleEditPlaceSubmit(e) {
         await renderPlacesList();
         updateMapMarkers();
         triggerSyncUpload(id);
-        if (placeNameKey(name) !== placeNameKey(oldName)) {
+
+        if (syncRoomId && photosBase64 && photosBase64.length > 0) {
+            await uploadPhotoToCloud(id, photosBase64);
+        }
+        if (nameChanged) {
+            // Moves the photo data to the new name's cloud key (it's always re-read from the
+            // current local photos above, whether or not this edit touched them, so it's already
+            // correct here) and tombstones the old place/photo nodes so devices that already
+            // downloaded the pre-rename place get told to hide it — see deleteOrphanedPlaceCloudNode.
             deleteOrphanedPlaceCloudNode(oldName);
         }
     } catch(err) {
@@ -4369,20 +4380,36 @@ async function refreshSinglePlaceFromCloud(placeId) {
 }
 
 // A place's cloud node is keyed by its name (see placeNameKey), so renaming a place makes
-// savePlaceToCloud() write a brand-new node instead of updating the old one — the old node is
-// orphaned, still holds the pre-rename data, and any later loadFromCloud() resurrects it as a
-// phantom duplicate place (it can no longer name-match anything local, so it looks "new").
-// Call this right after a rename succeeds locally to delete that stale node before it can do that.
+// savePlaceToCloud() write a brand-new node instead of updating the old one, orphaning the old one.
+//
+// This used to hard-DELETE the old /places/{nameKey} node, which fixed the orphan for any device
+// that pulls AFTER the delete — but a device that had already downloaded the pre-rename place has
+// its own local Dexie row for the old name, and loadFromCloud() only upserts places it currently
+// sees in the cloud; it never notices a place disappearing from there. So that device's stale local
+// copy just sat there forever, and the next loadFromCloud() added the new-named node as a totally
+// separate place — the exact "renamed place shows up twice, once under each name" bug. Writing a
+// tombstone (isDeleted:1) instead — same shape deletePlace() already uses for real deletions — fixes
+// this the same way: any device's next pull matches its stale local row by the old name, sees
+// isDeleted:1, and hides it, while a device with no local copy of the old name skips creating one.
+//
+// Also cleans up the old name's /photos and /photoVersions nodes — those are keyed by name too, so
+// a rename otherwise leaves them behind as permanently unreachable dead data. Safe to delete here
+// because the caller (handleEditPlaceSubmit) always re-uploads the place's current photos under the
+// NEW name first, whether or not this particular edit touched them.
 async function deleteOrphanedPlaceCloudNode(oldName) {
     if (!syncRoomId) return;
     const nameKey = placeNameKey(oldName);
     if (!nameKey) return;
     try {
         await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}.json?print=silent`, {
-            method: 'DELETE'
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isVisited: -1, isDeleted: 1, deletedAt: Date.now() })
         });
+        await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json?print=silent`, { method: 'DELETE' });
+        await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions/${encodeURIComponent(nameKey)}.json?print=silent`, { method: 'DELETE' });
     } catch (e) {
-        console.error('[Place Sync] Failed to delete orphaned cloud node for rename:', e);
+        console.error('[Place Sync] Failed to tombstone orphaned cloud node for rename:', e);
     }
 }
 
