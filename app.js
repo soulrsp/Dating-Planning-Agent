@@ -4,6 +4,33 @@
  * Canvas Photo Compression
  * ------------------------------------------------------------- */
 
+// Boot milestones for the ?debug=1 on-screen panel (see index.html). No-ops otherwise.
+window.auraDbg("app.js 시작 (Dexie=" + typeof Dexie + ", firebase=" + typeof firebase + ", lucide=" + typeof lucide + ", indexedDB=" + !!window.indexedDB + ")");
+
+// Extra ?debug=1 probes for "the page just sits there" reports (nothing throws, so there's no error
+// to show): which service worker controls the page, whether IndexedDB can even be opened here, and
+// a notice if Firebase never reports a sign-in state (set by onIdTokenChanged below).
+if (window.auraDebugOn) {
+    const swc = navigator.serviceWorker && navigator.serviceWorker.controller;
+    window.auraDbg("서비스워커 제어: " + (swc ? swc.scriptURL.split("/").pop() : "없음"));
+    const probeStart = Date.now();
+    try {
+        const probe = indexedDB.open("aura-probe");
+        probe.onsuccess = () => {
+            probe.result.close();
+            indexedDB.deleteDatabase("aura-probe");
+            window.auraDbg("IndexedDB 열기 OK (" + (Date.now() - probeStart) + "ms)");
+        };
+        probe.onerror = () => window.auraDbg("IndexedDB 열기 실패: " + (probe.error && probe.error.message));
+        probe.onblocked = () => window.auraDbg("IndexedDB 차단됨");
+    } catch (e) {
+        window.auraDbg("IndexedDB 예외: " + e.message);
+    }
+    setTimeout(() => {
+        if (!window.__auraAuthSeen) window.auraDbg("⚠ 6초가 지나도 로그인 상태 응답이 없음 (Firebase Auth 초기화 대기 중)");
+    }, 6000);
+}
+
 // 1. Initialize Dexie Database
 const db = new Dexie("AuraDatePlannerDB");
 db.version(2).stores({
@@ -208,7 +235,10 @@ function waitForAuthGate() { return authGateReady; }
 
     // Surface any error from a signInWithRedirect() that just completed (e.g. after returning from
     // the Google login page) — otherwise a failure there has nowhere to report to.
-    firebase.auth().getRedirectResult().catch((e) => {
+    firebase.auth().getRedirectResult().then((r) => {
+        window.auraDbg("redirect 결과: " + (r && r.user ? "로그인 성공" : "없음"));
+    }).catch((e) => {
+        window.auraDbg("redirect 오류: " + (e.code || "") + " " + e.message);
         showGateError("로그인에 실패했습니다: " + e.message);
         if (signInBtn) signInBtn.disabled = false;
     });
@@ -218,6 +248,8 @@ function waitForAuthGate() { return authGateReady; }
     }
 
     firebase.auth().onIdTokenChanged(async (user) => {
+        window.__auraAuthSeen = true;
+        window.auraDbg("auth 상태: " + (user ? "로그인됨" : "로그아웃"));
         if (!user) {
             currentIdToken = null;
             if (gateEl) gateEl.style.display = "flex";
@@ -325,6 +357,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Block here until a signed-in, allowlisted Google account is confirmed — nothing below (sync
     // loop, Firebase reads, event wiring) should run for an unauthenticated or disallowed visitor.
     await waitForAuthGate();
+    window.auraDbg("init 시작 (방: " + syncRoomId + ")");
+    db.places.count().then(n => window.auraDbg("로컬DB 정상: " + n + "곳")).catch(e => window.auraDbg("로컬DB 실패: " + (e && e.message ? e.message : e)));
 
     // Populate settings UI from LocalStorage
     document.getElementById("settings-gemini-key").value = geminiApiKey;
@@ -412,12 +446,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Refresh UI Data
+    window.auraDbg("클라우드 동기화 끝, 화면 그리는 중");
     await updateDashboardStats();
     await renderPlacesList();
     await renderCalendar();
     renderLovelyMemoryGallery();
     checkApiKeyAlert();
     startCloudSyncLoop();
+    window.auraDbg("init 완료");
 
     // Lucide Icons Initialization
     lucide.createIcons();

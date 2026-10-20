@@ -4,7 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - 러블리 AI 데이트 플래너</title>
-    
+
+    <script>
+        // Firebase gives the app two default hosts. Google sign-in only works on the one that is the
+        // Firebase Auth domain (firebaseapp.com — same origin as the sign-in helper); on web.app the
+        // helper is cross-origin and Safari blocks the storage the sign-in result is read from.
+        if (location.hostname === "dating-planning-agent.web.app") {
+            location.replace("https://dating-planning-agent.firebaseapp.com" + location.pathname + location.search + location.hash);
+        }
+
+        // Remote-debug aid for a device nobody can attach a console to (a partner's iPhone showing a
+        // blank page). Completely inert unless the page is opened with ?debug=1, in which case it
+        // prints the user agent, every script/promise error and the app's boot milestones
+        // (window.auraDbg(...) calls in app.js) in an on-screen panel she can screenshot.
+        window.auraDbg = function () {};
+        if (/[?&]debug=1(&|$)/.test(location.search)) {
+            (function () {
+                var box;
+                function line(text) {
+                    if (!box) {
+                        box = document.createElement("pre");
+                        box.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;margin:0;padding:6px 8px;background:rgba(0,0,0,.85);color:#9f9;font:11px/1.35 monospace;white-space:pre-wrap;word-break:break-all;z-index:2147483647;pointer-events:none";
+                        document.documentElement.appendChild(box);
+                    }
+                    box.textContent += text + "\n";
+                }
+                window.auraDebugOn = true;
+                window.auraDbg = function (m) { line("· " + m); };
+                line("UA: " + navigator.userAgent);
+                line("URL: " + location.href);
+                window.addEventListener("error", function (e) {
+                    var t = e.target;
+                    if (t && t !== window) {
+                        // Only scripts/stylesheets failing to load matter here; broken <img>s (empty
+                        // placeholders, a deleted photo) are routine and would just bury the real cause.
+                        if (t.tagName === "SCRIPT" || t.tagName === "LINK") line("✗ 로드 실패: " + (t.src || t.href));
+                    } else {
+                        line("✗ " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno);
+                    }
+                }, true);
+                window.addEventListener("unhandledrejection", function (e) {
+                    var r = e.reason;
+                    line("✗ (promise) " + (r && r.message ? r.message : r));
+                });
+            })();
+        }
+    </script>
+
     <!-- PWA & Mobile Web Meta Tags -->
     <meta name="theme-color" content="#FF6584">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,7 +67,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261020_v385">
+    <link rel="stylesheet" href="style.css?v=20261020_v387">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -967,13 +1013,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261020_v385"></script>
+    <script src="app.js?v=20261020_v387"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261020_v385').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261020_v387').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
