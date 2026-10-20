@@ -150,7 +150,11 @@ function waitForAuthGate() { return authGateReady; }
     // getRedirectResult() finds nothing and the login screen just reappears (white flash, then the
     // same login screen, forever). Popup sign-in doesn't depend on that returning-page lookup, so try
     // it first; fall back to redirect only if the popup itself is blocked/unsupported.
-    const isIOSSafariTab = isIOS && !isStandalone && !isInAppBrowser;
+    // Not needed once the app is served from Firebase Hosting itself: then the app and the sign-in
+    // helper share one origin, there's no cross-site storage to block, and plain redirect (the
+    // mobile default below) works reliably.
+    const isSameOriginAuth = location.hostname === "dating-planning-agent.firebaseapp.com";
+    const isIOSSafariTab = isIOS && !isStandalone && !isInAppBrowser && !isSameOriginAuth;
 
     async function startSignIn() {
         signInBtn.disabled = true;

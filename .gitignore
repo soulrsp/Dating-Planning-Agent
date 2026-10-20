@@ -16,6 +16,10 @@ archive/
 # Local rollback snapshots
 backup/
 
+# Firebase Hosting deploy staging folder + CLI cache (see deploy-hosting.js)
+.hosting-dist/
+.firebase/
+
 # OS / editor noise
 Thumbs.db
 Desktop.ini

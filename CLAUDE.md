@@ -7,10 +7,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AURA — a Korean couple's date-planner PWA. Static site, no backend, no build step, no bundler.
 Three files carry almost the entire app: [`app.js`](app.js) (~6300 lines), [`index.html`](index.html)
 (~960 lines), [`style.css`](style.css) (~2600 lines), plus a tiny [`sw.js`](sw.js) service worker.
-Deployed (not via CI) to GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/`. This
-directory is a git repository tracking `origin/main` at `github.com/soulrsp/Dating-Planning-Agent` —
-Claude Code can commit and push directly here (with the user's confirmation per its normal push-safety
-rules); a push to `main` deploys to GitHub Pages. **Never commit `API 모음.txt`** (real Naver/Gemini/
+Served from two places (neither via CI): **Firebase Hosting** at `https://dating-planning-agent.firebaseapp.com/`
+(the primary one — it shares an origin with the Firebase Auth helper, which is what makes Google sign-in
+work on iOS Safari) and GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/` (legacy; sign-in
+fails on iOS Safari there because the sign-in state lives on a different origin). This directory is a git
+repository tracking `origin/main` at `github.com/soulrsp/Dating-Planning-Agent` — Claude Code can commit
+and push directly here (with the user's confirmation per its normal push-safety rules); a push to `main`
+deploys to GitHub Pages only. Updating Firebase Hosting is a separate step: `node deploy-hosting.js`, which
+copies an explicit whitelist of files (not the whole directory — it also holds `secrets/` and
+`API 모음.txt`) into `.hosting-dist/` and runs `firebase deploy --only hosting`. That needs the user's own
+`firebase login`, so hand them the command rather than running it. `localStorage`/IndexedDB are per-origin,
+so each URL has its own Gemini/TourAPI keys and local cache; open the new URL with `?room=<id>` once. **Never commit `API 모음.txt`** (real Naver/Gemini/
 Supabase secrets in plaintext) — it's already in `.gitignore`, but double-check before any `git add`
 that touches the repo root.
 
