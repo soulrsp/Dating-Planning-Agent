@@ -65,6 +65,30 @@ db.version(2).stores({
     places: "++id, name, category, url, lat, lng, priority, notes, isVisited, rating, review, expense, payer, peopleCount, photo, createdAt"
 });
 
+// Every row carries its photos inline (base64, ~200KB each — 80MB+ for the couple's room), so each
+// db.places.toArray() copies ALL of that out of IndexedDB (~130ms on a desktop, far more on a phone).
+// App startup alone did that 8-9 times: stats, list, calendar, map, widget, sync diffing... all asking
+// for the same table that nothing had changed in between. getPlaces() hands them one shared read
+// instead, and any write to the table (hooks) or change from another tab drops it so the next call
+// reads fresh. It returns a copy of the array (callers sort/filter freely) but NOT of the rows, so
+// treat the rows as read-only; anything that needs to edit a row should db.places.update() it, which
+// also invalidates this.
+let placesSnapshot = null;
+function invalidatePlacesSnapshot() { placesSnapshot = null; }
+function getPlaces() {
+    if (!placesSnapshot) {
+        const read = db.places.toArray();
+        placesSnapshot = read;
+        read.catch(() => { if (placesSnapshot === read) placesSnapshot = null; });
+    }
+    return placesSnapshot.then(rows => rows.slice());
+}
+db.places.hook("creating", invalidatePlacesSnapshot);
+db.places.hook("updating", invalidatePlacesSnapshot);
+db.places.hook("deleting", invalidatePlacesSnapshot);
+// Table.clear() doesn't run the per-row hooks above, and other tabs write to the same database.
+if (Dexie.on && typeof Dexie.on === "function") Dexie.on("storagemutated", invalidatePlacesSnapshot);
+
 // 2. State & Settings Variables
 let map = null;
 let leafletMarkersGroup = null;
@@ -359,6 +383,7 @@ async function ensureLocalDbMatchesRoom() {
 
     console.warn(`[Room] Local DB held room '${owner}', now opening '${syncRoomId}' — clearing local places.`);
     await db.places.clear();
+    invalidatePlacesSnapshot();
     // These refer to the old room's Dexie rows (by id) and its in-flight uploads; they mean nothing
     // for the new room, and a stale "pending" flag would block pulling its data entirely.
     ["aura_pending_place_ids", "aura_pending_photo_place_ids", "aura_pending_mutation_ts", "aura_pending_settings"]
@@ -1133,7 +1158,7 @@ window.fitAllMapMarkers = function() {
 
 async function updateMapMarkers() {
     if (!map) return;
-    const places = await db.places.toArray();
+    const places = await getPlaces();
 
     // 1. Sequentially resolve missing/corrupted coordinates for all saved wishlist & visited places BEFORE rendering markers
     for (const place of places) {
@@ -3457,7 +3482,7 @@ function applyCategoryOverride(name, address, category) {
 // mask. Idempotent — once every matching place is migrated there's nothing left to touch — so it's
 // safe to run on every startup, same as cleanJunkData().
 async function migrateRenamedCategory(oldCategory, newCategory) {
-    const places = await db.places.toArray();
+    const places = await getPlaces();
     for (const p of places) {
         if (p.category === oldCategory && p.isDeleted !== 1) {
             await db.places.update(p.id, { category: newCategory });
@@ -3897,7 +3922,7 @@ async function renderPlacesList() {
         const searchInput = document.getElementById("wishlist-search-input");
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
-        const allPlaces = await db.places.toArray();
+        const allPlaces = await getPlaces();
         const wishlistPlaces = allPlaces.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1);
         // 방문 예정일이 오늘과 가까운 순서로 정렬 (미정은 항상 맨 아래)
         //  1) 다가오는 날짜: 오늘에 가까운 순 (오늘 → 내일 → ...)
@@ -3999,7 +4024,7 @@ async function renderPlacesList() {
         const searchInput = document.getElementById("visited-search-input");
         const searchVal = searchInput ? searchInput.value.toLowerCase() : "";
         
-        const allVisitedPlaces = await db.places.toArray();
+        const allVisitedPlaces = await getPlaces();
         const visitedPlaces = allVisitedPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
         // Strict Descending Sort by visit date (createdAt/date) with ID tie-breaker for 1st, 2nd, 3rd ... Nth
         visitedPlaces.sort((a, b) => {
@@ -4162,7 +4187,7 @@ async function deletePlace(id, name) {
 
 // 11. Dashboard Analytics
 async function updateDashboardStats() {
-    const places = await db.places.toArray();
+    const places = await getPlaces();
 
     const wishlistCount = places.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1).length;
     const visitedCount = places.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1).length;
@@ -4648,7 +4673,7 @@ async function loadFromCloud() {
         const resData = {};
         roomFields.forEach((f, i) => { resData[f] = fieldResults[i]; });
 
-        const localPlaces = await db.places.toArray();
+        const localPlaces = await getPlaces();
 
         if (resData.places == null && resData.timestamp == null) {
             // Room empty in cloud, initialize cloud with local data
@@ -4729,7 +4754,7 @@ async function loadFromCloud() {
                     }
                 });
 
-                const localPlaces = await db.places.toArray();
+                const localPlaces = await getPlaces();
 
                 // Preserve local tombstones. (This used to also copy localMatch.photo/photos onto fp
                 // "to avoid wiping them" — but that's exactly the race the comment below describes:
@@ -5039,7 +5064,7 @@ async function loadPhotosFromCloud() {
         const remoteVersions = await versionsResp.json();
         if (!remoteVersions || typeof remoteVersions !== 'object') return;
 
-        const places = await db.places.toArray();
+        const places = await getPlaces();
         let changed = false;
         // A place with a photo upload still in flight/retrying (see uploadPhotoToCloud) must never
         // be overwritten by this pull — its local photos are newer than whatever the cloud has right
@@ -5716,6 +5741,8 @@ function importData(e) {
             if (!Array.isArray(places)) throw new Error("유효한 데이터 리스트가 아닙니다.");
             
             await db.places.clear();
+            
+            invalidatePlacesSnapshot();
             await db.places.bulkAdd(places.map(p => {
                 delete p.id;
                 return p;
@@ -5995,6 +6022,7 @@ async function cleanJunkData(showToastMsg = false) {
 
         if (removedCount > 0 || cleanList.length !== places.length) {
             await db.places.clear();
+            invalidatePlacesSnapshot();
             if (cleanList.length > 0) {
                 await db.places.bulkAdd(cleanList);
             }
@@ -6081,7 +6109,7 @@ async function renderCalendar() {
     if (!gridContainer) return;
     gridContainer.innerHTML = "";
 
-    const places = await db.places.toArray();
+    const places = await getPlaces();
 
     const firstDay = new Date(currentCalendarYear, currentCalendarMonth, 1).getDay();
     const daysInMonth = new Date(currentCalendarYear, currentCalendarMonth + 1, 0).getDate();
@@ -6172,7 +6200,7 @@ window.selectCalendarDateAndRender = async function(dateStr, filterType = 'all')
     const targetCell = document.querySelector(`.calendar-day-cell[data-date="${dateStr}"]`);
     if (targetCell) targetCell.classList.add("selected");
     
-    const places = await db.places.toArray();
+    const places = await getPlaces();
     renderSelectedDateDetails(dateStr, places, filterType);
 
     const detailsEl = document.getElementById("selected-date-title");
@@ -6275,7 +6303,7 @@ async function renderGallery() {
     if (!container) return;
 
     container.innerHTML = "";
-    const allPlaces = await db.places.toArray();
+    const allPlaces = await getPlaces();
     const places = allPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
     
     // Filter places with photos
@@ -6697,7 +6725,7 @@ async function renderLovelyMemoryGallery() {
     if (!grid) return;
 
     // 1. Gather all photos attached to visited places in Dexie DB
-    const places = await db.places.toArray();
+    const places = await getPlaces();
     const placePhotos = [];
     places.forEach(p => {
         if (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1") {
