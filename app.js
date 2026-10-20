@@ -144,10 +144,37 @@ function waitForAuthGate() { return authGateReady; }
         }
     }
 
+    // A normal iOS Safari tab (not the home-screen icon, not an in-app browser). Redirect sign-in
+    // breaks here: the app lives on github.io but Firebase keeps the sign-in state on firebaseapp.com,
+    // and Safari blocks that cross-site storage, so after Google sends the user back,
+    // getRedirectResult() finds nothing and the login screen just reappears (white flash, then the
+    // same login screen, forever). Popup sign-in doesn't depend on that returning-page lookup, so try
+    // it first; fall back to redirect only if the popup itself is blocked/unsupported.
+    const isIOSSafariTab = isIOS && !isStandalone && !isInAppBrowser;
+
     async function startSignIn() {
         signInBtn.disabled = true;
         if (errorEl) errorEl.style.display = "none";
         const provider = new firebase.auth.GoogleAuthProvider();
+        if (isIOSSafariTab) {
+            try {
+                await firebase.auth().signInWithPopup(provider);
+            } catch (e) {
+                console.warn('[Auth] iOS Safari popup sign-in failed:', e.code, e.message);
+                // The user closing the popup themselves isn't a failure to work around.
+                if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+                    signInBtn.disabled = false;
+                    return;
+                }
+                try {
+                    await firebase.auth().signInWithRedirect(provider);
+                } catch (e2) {
+                    showGateError("로그인에 실패했습니다: " + e2.message);
+                    signInBtn.disabled = false;
+                }
+            }
+            return;
+        }
         if (isStandalone || isMobileDevice) {
             try {
                 await firebase.auth().signInWithRedirect(provider);
