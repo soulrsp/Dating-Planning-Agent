@@ -54,6 +54,11 @@ one in lockstep — there's no script for this, it's manual.
   All cloud data is namespaced under `aura-rooms/{roomId}/...` (`places`, `photos`, `timestamp`), and
   all `localStorage` cache keys that must not bleed between rooms are suffixed with the room id (see
   `memoryPhotosStorageKey()`, `photosVersionStorageKey()` etc. near the top of `app.js`).
+- The local Dexie `places` table is **not** room-scoped — rows have no room id, and there is one DB per
+  browser origin. `ensureLocalDbMatchesRoom()` records which room it holds (`aura_local_db_room`) and
+  empties it when a different room is opened (startup and the Settings room switch), so one room's
+  places/photos never show up in, or get pushed to, another. Anything new that reads `db.places` can
+  rely on that; don't add a second per-room mechanism alongside it.
 - Every Firebase REST call must carry the signed-in user's ID token as `?auth=`. This is done once via
   a `window.fetch` monkey-patch (`patchFetchForAuth()`, right after the auth gate) rather than at each
   of the ~20 call sites — don't hand-add `auth=` params to new fetch calls, the patch already does it

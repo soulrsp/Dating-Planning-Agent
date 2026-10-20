@@ -278,6 +278,41 @@ function setLastKnownMemoryPhotosVersion(v) {
     localStorage.setItem(memoryPhotosVersionStorageKey(), String(v));
 }
 
+// The local Dexie database ("AuraDatePlannerDB") is ONE database per browser origin, shared by every
+// ?room=<id> opened there — its rows carry no room id. Everything cloud-side is namespaced per room,
+// but without this, opening ?room=55 in a browser that had opened ?room=77 left 77's places and photos
+// sitting in the local DB: they showed up in room 55's lists, calendar and "우리의 러블리 메모리"
+// widget, and loadFromCloud() would even push them into room 55's cloud node when it was empty.
+// So remember which room the local DB currently holds, and when a different room is opened, empty it
+// (plus the sync bookkeeping that refers to its rows) and let the normal cloud pull refill it with
+// only the new room's data. Nothing is lost by this — the cloud copy is the source of truth. The
+// first run after this shipped has no marker yet; adopt the current room without wiping, so the
+// couple's existing devices don't re-download their whole photo library for no reason.
+const LOCAL_DB_ROOM_KEY = "aura_local_db_room";
+async function ensureLocalDbMatchesRoom() {
+    const owner = localStorage.getItem(LOCAL_DB_ROOM_KEY);
+    if (owner === null) {
+        localStorage.setItem(LOCAL_DB_ROOM_KEY, syncRoomId);
+        return false;
+    }
+    if (owner === syncRoomId) return false;
+
+    console.warn(`[Room] Local DB held room '${owner}', now opening '${syncRoomId}' — clearing local places.`);
+    await db.places.clear();
+    // These refer to the old room's Dexie rows (by id) and its in-flight uploads; they mean nothing
+    // for the new room, and a stale "pending" flag would block pulling its data entirely.
+    ["aura_pending_place_ids", "aura_pending_photo_place_ids", "aura_pending_mutation_ts", "aura_pending_settings"]
+        .forEach(k => localStorage.removeItem(k));
+    localMutationTimestamp = 0;
+    lastSyncedTimestamp = 0;
+    // The "photos unchanged since last pull" marker is per room and survives in localStorage, but the
+    // photos it vouches for just got wiped from the DB — reset it or they'd never be re-downloaded.
+    localStorage.removeItem(photosVersionStorageKey());
+    lastKnownPhotosVersion = 0;
+    localStorage.setItem(LOCAL_DB_ROOM_KEY, syncRoomId);
+    return true;
+}
+
 let syncIntervalId = null;
 let photoSyncIntervalId = null;
 let isUploading = false;
@@ -354,6 +389,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (kakaoApiKey) {
         loadKakaoPlacesScript(kakaoApiKey);
     }
+
+    // Before anything reads or pushes local places: make sure the local DB holds THIS room's data
+    // and not leftovers from another ?room= opened earlier in this browser.
+    await ensureLocalDbMatchesRoom();
 
     // Cleanup legacy test comments & deduplicate junk places if present
     await cleanJunkData(false);
@@ -5516,6 +5555,15 @@ async function saveSettings() {
         customMemoryPhotos = getStoredMemoryPhotos();
         lastKnownMemoryPhotosVersion = parseInt(localStorage.getItem(memoryPhotosVersionStorageKey()) || '0', 10) || 0;
         lastKnownPhotosVersion = parseInt(localStorage.getItem(photosVersionStorageKey()) || '0', 10) || 0;
+        // The local places table isn't room-scoped, so the old room's places/photos must go too (and
+        // the new room's pulled in), or they keep showing under the new room — this includes the
+        // photos the memory widget collects from visited places.
+        if (await ensureLocalDbMatchesRoom()) {
+            await updateDashboardStats();
+            await renderPlacesList();
+            await renderCalendar();
+            loadFromCloud();
+        }
         await renderLovelyMemoryGallery();
     }
 
