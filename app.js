@@ -31,6 +31,34 @@ if (window.auraDebugOn) {
     }, 6000);
 }
 
+// Photos are stored inline as base64 (~200KB each; the couple's room has 400+, ~80MB). Putting every
+// one into the page as <img src="data:..."> up front made each render parse and decode all of it,
+// which is what made the app crawl on a phone. Instead each <img> starts as a 1px placeholder and
+// gets its real source only when it's about to scroll into view. The sources live in a WeakMap, not
+// in the HTML, so building a few hundred of these is cheap.
+const LAZY_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const lazyPhotoSources = new WeakMap();
+const lazyPhotoObserver = ("IntersectionObserver" in window)
+    ? new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            const img = entry.target;
+            lazyPhotoObserver.unobserve(img);
+            const src = lazyPhotoSources.get(img);
+            if (src) img.src = src;
+        });
+    }, { rootMargin: "400px" })
+    : null;
+function setLazyPhoto(img, src) {
+    if (!lazyPhotoObserver) {
+        img.src = src;
+        return;
+    }
+    lazyPhotoSources.set(img, src);
+    img.src = LAZY_PIXEL;
+    lazyPhotoObserver.observe(img);
+}
+
 // 1. Initialize Dexie Database
 const db = new Dexie("AuraDatePlannerDB");
 db.version(2).stores({
@@ -453,6 +481,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderLovelyMemoryGallery();
     checkApiKeyAlert();
     startCloudSyncLoop();
+    // Resume photos a previous (interrupted) session didn't finish; a single tiny request when
+    // everything is already current. Not awaited — see loadFromCloud.
+    loadPhotosFromCloud();
     window.auraDbg("init 완료");
 
     // Lucide Icons Initialization
@@ -4048,7 +4079,7 @@ async function renderPlacesList() {
                             </div>
                             <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
                                 ${orderedIndices.map(pIdx => `
-                                    <img src="${photoList[pIdx]}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+                                    <img src="${LAZY_PIXEL}" data-pidx="${pIdx}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
                                 `).join('')}
                             </div>
                         </div>
@@ -4056,6 +4087,11 @@ async function renderPlacesList() {
                 }
                 
                 card.innerHTML = cardContent;
+                // The thumbnails above are 1px placeholders; hand each its real photo lazily (see
+                // setLazyPhoto) instead of embedding every full-size base64 photo in this HTML string.
+                card.querySelectorAll(".card-photo-thumbnails img[data-pidx]").forEach(img => {
+                    setLazyPhoto(img, photoList[Number(img.dataset.pidx)]);
+                });
                 visitedContainer.appendChild(card);
             });
         }
@@ -4067,7 +4103,7 @@ async function renderPlacesList() {
     // used to render only at startup/its own upload — so a photo added, deleted, or synced in from
     // the partner's device never showed up there until a full reload. Anything that re-renders the
     // place list has (or may have) changed those photos, so refresh the widget alongside it.
-    renderLovelyMemoryGallery();
+    scheduleMemoryWidgetRefresh();
 
     // Preserve scroll position
     if (mainContent && savedScrollTop > 0) {
@@ -4783,7 +4819,9 @@ async function loadFromCloud() {
                     await updateDashboardStats();
                     await renderPlacesList();
                     updateMapMarkers();
-                    await loadPhotosFromCloud();
+                    // Not awaited: on a first load this is the whole photo library, and startup must
+                    // not sit on a blank screen until it's done. Photos fill in as they arrive.
+                    loadPhotosFromCloud();
                 }
             }
         }
@@ -4956,22 +4994,41 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
     }
 }
 
+// A first load on a new device/origin pulls the whole photo library (80MB+ in the couple's room), which
+// takes minutes on a phone connection. loadFromCloud() no longer waits for it, so the 45s poller (or a
+// second loadFromCloud) can easily start another pass while one is still running — don't let two
+// passes download the same places at once. And show photos as they arrive instead of all at the end.
+let photoLoadInFlight = false;
+let photoProgressTimer = null;
+function schedulePlacesRefresh() {
+    clearTimeout(photoProgressTimer);
+    photoProgressTimer = setTimeout(() => renderPlacesList(), 1500);
+}
+
 async function loadPhotosFromCloud() {
     if (!syncRoomId) return;
     // Same pending-edit guard as loadFromCloud() — a local photo add/delete not yet confirmed
     // uploaded shouldn't be clobbered by a stale cloud snapshot pulled in the meantime.
     if (localMutationTimestamp > lastSyncedTimestamp) return;
+    if (photoLoadInFlight) return;
+    photoLoadInFlight = true;
     try {
         // Cheap check first (a few bytes) — skip everything else when nothing changed since our
         // last pull. This is what was blowing through Firebase's download quota: every device
         // re-fetched every photo, every 10 seconds, forever.
         const versionUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photosVersion.json?t=${Date.now()}`;
         const versionResp = await fetch(versionUrl, { cache: 'no-store' });
+        // Recorded only AFTER every place below has downloaded. It used to be recorded right here,
+        // before any photo arrived, so closing/reloading the app partway through a slow download left
+        // "photos are up to date" on record with half of them missing — and nothing ever fetched the
+        // rest. (Each place's own photoVersion still lets a retry skip the ones already done.)
+        let versionToRecord;
         if (versionResp.ok) {
             const remoteVersion = await versionResp.json();
             if (remoteVersion && remoteVersion === lastKnownPhotosVersion) return;
-            setLastKnownPhotosVersion(remoteVersion);
+            versionToRecord = remoteVersion;
         }
+        let allPlacesFetched = true;
 
         // Second cheap check: a placeKey -> timestamp map (numbers only, no image bytes) tells us
         // exactly WHICH place changed, so only that place's actual photos get downloaded below —
@@ -5003,7 +5060,7 @@ async function loadPhotosFromCloud() {
             // Only now — for this one place — download its actual image data.
             const photoUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json?t=${Date.now()}`;
             const photoResp = await fetch(photoUrl, { cache: 'no-store' });
-            if (!photoResp.ok) continue;
+            if (!photoResp.ok) { allPlacesFetched = false; continue; }
             const entry = await photoResp.json();
             if (!entry) continue;
 
@@ -5017,14 +5074,18 @@ async function loadPhotosFromCloud() {
                     photoVersion: remoteTs
                 });
                 changed = true;
+                schedulePlacesRefresh();
             } else {
                 // Content already matches — just remember the version so this place isn't re-fetched every poll.
                 await db.places.update(place.id, { photoVersion: remoteTs });
             }
         }
 
+        if (allPlacesFetched && versionToRecord !== undefined) setLastKnownPhotosVersion(versionToRecord);
+
         if (changed) {
             console.log("[Photo Sync] Photos successfully synchronized across devices.");
+            clearTimeout(photoProgressTimer);
             await renderPlacesList();
             if (currentActiveTab === "gallery") {
                 renderGallery();
@@ -5032,6 +5093,8 @@ async function loadPhotosFromCloud() {
         }
     } catch (e) {
         console.error('[Photo Sync] Load failed:', e);
+    } finally {
+        photoLoadInFlight = false;
     }
 }
 
@@ -6202,7 +6265,7 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
 }
 
 async function renderGallery() {
-    renderLovelyMemoryGallery();
+    scheduleMemoryWidgetRefresh();
     const mainContent = document.querySelector(".main-content");
     const savedScrollTop = mainContent ? mainContent.scrollTop : 0;
     const savedWindowY = window.scrollY || document.documentElement.scrollTop;
@@ -6619,6 +6682,16 @@ function persistMemoryPhotosLocally() {
 let activeMemoryPhotosList = [];
 let activeMemoryPhotoIndex = 0;
 
+// Many callers re-render the place list / gallery in quick succession (startup, every sync that
+// changed something, photo downloads finishing), and each of those used to rebuild this whole widget.
+// The widget only depends on the photo list, so coalesce those bursts into one trailing refresh.
+let memoryWidgetRefreshTimer = null;
+function scheduleMemoryWidgetRefresh() {
+    clearTimeout(memoryWidgetRefreshTimer);
+    memoryWidgetRefreshTimer = setTimeout(() => renderLovelyMemoryGallery(), 400);
+}
+
+let lastRenderedMemoryPhotos = null;
 async function renderLovelyMemoryGallery() {
     const grid = document.getElementById("dashboard-memory-grid");
     if (!grid) return;
@@ -6630,36 +6703,46 @@ async function renderLovelyMemoryGallery() {
         if (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1") {
             const list = p.photos || (p.photo ? [p.photo] : []);
             list.forEach(src => {
-                if (src && !placePhotos.includes(src)) {
-                    placePhotos.push(src);
-                }
+                if (src) placePhotos.push(src);
             });
         }
     });
 
-    // 2. Combine custom memory photos and place photos
+    // 2. Combine custom memory photos and place photos (deduped — via a Set, since each entry is a
+    // ~200KB base64 string and includes() on a few hundred of them is quadratic string comparison)
+    const seen = new Set();
     const combinedPhotos = [];
-    if (Array.isArray(customMemoryPhotos)) {
-        customMemoryPhotos.forEach(src => {
-            if (src && !combinedPhotos.includes(src)) {
-                combinedPhotos.push(src);
-            }
-        });
-    }
-    placePhotos.forEach(src => {
-        if (src && !combinedPhotos.includes(src)) {
+    const addUnique = (src) => {
+        if (src && !seen.has(src)) {
+            seen.add(src);
             combinedPhotos.push(src);
         }
-    });
+    };
+    if (Array.isArray(customMemoryPhotos)) customMemoryPhotos.forEach(addUnique);
+    placePhotos.forEach(addUnique);
 
     const displayPhotos = combinedPhotos.length > 0 ? combinedPhotos : DEFAULT_MEMORY_PHOTOS;
     activeMemoryPhotosList = displayPhotos;
+
+    // Same photos in the same order as what's already on screen: nothing to rebuild.
+    if (lastRenderedMemoryPhotos
+        && lastRenderedMemoryPhotos.length === displayPhotos.length
+        && lastRenderedMemoryPhotos.every((s, i) => s === displayPhotos[i])
+        && grid.childElementCount === displayPhotos.length) {
+        return;
+    }
+    lastRenderedMemoryPhotos = displayPhotos;
 
     grid.innerHTML = "";
     displayPhotos.forEach((imgSrc, idx) => {
         const item = document.createElement("div");
         item.className = "memory-item";
-        item.innerHTML = `<img src="${imgSrc}" alt="Lovely Memory ${idx + 1}" class="gallery-img" onclick="openMemoryLightboxModal(${idx})">`;
+        const img = document.createElement("img");
+        img.alt = `Lovely Memory ${idx + 1}`;
+        img.className = "gallery-img";
+        img.onclick = () => openMemoryLightboxModal(idx);
+        setLazyPhoto(img, imgSrc);
+        item.appendChild(img);
         grid.appendChild(item);
     });
 }

@@ -20,17 +20,21 @@
         window.auraDbg = function () {};
         if (/[?&]debug=1(&|$)/.test(location.search)) {
             (function () {
-                var box;
+                var box, dismissed = false;
                 function line(text) {
+                    if (dismissed) return;
                     if (!box) {
                         box = document.createElement("pre");
-                        box.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;margin:0;padding:6px 8px;background:rgba(0,0,0,.85);color:#9f9;font:11px/1.35 monospace;white-space:pre-wrap;word-break:break-all;z-index:2147483647;pointer-events:none";
+                        box.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;margin:0;padding:6px 8px;background:rgba(0,0,0,.85);color:#9f9;font:11px/1.35 monospace;white-space:pre-wrap;word-break:break-all;z-index:2147483647";
+                        // Tap the panel to close it (it sits over the bottom nav).
+                        box.addEventListener("click", function () { dismissed = true; box.remove(); });
                         document.documentElement.appendChild(box);
                     }
                     box.textContent += text + "\n";
                 }
                 window.auraDebugOn = true;
                 window.auraDbg = function (m) { line("· " + m); };
+                line("(이 패널을 탭하면 닫힙니다)");
                 line("UA: " + navigator.userAgent);
                 line("URL: " + location.href);
                 window.addEventListener("error", function (e) {
@@ -67,7 +71,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261020_v387">
+    <link rel="stylesheet" href="style.css?v=20261020_v388">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -1013,13 +1017,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261020_v387"></script>
+    <script src="app.js?v=20261020_v388"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261020_v387').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261020_v388').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
