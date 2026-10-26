@@ -2644,3 +2644,24 @@ body {
 }
 /* Compact circular dot styling for narrow screens now lives in one place — see the
    @media (max-width: 768px) block near the top of this file. */
+
+/* iOS Safari / WebKit only (-webkit-touch-callout exists nowhere else, so Android and desktop are
+   untouched). WebKit renders every backdrop-filter element as its own blurred layer: this page has ~160
+   of them (every .card, .stat-card, the navs) plus three fixed 450-500px circles under blur(120px), and
+   on a partner's iPhone the page's main thread stalled for 5+ seconds at startup. Under those cards sits
+   nothing but the smooth page gradient, so the blur is all cost and almost no look. The .bg-glow circles
+   are already radial gradients that fade to transparent, so their extra filter was redundant too.
+   One blurred layer is kept: the dark overlay behind an open modal (a single element). */
+@supports (-webkit-touch-callout: none) {
+    * {
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+    }
+    .bg-glow {
+        filter: none;
+    }
+    .modal-overlay {
+        -webkit-backdrop-filter: blur(8px) !important;
+        backdrop-filter: blur(8px) !important;
+    }
+}

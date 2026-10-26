@@ -48,6 +48,14 @@
                         line(at() + "✗ " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno);
                     }
                 }, true);
+                // Main-thread stall monitor: a 200ms ticker that notices when it runs late. A page that is busy
+                // painting/layout can't run timers, so a late tick means the screen was frozen that long.
+                var lastTick = performance.now();
+                setInterval(function () {
+                    var now = performance.now(), late = now - lastTick - 200;
+                    lastTick = now;
+                    if (late > 1000 && document.visibilityState === "visible") line(at() + "⚠ 화면 처리가 " + (late / 1000).toFixed(1) + "초 멈췄었음");
+                }, 200);
                 window.addEventListener("unhandledrejection", function (e) {
                     var r = e.reason;
                     line(at() + "✗ (promise) " + (r && r.message ? r.message : r));
@@ -72,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261026_v394">
+    <link rel="stylesheet" href="style.css?v=20261026_v395">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -1018,13 +1026,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261026_v394"></script>
+    <script src="app.js?v=20261026_v395"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261026_v394').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261026_v395').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
