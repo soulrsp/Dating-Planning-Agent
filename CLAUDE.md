@@ -59,6 +59,29 @@ one in lockstep — there's no script for this, it's manual.
   empties it when a different room is opened (startup and the Settings room switch), so one room's
   places/photos never show up in, or get pushed to, another. Anything new that reads `db.places` can
   rely on that; don't add a second per-room mechanism alongside it.
+- **Place text is written field by field.** `triggerSyncUpload(id, fields)` takes the keys an edit actually
+  changed and `savePlaceToCloud` PATCHes just those (when the node already exists); `triggerSyncUpload(id)`
+  with no list writes the whole record (new place, rename, delete). The pending field list survives in
+  `aura_pending_place_fields` so a retry after a reload writes the same thing. Never submit a whole form
+  over a cloud node: a blank or stale local copy of a field the person didn't touch would erase it for
+  both people. `handleEditPlaceSubmit` diffs against the stored row and skips saving when nothing changed.
+- **Photos are replaced as a whole list.** A place's photos live in one cloud node (`photos/{nameKey}`),
+  and any photo add/remove uploads this device's whole list over it, last write wins. Before replacing it,
+  call `photoBaselineProblem(place)` (it checks the device's last-synced `photoVersion` against the cloud's
+  and refuses while a download is running); if it returns a message, show it, call `kickPhotoResync()` and
+  write nothing. `handleEditPlaceSubmit` only touches photos when they changed or the place is renamed.
+- **A photo's string is not its identity.** Before v391 the edit screen re-compressed every existing photo
+  on each save, so the same picture exists as different base64 strings on different devices; comparing
+  photos with `===` makes a merge add every one of them again (that doubled a 65-photo album to 138). To
+  ask "does the other list already have this picture?" use `photoThumb` + `samePhoto`
+  (`SAME_PHOTO_MAX_DIFF`, calibrated in its comment), and only ever compare ACROSS two lists — an album can
+  legitimately hold two near-identical shots, so never dedupe within one list by looks.
+- **Recovery mode (`?room=<id>&recover=1`)** replaces the app with `runRecoveryMode()`: no cloud pulls, no
+  cleanup, no wipe, so a device that still holds a lost copy can be opened without destroying it. It lists
+  this device's places and pushes text (`savePlaceToCloud`) and photos (`uploadPhotoToCloud`) back up
+  separately, refusing a photo push that would shrink the cloud's list. Local rows are append-only
+  relative to the cloud (a place deleted *without* a tombstone survives on other devices), which is what
+  makes this recovery possible.
 - Every Firebase REST call must carry the signed-in user's ID token as `?auth=`. This is done once via
   a `window.fetch` monkey-patch (`patchFetchForAuth()`, right after the auth gate) rather than at each
   of the ~20 call sites — don't hand-add `auth=` params to new fetch calls, the patch already does it

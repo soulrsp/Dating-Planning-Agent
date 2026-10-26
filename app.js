@@ -31,6 +31,13 @@ if (window.auraDebugOn) {
     }, 6000);
 }
 
+// ?recover=1 opens a recovery screen instead of the app: nothing is pulled from the cloud, nothing on
+// this device is cleaned up or overwritten, and the person can push what THIS device still has back to
+// the cloud, place by place. See runRecoveryMode() at the end of the file. It exists because every
+// normal launch syncs down from the cloud within seconds — so a device that still holds the only good
+// copy of something the cloud lost would otherwise destroy that copy the moment it's opened.
+const RECOVER_MODE = /[?&]recover=1(&|$)/.test(location.search);
+
 // Photos are stored inline as base64 (~200KB each; the couple's room has 400+, ~80MB). Putting every
 // one into the page as <img src="data:..."> up front made each render parse and decode all of it,
 // which is what made the app crawl on a phone. Instead each <img> starts as a 1px placeholder and
@@ -315,7 +322,7 @@ function waitForAuthGate() { return authGateReady; }
         currentIdToken = await user.getIdToken();
         if (emailLabel) emailLabel.textContent = user.email;
         if (gateEl) gateEl.style.display = "none";
-        if (appEl) appEl.style.display = "";
+        if (appEl) appEl.style.display = RECOVER_MODE ? "none" : "";
         if (resolveAuthGate) { resolveAuthGate(); resolveAuthGate = null; }
     });
 })();
@@ -386,7 +393,7 @@ async function ensureLocalDbMatchesRoom() {
     invalidatePlacesSnapshot();
     // These refer to the old room's Dexie rows (by id) and its in-flight uploads; they mean nothing
     // for the new room, and a stale "pending" flag would block pulling its data entirely.
-    ["aura_pending_place_ids", "aura_pending_photo_place_ids", "aura_pending_mutation_ts", "aura_pending_settings"]
+    ["aura_pending_place_ids", "aura_pending_place_fields", "aura_pending_photo_place_ids", "aura_pending_mutation_ts", "aura_pending_settings"]
         .forEach(k => localStorage.removeItem(k));
     localMutationTimestamp = 0;
     lastSyncedTimestamp = 0;
@@ -410,6 +417,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Block here until a signed-in, allowlisted Google account is confirmed — nothing below (sync
     // loop, Firebase reads, event wiring) should run for an unauthenticated or disallowed visitor.
     await waitForAuthGate();
+    if (RECOVER_MODE) {
+        window.auraDbg("복구 모드로 시작 — 클라우드 동기화와 정리 작업을 모두 건너뜀");
+        await runRecoveryMode();
+        return;
+    }
     window.auraDbg("init 시작 (방: " + syncRoomId + ")");
     db.places.count().then(n => window.auraDbg("로컬DB 정상: " + n + "곳")).catch(e => window.auraDbg("로컬DB 실패: " + (e && e.message ? e.message : e)));
 
@@ -508,7 +520,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     startCloudSyncLoop();
     // Resume photos a previous (interrupted) session didn't finish; a single tiny request when
     // everything is already current. Not awaited — see loadFromCloud.
-    loadPhotosFromCloud();
+    flushPendingPhotoUploads().then(() => loadPhotosFromCloud());
+    if (window.auraDebugOn) {
+        getPlaces().then(rows => {
+            const n = rows.reduce((sum, p) => sum + (p.photos ? p.photos.length : (p.photo ? 1 : 0)), 0);
+            window.auraDbg(`기기에 저장된 사진: ${n}장 (장소 ${rows.length}곳)`);
+        });
+    }
     window.auraDbg("init 완료");
 
     // Lucide Icons Initialization
@@ -2864,6 +2882,18 @@ async function handleVisitLogSubmit(e) {
             }
         }
 
+        // This save REPLACES the place's cloud photo list with only the photos picked here, so be sure
+        // this device isn't about to overwrite photos it doesn't know about (see photoBaselineProblem).
+        if (syncRoomId && photosBase64.length > 0) {
+            const visitPlace = await db.places.get(id);
+            const photoProblem = await photoBaselineProblem(visitPlace);
+            if (photoProblem) {
+                showToast(photoProblem, "danger");
+                kickPhotoResync();
+                return;
+            }
+        }
+
         const updateObj = {
             isVisited: 1,
             peopleCount: 2,
@@ -3040,7 +3070,7 @@ window.quickEditComment = async function(id, partnerKey) {
         await db.places.update(id, updateObj);
         showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
         await renderPlacesList();
-        triggerSyncUpload(id);
+        triggerSyncUpload(id, [fieldKey]);
     }
 };
 
@@ -3071,39 +3101,82 @@ async function handleEditPlaceSubmit(e) {
         return;
     }
 
-    let updatePayload = {
-        name: name,
-        category: category,
-        notes: addressVal,
-        createdAt: updatedDate,
+    // Only the fields this edit actually CHANGES are written, locally and (via triggerSyncUpload's field
+    // list) to the cloud. The form used to submit every field it showed, so saving after, say, adding
+    // photos re-sent the date and both comments too — and whenever this device's copy of those was blank
+    // or stale, that silently erased them for both people. "Unchanged" is judged against what the form
+    // showed: the address with its "- AURA ..." tag stripped, dates by calendar day.
+    const cleanedOldNotes = (place.notes || "").replace(/s*-s*AURA.*$/, "").replace(/^💡s*메모:s*/, "").trim();
+    const newCommentA = commentAEl ? commentAEl.value.trim() : (place.commentA || "");
+    const newCommentB = commentBEl ? commentBEl.value.trim() : (place.commentB || "");
+    const oldStart = place.createdAt || place.date;
+    const normEnd = (start, end) => { const e = toLocalDateKey(end); return e && e !== toLocalDateKey(start) ? e : ""; };
+    const dateChanged = toLocalDateKey(updatedDate) !== toLocalDateKey(oldStart)
+        || normEnd(updatedDate, updatedEndDate) !== normEnd(oldStart, place.endDate);
+
+    const oldName = place.name;
+    const nameChanged = placeNameKey(name) !== placeNameKey(oldName);
+
+    const textChanges = {};
+    if (name !== place.name) textChanges.name = name;
+    if (category !== place.category) textChanges.category = category;
+    if (addressVal !== cleanedOldNotes) textChanges.notes = addressVal;
+    if (dateChanged) {
+        textChanges.createdAt = updatedDate;
         // 기간(여러 날짜) 체크를 해제하면 null로 확실히 지워서 다시 당일 하루로 되돌린다.
-        endDate: updatedEndDate,
-        commentA: commentAEl ? commentAEl.value.trim() : (place.commentA || ""),
-        commentB: commentBEl ? commentBEl.value.trim() : (place.commentB || "")
-    };
+        textChanges.endDate = updatedEndDate;
+    }
+    if (newCommentA !== (place.commentA || "")) textChanges.commentA = newCommentA;
+    if (newCommentB !== (place.commentB || "")) textChanges.commentB = newCommentB;
+    let updatePayload = { ...textChanges };
 
     // Photos are read here but NOT uploaded yet — uploadPhotoToCloud(id, ...) re-reads
     // db.places.get(id) to derive the cloud key from the place's CURRENT name, so calling it before
     // the rename below is applied to Dexie would upload under the stale pre-rename name. Uploaded
     // after db.places.update() instead (see below), once "id" actually resolves to the new name.
+    //
+    // Photos are only touched when this edit actually changes them (a photo added/removed) or the
+    // place is being renamed (its photos have to move to the new name's cloud key). A comment/date
+    // edit used to recompress and re-upload every photo anyway — wasteful, and since an upload REPLACES
+    // the cloud's whole photo list, it was also a way to overwrite photos this device hadn't finished
+    // downloading with whatever partial list it happened to hold.
     let photosBase64 = null;
     if (place.isVisited === 1) {
-        const editPhotoImgs = document.querySelectorAll("#edit-place-photo-preview img");
-        if (editPhotoImgs.length > 0) {
-            photosBase64 = [];
-            for (let i = 0; i < editPhotoImgs.length; i++) {
-                const compressed = await compressBase64Image(editPhotoImgs[i].src);
-                if (compressed) photosBase64.push(compressed);
+        const editPhotoImgs = Array.from(document.querySelectorAll("#edit-place-photo-preview img"));
+        const localList = place.photos || (place.photo ? [place.photo] : []);
+        const photosChanged = editPhotoImgs.length !== localList.length || editPhotoImgs.some((img, i) => img.src !== localList[i]);
+        if (editPhotoImgs.length > 0 && (photosChanged || nameChanged)) {
+            // Never replace the cloud's photo list from a list this device doesn't know to be current.
+            if (syncRoomId) {
+                const problem = await photoBaselineProblem(place);
+                if (problem) {
+                    showToast(problem, "danger");
+                    kickPhotoResync();
+                    return;
+                }
             }
-            if (photosBase64.length > 0) {
-                updatePayload.photo = photosBase64[0];
-                updatePayload.photos = photosBase64;
+            if (photosChanged) {
+                photosBase64 = [];
+                for (let i = 0; i < editPhotoImgs.length; i++) {
+                    const compressed = await compressBase64Image(editPhotoImgs[i].src);
+                    if (compressed) photosBase64.push(compressed);
+                }
+                if (photosBase64.length > 0) {
+                    updatePayload.photo = photosBase64[0];
+                    updatePayload.photos = photosBase64;
+                }
+            } else {
+                photosBase64 = localList.slice();
             }
         }
     }
 
-    const oldName = place.name;
-    const nameChanged = placeNameKey(name) !== placeNameKey(oldName);
+
+    if (Object.keys(updatePayload).length === 0 && !photosBase64) {
+        showToast("변경된 내용이 없어요.", "info");
+        closeEditPlaceModal();
+        return;
+    }
 
     try {
         await db.places.update(id, updatePayload);
@@ -3112,7 +3185,11 @@ async function handleEditPlaceSubmit(e) {
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload(id);
+        // A rename writes the whole record under the new key; otherwise only the text fields that
+        // changed go up (and nothing at all if only photos changed — they have their own upload).
+        const textKeys = Object.keys(textChanges);
+        if (nameChanged) triggerSyncUpload(id);
+        else if (textKeys.length > 0) triggerSyncUpload(id, textKeys);
 
         if (syncRoomId && photosBase64 && photosBase64.length > 0) {
             await uploadPhotoToCloud(id, photosBase64);
@@ -4419,6 +4496,9 @@ function startCloudSyncLoop() {
 
     photoSyncIntervalId = setInterval(async () => {
         if (document.visibilityState !== 'visible') return;
+        // Retry photo uploads that never finished (a no-op when nothing is pending) before pulling —
+        // pulling skips those places, so this is what eventually gets them out.
+        await flushPendingPhotoUploads();
         await loadPhotosFromCloud();
         await loadMemoryPhotosFromCloud();
     }, 45000);
@@ -4472,12 +4552,39 @@ async function savePlaceToCloud(placeId, attempt = 1) {
         if (!nameKey) return;
 
         const ts = Date.now();
-        const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}.json?print=silent`;
-        const response = await fetch(url, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(copy)
-        });
+        const nodeUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}`;
+        const url = `${nodeUrl}.json?print=silent`;
+
+        // Writing the WHOLE place over its cloud node means every field this device holds replaces the
+        // cloud's — including ones the person never touched. If this device's copy of them is blank or
+        // stale (a place it hadn't finished syncing, a second copy of the app on an old address...), an
+        // unrelated edit such as adding photos wipes the date and both comments for everyone. So when the
+        // caller knows exactly which fields changed (see triggerSyncUpload) and the node already exists,
+        // PATCH just those. Anything else — a new place, a rename (new key), a delete tombstone, a
+        // retry that lost track of the fields — still writes the whole record.
+        const pendingFields = getPendingPlaceFields()[placeId];
+        let fieldsToWrite = Array.isArray(pendingFields) && pendingFields.length > 0 ? pendingFields : null;
+        if (fieldsToWrite) {
+            const existing = await fetchJsonWithTimeout(`${nodeUrl}.json?shallow=true&t=${Date.now()}`, 15000);
+            if (!existing || typeof existing !== 'object') fieldsToWrite = null;
+        }
+        let response;
+        if (fieldsToWrite) {
+            const patch = {};
+            // null deletes the key in Firebase — that's how a cleared date (미정) or comment is written.
+            fieldsToWrite.forEach(f => { patch[f] = copy[f] === undefined ? null : copy[f]; });
+            response = await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patch)
+            });
+        } else {
+            response = await fetch(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(copy)
+            });
+        }
         if (!response.ok) throw new Error(`place write failed: ${response.status}`);
 
         // Cheap top-level marker other devices' loadFromCloud() polls to know something changed.
@@ -4861,12 +4968,15 @@ async function loadFromCloud() {
 // Pass the changed place's id for any place mutation (add/edit/delete/comment/etc) — that pushes
 // only that place's own cloud node (see savePlaceToCloud). Call with no argument only for
 // settings-only changes (partner names, API keys) — never for place data.
-function triggerSyncUpload(placeId) {
+// Pass `fields` (the place keys this edit actually changed) to have only those written to the cloud;
+// omit it to write the whole record (new place, rename, delete, anything unsure).
+function triggerSyncUpload(placeId, fields) {
     localMutationTimestamp = Date.now();
     // Survives a reload/close before the upload (or its retry) finishes — see the init comment above.
     localStorage.setItem('aura_pending_mutation_ts', String(localMutationTimestamp));
 
     if (placeId != null) {
+        notePendingPlaceFields(placeId, fields);
         const pending = JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]');
         if (!pending.includes(placeId)) {
             pending.push(placeId);
@@ -4880,7 +4990,28 @@ function triggerSyncUpload(placeId) {
 }
 
 // Removes a place id from the "not yet confirmed uploaded" list once its save actually succeeds.
+// Which fields of a pending place still need writing: an array of keys, or "*" for the whole record.
+// Kept in localStorage next to the pending ids so a retry after a reload writes the same thing.
+function getPendingPlaceFields() {
+    try { return JSON.parse(localStorage.getItem('aura_pending_place_fields') || '{}') || {}; } catch (e) { return {}; }
+}
+function setPendingPlaceFields(map) {
+    if (Object.keys(map).length > 0) localStorage.setItem('aura_pending_place_fields', JSON.stringify(map));
+    else localStorage.removeItem('aura_pending_place_fields');
+}
+function notePendingPlaceFields(placeId, fields) {
+    const map = getPendingPlaceFields();
+    if (!Array.isArray(fields)) {
+        map[placeId] = "*";                       // caller didn't say what changed: write everything
+    } else if (map[placeId] !== "*") {
+        map[placeId] = [...new Set([...(map[placeId] || []), ...fields])];
+    }
+    setPendingPlaceFields(map);
+}
+
 function clearPendingPlaceId(placeId) {
+    const fieldMap = getPendingPlaceFields();
+    if (placeId in fieldMap) { delete fieldMap[placeId]; setPendingPlaceFields(fieldMap); }
     const pending = JSON.parse(localStorage.getItem('aura_pending_place_ids') || '[]').filter(id => id !== placeId);
     if (pending.length > 0) {
         localStorage.setItem('aura_pending_place_ids', JSON.stringify(pending));
@@ -4921,8 +5052,20 @@ function getPendingPhotoPlaceIds() {
 // permanently on any hiccup (a 401 during the rules lockdown, a 400 from the old oversized-payload
 // bug, a dropped connection), leaving the place's photo stuck locally with nothing to show it was
 // ever lost. Real place: 한국전통문화대학교's photo never reached the cloud at all until this was added.
-async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1) {
+// Each upload replaces the place's whole cloud photo list, and a failed one retries later with the list
+// it captured. If the person saved again in between (a newer list, already uploaded), the old retry
+// would land afterwards and put the OLDER, smaller list back over it. Every call takes a sequence number
+// for its place and a retry gives up as soon as a newer call exists.
+const photoUploadSeq = new Map();
+async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1, seq = null) {
     if (!syncRoomId) return;
+    if (seq === null) {
+        seq = (photoUploadSeq.get(placeIdOrName) || 0) + 1;
+        photoUploadSeq.set(placeIdOrName, seq);
+    } else if (photoUploadSeq.get(placeIdOrName) !== seq) {
+        console.warn('[Photo Sync] Dropping a stale retry — a newer photo save for this place superseded it.');
+        return;
+    }
     const MAX_ATTEMPTS = 4;
     // Only numeric place ids participate in the pending-photo guard (see markPendingPhotoPlaceId) —
     // every real call site passes one; a bare name string (no local place row) has nothing for
@@ -5002,11 +5145,17 @@ async function uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt = 1)
         // This device already has the change it just made — remember the version now so its own
         // next poll doesn't immediately re-download the photo library it just uploaded.
         setLastKnownPhotosVersion(ts);
-        if (placeId != null) clearPendingPhotoPlaceId(placeId);
+        if (placeId != null) {
+            clearPendingPhotoPlaceId(placeId);
+            // This device just uploaded exactly these photos; record that version on the row too, or the
+            // next photo poll sees "cloud version != local version" and downloads this place's whole
+            // photo list back down just to find out it's identical.
+            if (!isDelete) await db.places.update(placeId, { photoVersion: ts });
+        }
     } catch (e) {
         console.error(`[Photo Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, e);
         if (attempt < MAX_ATTEMPTS) {
-            setTimeout(() => uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt + 1), 3000 * attempt);
+            setTimeout(() => uploadPhotoToCloud(placeIdOrName, base64ImagesArray, attempt + 1, seq), 3000 * attempt);
         } else {
             console.error('[Photo Sync] Giving up after max retries — photo stayed local-only.');
             // Surface this instead of failing silently — a couple otherwise has no way to know a
@@ -5028,6 +5177,194 @@ let photoProgressTimer = null;
 function schedulePlacesRefresh() {
     clearTimeout(photoProgressTimer);
     photoProgressTimer = setTimeout(() => renderPlacesList(), 1500);
+}
+
+// A place's photos are stored in the cloud as ONE list, and every photo add/remove uploads this
+// device's whole list over it — last write wins. That's only safe if this device's list IS the cloud's
+// current list. It isn't while photos are still downloading (the app shows the card before they all
+// arrive), nor when another device changed the photos since this one last synced; saving then
+// silently replaces the cloud's list with a partial or stale one and the missing photos are gone for
+// good. So before replacing a place's cloud photo list, check that the version this device last
+// synced for the place is still the cloud's. Returns a message for the person when it isn't (the
+// caller must stop without writing anything), or null when it's safe to go ahead.
+async function photoBaselineProblem(place) {
+    if (!syncRoomId || !place) return null;
+    if (photoLoadInFlight) {
+        return "사진을 아직 내려받는 중이에요. 다 받은 뒤에 다시 시도해주세요. (그대로 저장하면 클라우드의 사진이 사라질 수 있어요)";
+    }
+    let remoteTs;
+    try {
+        remoteTs = await fetchJsonWithTimeout(
+            `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photoVersions/${encodeURIComponent(placeNameKey(place.name))}.json?t=${Date.now()}`,
+            15000
+        );
+    } catch (e) {
+        return "클라우드의 사진 상태를 확인하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.";
+    }
+    if (!remoteTs) return null;                       // the cloud has no photos for this place yet
+    if (place.photoVersion === remoteTs) return null; // this device's list is exactly the cloud's
+    return "이 기기의 사진 목록이 클라우드와 달라요 (다른 기기에서 사진이 바뀌었거나 아직 다 받지 못했어요). 그대로 저장하면 클라우드의 사진이 사라질 수 있어서 막았어요. 최신 사진을 받아오는 중이니 잠시 후 다시 시도해주세요.";
+}
+
+// After a blocked save: make sure the missing/stale photos actually get fetched (clearing the
+// "photos are current" marker forces a per-place pass instead of an early return).
+function kickPhotoResync() {
+    lastKnownPhotosVersion = 0;
+    localStorage.removeItem(photosVersionStorageKey());
+    loadPhotosFromCloud();
+}
+
+// ── Photo download: one photo per request, resumable, with visible progress ───────────────────────
+// A place's photos used to come down as ONE request for the whole list (the biggest place is 84 photos,
+// ~19MB). On a weak LTE connection a single request that size often dies partway, the whole place
+// restarted from zero on the next try, and since the place never finished nothing ever marked photos as
+// up to date — so the phone kept retrying (and hogging the connection) forever, with no sign of it.
+// Now each photo is its own ~200KB request. Every photo that arrives is saved right away in a small
+// separate IndexedDB (so closing the app or losing signal only costs the photo in flight, and the next
+// launch continues where this one stopped), and the count is shown on screen.
+const photoPartsDb = new Dexie("AuraPhotoPartsDB");
+photoPartsDb.version(1).stores({ parts: "key" });
+
+async function fetchJsonWithTimeout(url, ms) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+        const r = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return await r.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function fetchPhotoPart(url) {
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            return await fetchJsonWithTimeout(url, 40000);
+        } catch (e) {
+            lastErr = e;
+            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+        }
+    }
+    throw lastErr;
+}
+
+// Photos requested at once. Many small requests are latency-bound, so a few in parallel is much
+// faster than one at a time; more than ~6 per host doesn't help a browser and just starves the rest of
+// the page on a slow link.
+const PHOTO_DOWNLOAD_CONCURRENCY = 6;
+
+const photoSyncProgress = { total: 0, done: 0, bytes: 0, startedAt: 0, lastLogged: 0 };
+
+function updatePhotoSyncBanner() {
+    let el = document.getElementById("photo-sync-progress");
+    // Only worth showing for a real batch; one newly added photo shouldn't flash a banner.
+    if (photoSyncProgress.total - photoSyncProgress.done <= 0 || photoSyncProgress.total < 10) {
+        if (el) el.remove();
+        return;
+    }
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "photo-sync-progress";
+        el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:9000;background:rgba(40,40,40,.88);color:#fff;font-size:12px;padding:6px 12px;border-radius:999px;pointer-events:none;white-space:nowrap";
+        document.body.appendChild(el);
+    }
+    const pct = Math.round(photoSyncProgress.done * 100 / photoSyncProgress.total);
+    el.textContent = `📷 사진 내려받는 중 ${photoSyncProgress.done}/${photoSyncProgress.total} (${pct}%)`;
+}
+
+function tickPhotoSync(bytes) {
+    photoSyncProgress.done++;
+    photoSyncProgress.bytes += bytes;
+    updatePhotoSyncBanner();
+    if (photoSyncProgress.done - photoSyncProgress.lastLogged >= 20) {
+        photoSyncProgress.lastLogged = photoSyncProgress.done;
+        const sec = Math.max(1, Math.round((Date.now() - photoSyncProgress.startedAt) / 1000));
+        const mb = photoSyncProgress.bytes / 1048576;
+        window.auraDbg(`사진 ${photoSyncProgress.done}/${photoSyncProgress.total} · ${mb.toFixed(1)}MB · ${sec}초 · ${(mb * 1024 / sec).toFixed(0)}KB/s`);
+    }
+}
+
+// What does the cloud hold for this place, and how much of it do we already have saved from an
+// earlier, interrupted attempt at this same version?
+async function planPlacePhotoDownload(nameKey, remoteTs) {
+    const base = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}`;
+    const shallow = await fetchJsonWithTimeout(`${base}/imgList.json?shallow=true&t=${Date.now()}`, 20000);
+    let indexes = [];
+    if (shallow && typeof shallow === "object") {
+        indexes = Object.keys(shallow).map(Number).filter(Number.isInteger).sort((a, b) => a - b).map(String);
+    }
+    const partPrefix = `${syncRoomId}|${nameKey}|${remoteTs}|`;
+    const held = new Map();
+    (await photoPartsDb.parts.where("key").startsWith(partPrefix).toArray())
+        .forEach(r => held.set(r.key.slice(partPrefix.length), r.data));
+    return { base, nameKey, remoteTs, indexes, partPrefix, held };
+}
+
+// Returns the place's full photo list, or null if any photo couldn't be fetched yet (what did arrive
+// stays saved, so the next attempt only fetches the rest).
+async function downloadPlacePhotos(plan) {
+    const { base, indexes, partPrefix, held } = plan;
+
+    // Older nodes store a single photo as `img` with no list.
+    if (indexes.length === 0) {
+        const single = await fetchPhotoPart(`${base}/img.json?t=${Date.now()}`);
+        if (typeof single === "string" && single) {
+            tickPhotoSync(single.length);
+            return [single];
+        }
+        return [];
+    }
+
+    const todo = indexes.filter(i => !held.has(i));
+    let nextIdx = 0, incomplete = false;
+    const worker = async () => {
+        while (!incomplete && nextIdx < todo.length) {
+            const i = todo[nextIdx++];
+            try {
+                const data = await fetchPhotoPart(`${base}/imgList/${i}.json?t=${Date.now()}`);
+                if (typeof data !== "string" || !data) throw new Error("empty photo " + i);
+                held.set(i, data);
+                await photoPartsDb.parts.put({ key: partPrefix + i, data });
+                tickPhotoSync(data.length);
+            } catch (e) {
+                console.warn(`[Photo Sync] ${plan.nameKey} photo ${i} failed, will resume later:`, e);
+                incomplete = true;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(PHOTO_DOWNLOAD_CONCURRENCY, todo.length) }, worker));
+    if (incomplete) return null;
+
+    const list = indexes.map(i => held.get(i));
+    // Whole place assembled — the saved pieces have done their job.
+    await photoPartsDb.parts.where("key").startsWith(`${syncRoomId}|${plan.nameKey}|`).delete();
+    return list;
+}
+
+// A photo upload that gave up (weak signal, app closed mid-upload) leaves the place marked pending and
+// its photos only on this device — and loadPhotosFromCloud() deliberately skips pending places, so
+// nothing ever retried them. Retry them at startup, but only when this device's list is still based on
+// the cloud's current version (photoBaselineProblem); if another device changed the photos meanwhile,
+// leave it pending rather than overwrite theirs.
+async function flushPendingPhotoUploads() {
+    if (!syncRoomId) return;
+    for (const id of [...getPendingPhotoPlaceIds()]) {
+        try {
+            const place = await db.places.get(id);
+            if (!place) { clearPendingPhotoPlaceId(id); continue; }
+            const problem = await photoBaselineProblem(place);
+            if (problem) {
+                console.warn(`[Photo Sync] Not retrying pending photos for '${place.name}': ${problem}`);
+                continue;
+            }
+            window.auraDbg(`끝나지 않은 사진 업로드 이어서 올리는 중: ${place.name}`);
+            await uploadPhotoToCloud(id, place.photos || (place.photo ? [place.photo] : []));
+        } catch (e) {
+            console.warn('[Photo Sync] Pending photo retry failed:', e);
+        }
+    }
 }
 
 async function loadPhotosFromCloud() {
@@ -5072,27 +5409,68 @@ async function loadPhotosFromCloud() {
         // already been satisfied by an unrelated, already-confirmed place-text save.
         const pendingPhotoPlaceIdsNow = getPendingPhotoPlaceIds();
 
+        // Which places have photos we don't have yet? Newest visits first, so the cards at the top of
+        // the list fill in before the older ones.
+        const work = [];
         for (const place of places) {
             if (pendingPhotoPlaceIdsNow.has(place.id)) continue;
-
             const cleanName = (place.name || "").trim().toLowerCase();
             const nameKey = cleanName.replace(/[/\\?%*:|"<>. ]/g, "_");
             const encodedKey = encodeURIComponent(nameKey);
-
             const remoteTs = remoteVersions[nameKey] ?? remoteVersions[encodedKey] ?? remoteVersions[cleanName] ?? remoteVersions[place.id];
             if (!remoteTs || place.photoVersion === remoteTs) continue;
+            work.push({ place, nameKey, remoteTs });
+        }
+        work.sort((a, b) => parseAnyDate(b.place.createdAt || b.place.date) - parseAnyDate(a.place.createdAt || a.place.date));
 
-            // Only now — for this one place — download its actual image data.
-            const photoUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json?t=${Date.now()}`;
-            const photoResp = await fetch(photoUrl, { cache: 'no-store' });
-            if (!photoResp.ok) { allPlacesFetched = false; continue; }
-            const entry = await photoResp.json();
-            if (!entry) continue;
+        // Size up the whole batch first (a tiny request per place) so progress can say "120/404".
+        let planCursor = 0;
+        await Promise.all(Array.from({ length: Math.min(6, work.length) }, async () => {
+            while (planCursor < work.length) {
+                const item = work[planCursor++];
+                try {
+                    item.plan = await planPlacePhotoDownload(item.nameKey, item.remoteTs);
+                } catch (e) {
+                    console.warn(`[Photo Sync] couldn't size up ${item.nameKey}:`, e);
+                    allPlacesFetched = false;
+                }
+            }
+        }));
+        const plans = work.filter(item => item.plan);
 
-            const serverImgList = entry.imgList || (entry.img ? [entry.img] : []);
+        photoSyncProgress.total = plans.reduce((n, it) => n + Math.max(1, it.plan.indexes.length), 0);
+        photoSyncProgress.done = plans.reduce((n, it) => n + it.plan.held.size, 0);
+        photoSyncProgress.bytes = 0;
+        photoSyncProgress.lastLogged = photoSyncProgress.done;
+        photoSyncProgress.startedAt = Date.now();
+        if (plans.length > 0) {
+            window.auraDbg(`사진 받기 시작: ${plans.length}곳, ${photoSyncProgress.total}장 (기기에 이미 받아둔 조각 ${photoSyncProgress.done}장)`);
+            updatePhotoSyncBanner();
+        }
+
+        // Two places in a row failing means the connection is bad, not that one place is special:
+        // stop here (what arrived is saved) instead of burning minutes retrying every remaining place.
+        let consecutiveFailedPlaces = 0;
+        for (const item of plans) {
+            const { place, remoteTs } = item;
+            let serverImgList;
+            try {
+                serverImgList = await downloadPlacePhotos(item.plan);
+            } catch (e) {
+                console.warn(`[Photo Sync] ${item.nameKey} failed:`, e);
+                serverImgList = null;
+            }
+            if (serverImgList === null) {
+                allPlacesFetched = false;
+                if (++consecutiveFailedPlaces >= 2) break;
+                continue;
+            }
+            consecutiveFailedPlaces = 0;
+
             const localImgList = place.photos || (place.photo ? [place.photo] : []);
+            const sameAsLocal = serverImgList.length === localImgList.length && serverImgList.every((s, i) => s === localImgList[i]);
 
-            if (serverImgList.length > 0 && JSON.stringify(serverImgList) !== JSON.stringify(localImgList)) {
+            if (serverImgList.length > 0 && !sameAsLocal) {
                 await db.places.update(place.id, {
                     photo: serverImgList[0] || "",
                     photos: serverImgList,
@@ -5104,6 +5482,13 @@ async function loadPhotosFromCloud() {
                 // Content already matches — just remember the version so this place isn't re-fetched every poll.
                 await db.places.update(place.id, { photoVersion: remoteTs });
             }
+        }
+
+        if (plans.length > 0) {
+            const sec = Math.round((Date.now() - photoSyncProgress.startedAt) / 1000);
+            window.auraDbg(allPlacesFetched
+                ? `사진 받기 끝: ${photoSyncProgress.done}/${photoSyncProgress.total}장, ${(photoSyncProgress.bytes / 1048576).toFixed(1)}MB, ${sec}초`
+                : `사진 받기 중단(다음에 이어받음): ${photoSyncProgress.done}/${photoSyncProgress.total}장`);
         }
 
         if (allPlacesFetched && versionToRecord !== undefined) setLastKnownPhotosVersion(versionToRecord);
@@ -5120,6 +5505,9 @@ async function loadPhotosFromCloud() {
         console.error('[Photo Sync] Load failed:', e);
     } finally {
         photoLoadInFlight = false;
+        photoSyncProgress.total = 0;
+        photoSyncProgress.done = 0;
+        updatePhotoSyncBanner();
     }
 }
 
@@ -6528,6 +6916,13 @@ window.deleteCurrentSliderPhoto = async function() {
     const place = await db.places.get(activePlaceInfo.id);
     if (!place) return;
 
+    const photoProblem = await photoBaselineProblem(place);
+    if (photoProblem) {
+        showToast(photoProblem, "danger");
+        kickPhotoResync();
+        return;
+    }
+
     let updatedPhotos = [...(place.photos || (place.photo ? [place.photo] : []))];
     if (activePhotoIndex >= 0 && activePhotoIndex < updatedPhotos.length) {
         updatedPhotos.splice(activePhotoIndex, 1);
@@ -6824,6 +7219,12 @@ window.deleteCurrentMemoryPhoto = async function() {
         const places = await db.places.toArray();
         const owner = places.find(p => (p.photos && p.photos.includes(photoToDelete)) || p.photo === photoToDelete);
         if (owner) {
+            const photoProblem = await photoBaselineProblem(owner);
+            if (photoProblem) {
+                showToast(photoProblem, "danger");
+                kickPhotoResync();
+                return;
+            }
             const updatedPhotos = (owner.photos || (owner.photo ? [owner.photo] : [])).filter(src => src !== photoToDelete);
             await db.places.update(owner.id, { photos: updatedPhotos, photo: updatedPhotos[0] || null });
             // photo/photos never travel through savePlaceToCloud (see there) — this dedicated path
@@ -6971,3 +7372,233 @@ window.addEventListener('beforeinstallprompt', (e) => {
     deferredPwaPrompt = e;
     console.log('[PWA] beforeinstallprompt event captured');
 });
+
+// Is this the same picture? Photo strings are NOT a reliable identity: the old edit screen re-compressed
+// every existing photo on each save, so one picture can exist as several different base64 strings that
+// look identical. Compare what they LOOK like instead: a 32x32 grayscale thumbnail, mean absolute pixel
+// difference on a 0-255 scale. Measured: re-encodes of one photo differ by 0.01-0.04 in the couple's
+// real data (up to ~0.44 for a synthetic worst case with hard edges, however many times re-encoded),
+// while genuinely different shots of the same scene differ by ~2.6-6 and different scenes by 17+.
+// 1.0 sits well clear of both sides. (Two different positions in one album can still be near-identical
+// — the same photo added twice — which is why callers only ever compare ACROSS two lists.)
+const SAME_PHOTO_MAX_DIFF = 1.0;
+const photoThumbCanvas = document.createElement("canvas");
+photoThumbCanvas.width = photoThumbCanvas.height = 32;
+async function photoThumb(src) {
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = src;
+    });
+    const ctx = photoThumbCanvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, 32, 32);
+    const d = ctx.getImageData(0, 0, 32, 32).data;
+    const gray = new Float32Array(32 * 32);
+    for (let p = 0; p < gray.length; p++) gray[p] = 0.299 * d[p * 4] + 0.587 * d[p * 4 + 1] + 0.114 * d[p * 4 + 2];
+    return { w: img.naturalWidth, h: img.naturalHeight, gray };
+}
+function samePhoto(a, b) {
+    if (!a || !b || a.w !== b.w || a.h !== b.h) return false;
+    let sum = 0;
+    for (let p = 0; p < a.gray.length; p++) sum += Math.abs(a.gray[p] - b.gray[p]);
+    return sum / a.gray.length < SAME_PHOTO_MAX_DIFF;
+}
+
+// ── Recovery mode (?recover=1) ─────────────────────────────────────────────────────────────────────
+// Normal launches pull the cloud's state down within seconds and overwrite what's on the device, so a
+// device that still holds the only good copy of something the cloud lost would destroy it just by
+// being opened. This screen replaces the app for that case: it never reads from the cloud on its own,
+// never cleans up or wipes the local database, and lets the person push what THIS device has back up,
+// one place at a time — text (name/date/comments) and photos separately, because the two travel as
+// different cloud nodes and one can be intact while the other isn't.
+async function runRecoveryMode() {
+    const app = document.getElementById("app-container");
+    if (app) app.style.display = "none";
+
+    const email = (firebase.auth().currentUser || {}).email || "";
+    const owner = localStorage.getItem(LOCAL_DB_ROOM_KEY);
+    const all = (await db.places.toArray()).filter(p => p.isDeleted !== 1 && p.isVisited !== -1);
+    all.sort((a, b) => (a.name || "").localeCompare(b.name || "", "ko"));
+    const byId = new Map(all.map(p => [String(p.id), p]));
+
+    const photosOf = (p) => p.photos || (p.photo ? [p.photo] : []);
+    const dateText = (p) => formatDisplayDateRange(p.createdAt || p.date, p.endDate) || "날짜 없음";
+    const commentLine = (label, v) => `${escapeHtml(label)}: ${v ? escapeHtml(v) : "<span style='color:#aaa'>(없음)</span>"}`;
+    const cloudBase = () => `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`;
+
+    const panel = document.createElement("div");
+    panel.id = "recovery-panel";
+    panel.style.cssText = "position:fixed;inset:0;overflow:auto;background:#fff7f9;color:#333;z-index:5000;padding:14px 14px 90px;font:14px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+    const btn = "border:1px solid #ff6584;background:#fff;color:#e0396c;border-radius:10px;padding:7px 10px;font-size:13px;font-weight:700;margin:4px 6px 0 0";
+    panel.innerHTML = `
+        <h2 style="margin:0 0 6px;font-size:18px">🛟 복구 모드</h2>
+        <div style="background:#fff;border:1px solid #ffd0da;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px">
+            이 화면에서는 <b>클라우드에서 아무것도 받아오지 않고</b>, 이 기기에 저장된 내용도 지우거나 바꾸지 않아요.<br>
+            이 기기에 남아 있는 장소를 확인하고, 필요한 것만 클라우드로 올릴 수 있어요.<br>
+            <span style="color:#888">방: <b>${escapeHtml(syncRoomId)}</b> · 계정: ${escapeHtml(email)} · 이 기기의 장소 ${all.length}곳</span>
+            ${owner !== null && owner !== syncRoomId ? `<div style="color:#c0392b;margin-top:4px">⚠ 이 기기의 데이터는 '${escapeHtml(owner)}' 방 것일 수 있어요.</div>` : ""}
+        </div>
+        <input id="rc-search" type="search" placeholder="장소 이름으로 찾기 (예: 성산)" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ddd;border-radius:12px;font-size:15px;margin-bottom:10px">
+        <div id="rc-list"></div>
+        <div style="position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #eee;padding:10px 14px;text-align:center">
+            <a href="${location.pathname}?room=${encodeURIComponent(syncRoomId)}" style="color:#e0396c;font-weight:700">복구 모드 끝내기 (정상 모드로 열기)</a>
+            <div style="color:#999;font-size:11px">정상 모드로 열면 다시 클라우드와 동기화돼요.</div>
+        </div>`;
+    document.body.appendChild(panel);
+
+    const list = panel.querySelector("#rc-list");
+    const render = (filter) => {
+        const q = (filter || "").trim().toLowerCase();
+        const shown = all.filter(p => !q || (p.name || "").toLowerCase().includes(q));
+        if (shown.length === 0) {
+            list.innerHTML = `<div style="color:#888;padding:20px;text-align:center">${all.length === 0 ? "이 기기에는 저장된 장소가 없어요." : "일치하는 장소가 없어요."}</div>`;
+            return;
+        }
+        list.innerHTML = shown.map(p => `
+            <div class="rc-row" data-id="${p.id}" style="background:#fff;border:1px solid #eee;border-radius:14px;padding:11px 12px;margin-bottom:10px">
+                <div style="font-weight:800;font-size:15px">${escapeHtml(p.name)} <span style="font-weight:600;font-size:11px;color:#888">${p.isVisited === 1 ? "다녀온 곳" : "위시리스트"}</span></div>
+                <div style="font-size:13px;color:#555;margin-top:2px">📅 ${escapeHtml(dateText(p))} · 📷 ${photosOf(p).length}장</div>
+                <div style="font-size:13px;color:#555">💬 ${commentLine(partnerAName, p.commentA)} / ${commentLine(partnerBName, p.commentB)}</div>
+                <div>
+                    <button class="rc-btn" data-act="compare" style="${btn}">클라우드와 비교</button>
+                    <button class="rc-btn" data-act="text" style="${btn}">글자 정보 올리기</button>
+                    <button class="rc-btn" data-act="photos" style="${btn}">사진 합쳐서 올리기</button>
+                </div>
+                <div class="rc-status" style="font-size:12.5px;margin-top:6px;color:#555;white-space:pre-wrap"></div>
+            </div>`).join("");
+    };
+    render("");
+    panel.querySelector("#rc-search").addEventListener("input", (e) => render(e.target.value));
+
+    async function cloudSummary(p) {
+        const key = encodeURIComponent(placeNameKey(p.name));
+        const [node, shallow] = await Promise.all([
+            fetchJsonWithTimeout(`${cloudBase()}/places/${key}.json?t=${Date.now()}`, 15000),
+            fetchJsonWithTimeout(`${cloudBase()}/photos/${key}/imgList.json?shallow=true&t=${Date.now()}`, 15000)
+        ]);
+        return { node, photos: shallow ? Object.keys(shallow).length : 0 };
+    }
+
+    async function doAction(act, p, status) {
+        if (act === "compare") {
+            status.textContent = "클라우드 확인 중…";
+            const { node, photos } = await cloudSummary(p);
+            if (!node) { status.textContent = `클라우드에 이 장소가 없어요 (사진 ${photos}장).`; return; }
+            status.textContent =
+                `☁ 클라우드: ${node.isDeleted === 1 ? "삭제 표시됨 · " : ""}📅 ${formatDisplayDateRange(node.createdAt, node.endDate) || "날짜 없음"} · 📷 ${photos}장\n` +
+                `☁ 코멘트: ${partnerAName}: ${node.commentA || "(없음)"} / ${partnerBName}: ${node.commentB || "(없음)"}\n` +
+                `📱 이 기기: 📅 ${dateText(p)} · 📷 ${photosOf(p).length}장`;
+            return;
+        }
+        if (act === "text") {
+            status.textContent = "글자 정보를 올리는 중…";
+            await savePlaceToCloud(p.id);
+            const { node } = await cloudSummary(p);
+            const same = node
+                && (node.commentA || "") === (p.commentA || "") && (node.commentB || "") === (p.commentB || "")
+                && (node.createdAt || null) === (p.createdAt || null) && (node.endDate || null) === (p.endDate || null);
+            status.textContent = same
+                ? "✅ 글자 정보(날짜·코멘트 등)를 클라우드에 올렸고, 다시 읽어 확인했어요. 사진은 건드리지 않았어요."
+                : "⚠ 올렸지만 클라우드 내용이 아직 다르게 보여요. 잠시 후 '클라우드와 비교'로 확인하고, 그래도 다르면 다시 눌러주세요.";
+            return;
+        }
+        if (act === "photos") {
+            // MERGE, never overwrite: take the cloud's photos, add the ones only this device has, and upload
+            // that union — so neither side's photos can be lost, whichever list is the longer or newer one.
+            const local = photosOf(p);
+            if (local.length === 0) { status.textContent = "이 기기에는 사진이 없어서 올릴 게 없어요."; return; }
+            const key = encodeURIComponent(placeNameKey(p.name));
+            status.textContent = "클라우드의 사진 목록 확인 중…";
+            const shallow = await fetchJsonWithTimeout(`${cloudBase()}/photos/${key}/imgList.json?shallow=true&t=${Date.now()}`, 15000);
+            const idx = shallow ? Object.keys(shallow).map(Number).filter(Number.isInteger).sort((a, b) => a - b) : [];
+            const cloudList = new Array(idx.length);
+            let got = 0, cursor = 0, failed = false;
+            await Promise.all(Array.from({ length: Math.min(PHOTO_DOWNLOAD_CONCURRENCY, idx.length) }, async () => {
+                while (!failed && cursor < idx.length) {
+                    const n = cursor++;
+                    try {
+                        const data = await fetchPhotoPart(`${cloudBase()}/photos/${key}/imgList/${idx[n]}.json?t=${Date.now()}`);
+                        if (typeof data !== "string" || !data) throw new Error("빈 사진");
+                        cloudList[n] = data;
+                        status.textContent = `클라우드 사진 받아서 비교하는 중… ${++got}/${idx.length}`;
+                    } catch (e) { failed = true; }
+                }
+            }));
+            if (failed) { status.textContent = "⚠ 클라우드 사진을 다 받지 못해서 합칠 수 없어요. 연결을 확인하고 다시 눌러주세요. (아무것도 바꾸지 않았어요)"; return; }
+            // Which of this device's photos does the cloud NOT already have? Exact string matches are
+            // free; anything else is compared by how it looks (see photoThumb). Only device-vs-cloud is
+            // compared — photos within one list are never merged or dropped. A photo that can't be
+            // decoded is kept: when unsure, add it rather than risk losing it.
+            const have = new Set(cloudList);
+            const unmatched = local.filter(src => !have.has(src));
+            const onlyHere = [];
+            if (unmatched.length > 0) {
+                status.textContent = `같은 사진인지 화면으로 비교하는 중… (0/${cloudList.length + unmatched.length})`;
+                const cloudThumbs = [];
+                for (let n = 0; n < cloudList.length; n++) {
+                    try { cloudThumbs.push(await photoThumb(cloudList[n])); } catch (e) { cloudThumbs.push(null); }
+                    if (n % 10 === 0) status.textContent = `같은 사진인지 화면으로 비교하는 중… (${n}/${cloudList.length + unmatched.length})`;
+                }
+                for (let n = 0; n < unmatched.length; n++) {
+                    let t = null;
+                    try { t = await photoThumb(unmatched[n]); } catch (e) { /* undecodable: keep it */ }
+                    if (!t || !cloudThumbs.some(c => samePhoto(c, t))) onlyHere.push(unmatched[n]);
+                    if (n % 10 === 0) status.textContent = `같은 사진인지 화면으로 비교하는 중… (${cloudList.length + n}/${cloudList.length + unmatched.length})`;
+                }
+            }
+            if (onlyHere.length === 0) {
+                status.textContent = `이 기기의 사진 ${local.length}장은 모두 이미 클라우드(${cloudList.length}장)에 있어요. 올릴 게 없어요.`;
+                return;
+            }
+            const union = cloudList.concat(onlyHere);
+            // Keep a copy of the cloud's current list on this device before replacing it.
+            try {
+                const bk = new Dexie("AuraManualBackupDB");
+                bk.version(1).stores({ backups: "id" });
+                await bk.backups.put({ id: `${placeNameKey(p.name)}-cloud-${new Date().toISOString()}`, photos: cloudList, savedAt: Date.now() });
+                bk.close();
+            } catch (e) { console.warn("[Recovery] local backup failed (continuing):", e); }
+            status.textContent = `클라우드 ${cloudList.length}장 + 이 기기에만 있던 ${onlyHere.length}장 = ${union.length}장을 올리는 중… (시간이 걸려요)`;
+            await db.places.update(p.id, { photos: union, photo: union[0] });
+            invalidatePlacesSnapshot();
+            await uploadPhotoToCloud(p.id, union);
+            const { photos: after } = await cloudSummary(p);
+            status.textContent = after === union.length
+                ? `✅ 사진 ${union.length}장(클라우드 ${cloudList.length} + 이 기기에만 있던 ${onlyHere.length})을 올렸고 확인했어요. 어느 쪽 사진도 잃지 않았어요.`
+                : `⚠ 올린 뒤 클라우드의 사진은 ${after}장이에요 (목표 ${union.length}장). 잠시 후 '클라우드와 비교'로 확인하고 다시 눌러주세요.`;
+            return;
+        }
+    }
+
+    // Anything that writes needs a second tap within 5 seconds, so a stray touch can't overwrite the cloud.
+    const armed = new Map();
+    list.addEventListener("click", async (e) => {
+        const b = e.target.closest(".rc-btn");
+        if (!b) return;
+        const row = b.closest(".rc-row");
+        const p = byId.get(row.dataset.id);
+        const status = row.querySelector(".rc-status");
+        const act = b.dataset.act;
+        const k = `${p.id}:${act}`;
+        if (act !== "compare") {
+            if (!armed.has(k)) {
+                const label = b.textContent;
+                b.textContent = "한 번 더 누르면 실행";
+                armed.set(k, setTimeout(() => { armed.delete(k); b.textContent = label; }, 5000));
+                return;
+            }
+            clearTimeout(armed.get(k));
+            armed.delete(k);
+            b.textContent = act === "text" ? "글자 정보 올리기" : "사진 합쳐서 올리기";
+        }
+        b.disabled = true;
+        try {
+            await doAction(act, p, status);
+        } catch (err) {
+            status.textContent = "❌ 실패: " + (err && err.message ? err.message : err);
+        } finally {
+            b.disabled = false;
+        }
+    });
+}
