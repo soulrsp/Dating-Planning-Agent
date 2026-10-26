@@ -288,6 +288,24 @@ function waitForAuthGate() { return authGateReady; }
         }
     }
 
+    // Firebase takes a moment (sometimes 6+ seconds on a phone) to work out whether anyone is signed in.
+    // Until it answers, the gate used to show a live "Google로 로그인" button — which looks exactly like
+    // "you're logged out", invites a tap, and starts a second sign-in on top of a login that was fine.
+    // Show "확인 중" instead, and only offer the button once Firebase says nobody is signed in (or has
+    // been silent for a long while).
+    const originalGateMessage = messageEl ? messageEl.textContent : "";
+    let authAnswered = false;
+    let checkingTimer = null;
+    function setGateChecking(on, lateNotice) {
+        if (!signInBtn || signInBtn.style.display === "none") return;   // the in-app/iOS-home-screen cases hide it for good
+        signInBtn.style.visibility = on ? "hidden" : "";
+        if (messageEl) messageEl.textContent = on ? "로그인 상태를 확인하는 중이에요…" : (lateNotice || originalGateMessage);
+    }
+    setGateChecking(true);
+    checkingTimer = setTimeout(() => {
+        if (!authAnswered) setGateChecking(false, "로그인 확인이 평소보다 오래 걸리고 있어요. 계속 안 되면 아래 버튼으로 직접 로그인해주세요.");
+    }, 20000);
+
     if (signInBtn) {
         signInBtn.addEventListener("click", startSignIn);
     }
@@ -303,12 +321,21 @@ function waitForAuthGate() { return authGateReady; }
     });
 
     if (signOutBtn) {
-        signOutBtn.addEventListener("click", () => firebase.auth().signOut());
+        signOutBtn.addEventListener("click", () => {
+            localStorage.removeItem("aura_signed_in_hint");
+            firebase.auth().signOut();
+        });
     }
 
     firebase.auth().onIdTokenChanged(async (user) => {
         window.__auraAuthSeen = true;
         window.auraDbg("auth 상태: " + (user ? "로그인됨" : "로그아웃"));
+        authAnswered = true;
+        clearTimeout(checkingTimer);
+        setGateChecking(false);
+        // Remembered so the NEXT launch can show this device's saved data without waiting on Firebase.
+        if (user) localStorage.setItem("aura_signed_in_hint", "1");
+        else localStorage.removeItem("aura_signed_in_hint");
         if (!user) {
             currentIdToken = null;
             if (gateEl) gateEl.style.display = "flex";
@@ -416,7 +443,22 @@ let defaultMapCoords = [37.5665, 126.9780]; // Seoul Central
 document.addEventListener("DOMContentLoaded", async () => {
     // Block here until a signed-in, allowlisted Google account is confirmed — nothing below (sync
     // loop, Firebase reads, event wiring) should run for an unauthenticated or disallowed visitor.
-    await waitForAuthGate();
+    //
+    // One exception, for speed: a device that was signed in last time shows its own saved data right
+    // away instead of sitting on the gate while Firebase works out the sign-in (6+ seconds on a phone).
+    // Only the parts that need no network or token run before sign-in is confirmed; everything that
+    // talks to the cloud waits for it (see the "cloud phase" at the end of this handler). If Firebase
+    // then says nobody is signed in, the gate comes back (onIdTokenChanged) and the cloud phase never runs.
+    const signedInBefore = !RECOVER_MODE && localStorage.getItem("aura_signed_in_hint") === "1";
+    if (signedInBefore) {
+        const gateNow = document.getElementById("auth-gate");
+        const appNow = document.getElementById("app-container");
+        if (gateNow) gateNow.style.display = "none";
+        if (appNow) appNow.style.display = "";
+        window.auraDbg("이전에 로그인한 기기 — 로그인 확인을 기다리지 않고 저장된 내용을 먼저 표시");
+    } else {
+        await waitForAuthGate();
+    }
     if (RECOVER_MODE) {
         window.auraDbg("복구 모드로 시작 — 클라우드 동기화와 정리 작업을 모두 건너뜀");
         await runRecoveryMode();
@@ -493,41 +535,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     // and not leftovers from another ?room= opened earlier in this browser.
     await ensureLocalDbMatchesRoom();
 
-    // Cleanup legacy test comments & deduplicate junk places if present
-    await cleanJunkData(false);
-
-    // Pull the latest cloud state BEFORE pushing anything on startup.
-    if (syncRoomId) {
-        await loadFromCloud();
-    }
-
-    // One-time data fix: "석한이네" → "칼립소의 섬" (see migrateRenamedCategory) — runs after the
-    // cloud pull above so it migrates the freshest copy of each place, not a stale local one.
-    await migrateRenamedCategory("석한이네", "칼립소의 섬");
-
-    // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
-    if (syncRoomId && (naverClientId || geminiApiKey)) {
-        setTimeout(() => triggerSyncUpload(), 300);
-    }
-
-    // Refresh UI Data
-    window.auraDbg("클라우드 동기화 끝, 화면 그리는 중");
+    // Local-only first paint from this device's saved data (no token needed). It is redrawn once the
+    // cloud phase below has pulled anything new.
     await updateDashboardStats();
     await renderPlacesList();
     await renderCalendar();
     renderLovelyMemoryGallery();
     checkApiKeyAlert();
-    startCloudSyncLoop();
-    // Resume photos a previous (interrupted) session didn't finish; a single tiny request when
-    // everything is already current. Not awaited — see loadFromCloud.
-    flushPendingPhotoUploads().then(() => loadPhotosFromCloud());
-    if (window.auraDebugOn) {
-        getPlaces().then(rows => {
-            const n = rows.reduce((sum, p) => sum + (p.photos ? p.photos.length : (p.photo ? 1 : 0)), 0);
-            window.auraDbg(`기기에 저장된 사진: ${n}장 (장소 ${rows.length}곳)`);
-        });
-    }
-    window.auraDbg("init 완료");
+    window.auraDbg("저장된 내용으로 화면 표시 완료");
 
     // Lucide Icons Initialization
     lucide.createIcons();
@@ -785,6 +800,48 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         }, { passive: true });
     }
+
+    // ── Cloud phase ─────────────────────────────────────────────────────────────────────────────────
+    // Everything that reads or writes the cloud needs the signed-in token, so it waits here. It runs last
+    // so the page is already drawn and every button wired while Firebase is still answering.
+    await waitForAuthGate();
+    window.auraDbg("로그인 확인됨 — 클라우드 동기화 시작");
+
+    // Cleanup legacy test comments & deduplicate junk places if present
+    await cleanJunkData(false);
+
+    // Pull the latest cloud state BEFORE pushing anything on startup.
+    if (syncRoomId) {
+        await loadFromCloud();
+    }
+
+    // One-time data fix: "석한이네" → "칼립소의 섬" (see migrateRenamedCategory) — runs after the
+    // cloud pull above so it migrates the freshest copy of each place, not a stale local one.
+    await migrateRenamedCategory("석한이네", "칼립소의 섬");
+
+    // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
+    if (syncRoomId && (naverClientId || geminiApiKey)) {
+        setTimeout(() => triggerSyncUpload(), 300);
+    }
+
+    // Redraw with whatever the cloud pull brought in.
+    window.auraDbg("클라우드 동기화 끝, 화면 다시 그리는 중");
+    await updateDashboardStats();
+    await renderPlacesList();
+    await renderCalendar();
+    renderLovelyMemoryGallery();
+    checkApiKeyAlert();
+    startCloudSyncLoop();
+    // Resume photos a previous (interrupted) session didn't finish; a single tiny request when
+    // everything is already current. Not awaited — see loadFromCloud.
+    flushPendingPhotoUploads().then(() => loadPhotosFromCloud());
+    if (window.auraDebugOn) {
+        getPlaces().then(rows => {
+            const n = rows.reduce((sum, p) => sum + (p.photos ? p.photos.length : (p.photo ? 1 : 0)), 0);
+            window.auraDbg(`기기에 저장된 사진: ${n}장 (장소 ${rows.length}곳)`);
+        });
+    }
+    window.auraDbg("init 완료");
 });
 
 // 4. Tab Navigation Logic

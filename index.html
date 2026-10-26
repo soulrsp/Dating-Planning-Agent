@@ -33,7 +33,8 @@
                     box.textContent += text + "\n";
                 }
                 window.auraDebugOn = true;
-                window.auraDbg = function (m) { line("· " + m); };
+                function at() { return "[" + (performance.now() / 1000).toFixed(1) + "s] "; }
+                window.auraDbg = function (m) { line(at() + m); };
                 line("(이 패널을 탭하면 닫힙니다)");
                 line("UA: " + navigator.userAgent);
                 line("URL: " + location.href);
@@ -42,14 +43,14 @@
                     if (t && t !== window) {
                         // Only scripts/stylesheets failing to load matter here; broken <img>s (empty
                         // placeholders, a deleted photo) are routine and would just bury the real cause.
-                        if (t.tagName === "SCRIPT" || t.tagName === "LINK") line("✗ 로드 실패: " + (t.src || t.href));
+                        if (t.tagName === "SCRIPT" || t.tagName === "LINK") line(at() + "✗ 로드 실패: " + (t.src || t.href));
                     } else {
-                        line("✗ " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno);
+                        line(at() + "✗ " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno);
                     }
                 }, true);
                 window.addEventListener("unhandledrejection", function (e) {
                     var r = e.reason;
-                    line("✗ (promise) " + (r && r.message ? r.message : r));
+                    line(at() + "✗ (promise) " + (r && r.message ? r.message : r));
                 });
             })();
         }
@@ -71,7 +72,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261026_v393">
+    <link rel="stylesheet" href="style.css?v=20261026_v394">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -1017,13 +1018,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261026_v393"></script>
+    <script src="app.js?v=20261026_v394"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261026_v393').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261026_v394').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
