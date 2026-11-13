@@ -412,15 +412,21 @@ function studioCaptionSuggestions() {
 // The preview keeps the photos/filter/frame part in an offscreen canvas and only redraws it when
 // something underneath changed (baseChanged), so dragging a sticker just recomposes the overlays
 // instead of re-running the pixel filter on every frame.
+// Renders run one at a time: a slider dragged live asks for many, and a slow base render finishing
+// after a newer one would otherwise paint stale settings. A request that arrives mid-render just
+// marks "again", and one more pass runs when the current one ends (baseDirty carries what changed).
 let studioBaseCanvas = null;
+let studioRendering = false, studioRenderAgain = false;
 function studioQueueRender(baseChanged = true) {
     if (baseChanged) studio.baseDirty = true;
     if (studio.renderQueued) return;
+    if (studioRendering) { studioRenderAgain = true; return; }
     studio.renderQueued = true;
     requestAnimationFrame(async () => {
         studio.renderQueued = false;
         const canvas = document.getElementById("studio-preview");
         if (!canvas || studio.photos.length === 0) return;
+        studioRendering = true;
         try {
             if (studio.baseDirty || !studioBaseCanvas) {
                 studio.baseDirty = false;
@@ -440,7 +446,27 @@ function studioQueueRender(baseChanged = true) {
                 uiScale: rect.width ? canvas.width / rect.width : 1
             });
         } catch (e) { console.error("[Studio] preview failed:", e); }
+        finally {
+            studioRendering = false;
+            if (studioRenderAgain) { studioRenderAgain = false; studioQueueRender(false); }
+        }
     });
+}
+
+// The preview stays pinned at the top of the editor (CSS position: sticky) so sliders further down
+// show their effect live; once scrolled, it shrinks so the controls still have room.
+let studioStickyAttached = false;
+function studioAttachStickyPreview() {
+    const body = document.querySelector("#modal-photo-studio .studio-body");
+    const wrap = document.getElementById("studio-preview-wrap");
+    if (!body || !wrap) return;
+    body.scrollTop = 0;
+    wrap.classList.remove("is-compact");
+    if (studioStickyAttached) return;
+    studioStickyAttached = true;
+    body.addEventListener("scroll", () => {
+        wrap.classList.toggle("is-compact", body.scrollTop > 60);
+    }, { passive: true });
 }
 
 function studioRenderControls() {
@@ -539,6 +565,7 @@ window.openPhotoStudio = function(photos = []) {
     studioBgStatus("");
     studioLoadTextFonts();
     studioAttachGestures();
+    studioAttachStickyPreview();
     document.getElementById("modal-photo-studio")?.classList.add("active");
     studioRenderControls();
     setTimeout(() => lucide.createIcons(), 50);
@@ -2131,11 +2158,16 @@ async function studioSourceImages() {
     });
 }
 
+let studioFaceDetecting = null;
 window.studioSetReshape = async function(key, value) {
     studio.reshape[key] = Number(value) || 0;
     if (!studio.reshape.jaw && !studio.reshape.eye) { studioQueueRender(); return; }
+    // The slider is live (oninput): calls that arrive while detection runs just wait for it.
+    if (studioFaceDetecting) { await studioFaceDetecting; studioQueueRender(); return; }
     const missing = studio.photos.filter(p => !studioFaceCache.has(p.src));
     if (!missing.length) { studioQueueRender(); return; }
+    let done;
+    studioFaceDetecting = new Promise(res => { done = res; });
     try {
         await studioLoadFaceLandmarker();
         const t0 = performance.now();
@@ -2149,6 +2181,8 @@ window.studioSetReshape = async function(key, value) {
         console.error("[Studio face]", e);
         studioFaceStatus("얼굴 보정을 불러오지 못했어요: " + (e && e.message ? e.message : e));
     }
+    studioFaceDetecting = null;
+    done();
     studioQueueRender();
 };
 

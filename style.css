@@ -3279,3 +3279,24 @@ body {
 .studio-video-sub { font-size: 0.75rem; color: var(--color-text-med); text-align: center; }
 .studio-video-actions { display: flex; gap: 0.5rem; width: 100%; }
 .studio-video-actions .btn { flex: 1; justify-content: center; white-space: nowrap; }
+
+/* ---- Photo studio: preview pinned while editing (v409) ---- */
+#modal-photo-studio .studio-preview-wrap {
+    position: sticky;
+    top: -1rem;              /* flush with the scroll box's top edge (studio-body has 1rem padding) */
+    z-index: 6;
+    margin-top: -1rem;
+    padding-top: calc(0.6rem + 1rem);
+    background-color: #FFFDFC;
+    border-radius: 0 0 14px 14px;
+    transition: box-shadow 0.2s;
+}
+#modal-photo-studio .studio-preview-wrap.is-compact {
+    box-shadow: 0 6px 14px -6px rgba(74, 40, 52, 0.25);
+}
+#modal-photo-studio .studio-preview-wrap canvas {
+    transition: max-height 0.2s;
+}
+#modal-photo-studio .studio-preview-wrap.is-compact canvas {
+    max-height: 26vh;
+}
