@@ -408,7 +408,7 @@ body {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0.75rem;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0;
 }
 
 .stat-card {
@@ -1982,7 +1982,7 @@ body {
     .dashboard-grid {
         display: flex !important;
         flex-direction: column !important;
-        gap: 1rem !important;
+        gap: 0.5rem !important; /* dday card → stats row → map card spacing */
         width: 100% !important;
         max-width: 100% !important;
         box-sizing: border-box !important;
@@ -1991,7 +1991,7 @@ body {
     .stats-row {
         grid-template-columns: 1fr 1fr !important;
         gap: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
+        margin-bottom: 0 !important; /* spacing comes from .dashboard-grid gap */
         width: 100% !important;
         box-sizing: border-box !important;
     }
@@ -2664,4 +2664,107 @@ body {
         -webkit-backdrop-filter: blur(8px) !important;
         backdrop-filter: blur(8px) !important;
     }
+}
+
+/* ---- D-day card (dashboard) & couple events on the calendar — see renderDdayCard() ---- */
+.dday-card {
+    background: linear-gradient(135deg, rgba(255, 101, 132, 0.12), rgba(181, 23, 158, 0.08));
+    border: 1px solid rgba(255, 101, 132, 0.28);
+    border-radius: 14px;
+    padding: 0.55rem 0.8rem;
+    margin-bottom: 0;
+    box-shadow: 0 2px 10px rgba(255, 101, 132, 0.08);
+}
+.dday-card.hidden { display: none; }
+/* Desktop: same 8px rhythm between the D-day card, the stats row and the map/calendar block. */
+.dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.dday-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.6rem;
+}
+.dday-names {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-secondary);
+}
+.dday-count {
+    font-size: 0.95rem;
+    color: var(--color-text-dark);
+}
+.dday-count strong {
+    margin-left: 0.3em; /* the plain space before a bigger bold number reads as no space at all */
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--color-primary);
+}
+
+.birthday-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.birthday-input-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+.lunar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Calendar: one pill per anniversary/birthday, above the visited/wishlist badges. */
+.calendar-day-cell.has-couple-event {
+    background: rgba(255, 236, 242, 0.9);
+}
+.cal-couple-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
+}
+.cal-couple-badge {
+    display: block;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 2px 5px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: center;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 4px rgba(181, 23, 158, 0.25);
+}
+.cal-couple-badge.kind-anniv {
+    background: linear-gradient(135deg, #FF6584, #B5179E);
+}
+.cal-couple-badge.kind-bday {
+    background: linear-gradient(135deg, #FFB347, #FF7A59);
+    box-shadow: 0 1px 4px rgba(255, 122, 89, 0.3);
+}
+.cal-couple-badge .ccb-short { display: none; }
+@media (max-width: 768px) {
+    /* Phone cells are ~40px wide: show the short form ("300일", "1주년", "🎂SA") in a tight pill. */
+    .cal-couple-badge {
+        padding: 1px 2px;
+        font-size: 0.56rem;
+        letter-spacing: -0.02em;
+    }
+    .cal-couple-badge .ccb-full { display: none; }
+    .cal-couple-badge .ccb-short { display: inline; }
 }

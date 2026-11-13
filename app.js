@@ -171,6 +171,7 @@ function normalizeFirebaseDbUrl(value) {
     }
 }
 let customFirebaseUrl = normalizeFirebaseDbUrl(localStorage.getItem("aura_firebase_url"));
+let coupleDates = loadCoupleDates(); // anniversary + birthdays for this room — see section 11a
 
 // Cloud Sync Engine variables
 const DEFAULT_FIREBASE_DB_URL = 'https://dating-planning-agent-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -510,6 +511,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("settings-sync-room-id").value = queryRoom;
         localStorage.setItem("aura_sync_room_id", queryRoom);
     }
+    fillCoupleDateSettings();
 
     // Room "77" ships with pinned map keys so anyone opening ?room=77 works immediately without a
     // trip to 설정. Checked against raw localStorage (not the in-memory var, which already carries
@@ -631,6 +633,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 roomId = sanitizeRoomId(roomId.trim());
                 if (roomId) {
                     syncRoomId = roomId;
+                    coupleDates = loadCoupleDates();
                     localStorage.setItem("aura_sync_room_id", roomId);
                     const syncInput = document.getElementById("settings-sync-room-id");
                     if (syncInput) syncInput.value = roomId;
@@ -913,6 +916,7 @@ function switchTab(tabId) {
         if (roomEl) roomEl.value = syncRoomId;
         const fbUrlEl = document.getElementById("settings-firebase-url");
         if (fbUrlEl) fbUrlEl.value = customFirebaseUrl;
+        fillCoupleDateSettings();
     }
 }
 
@@ -931,6 +935,11 @@ function updatePartnerNamesUI() {
     const nameBEl = document.getElementById("profile-name-b");
     if (nameAEl) nameAEl.textContent = partnerAName;
     if (nameBEl) nameBEl.textContent = partnerBName;
+
+    const bdayLblA = document.getElementById("label-birthday-a");
+    const bdayLblB = document.getElementById("label-birthday-b");
+    if (bdayLblA) bdayLblA.textContent = `🎂 ${partnerAName} 생일`;
+    if (bdayLblB) bdayLblB.textContent = `🎂 ${partnerBName} 생일`;
 
     const mobileA = document.getElementById("mobile-name-a");
     const mobileB = document.getElementById("mobile-name-b");
@@ -4341,8 +4350,196 @@ async function markPlaceDeleted(id) {
     return place;
 }
 
+// 11a. Couple Dates — D-day, anniversaries & birthdays
+// Stored per room in the cloud (aura-rooms/{room}/dates, synced like the partner names) and cached
+// per room in localStorage. Shape: { anniversary: "YYYY-MM-DD", birthdayA: { md: "MM-DD", lunar },
+// birthdayB: {...} } — A/B follow partnerAName/partnerBName. Day counting follows the Korean
+// convention: the day you started dating is day 1, so "100일" falls on start + 99 days.
+function coupleDatesStorageKey() { return `aura_couple_dates_${syncRoomId}`; }
+
+function normalizeCoupleDates(value) {
+    const out = { anniversary: "", birthdayA: { md: "", lunar: false }, birthdayB: { md: "", lunar: false } };
+    if (!value || typeof value !== "object") return out;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value.anniversary || "")) out.anniversary = value.anniversary;
+    for (const k of ["birthdayA", "birthdayB"]) {
+        const b = value[k];
+        if (b && /^\d{2}-\d{2}$/.test(b.md || "")) out[k] = { md: b.md, lunar: b.lunar === true };
+    }
+    return out;
+}
+
+function loadCoupleDates() {
+    try { return normalizeCoupleDates(JSON.parse(localStorage.getItem(coupleDatesStorageKey()) || "null")); }
+    catch (e) { return normalizeCoupleDates(null); }
+}
+
+function storeCoupleDates(dates) {
+    coupleDates = normalizeCoupleDates(dates);
+    try { localStorage.setItem(coupleDatesStorageKey(), JSON.stringify(coupleDates)); } catch (e) {}
+}
+
+// Accepts "2-17", "02-17", "2/17", "0217", "2월 17일" → "02-17"; "" for empty; null when invalid.
+function parseMonthDayInput(text, lunar) {
+    const s = String(text || "").trim();
+    if (!s) return "";
+    const m = s.match(/^(\d{1,2})\D+(\d{1,2})\D*$/) || s.match(/^(\d{2})(\d{2})$/);
+    if (!m) return null;
+    const month = parseInt(m[1], 10), day = parseInt(m[2], 10);
+    if (month < 1 || month > 12 || day < 1 || day > (lunar ? 30 : 31)) return null;
+    if (!lunar && day > new Date(2024, month, 0).getDate()) return null; // 2024: leap year, so 02-29 is allowed
+    return `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function startOfLocalDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function parseYmdLocal(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function addLocalDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function localDayDiff(from, to) { return Math.round((startOfLocalDay(to) - startOfLocalDay(from)) / 86400000); }
+
+// Lunar → solar uses the browser's own Korean lunar calendar (Intl "dangi", same astronomical basis
+// as KASI's 음력), falling back to "chinese" — no lookup table to maintain. null if neither exists.
+let lunarDateFormatter;
+function getLunarDateFormatter() {
+    if (lunarDateFormatter !== undefined) return lunarDateFormatter;
+    lunarDateFormatter = null;
+    for (const cal of ["dangi", "chinese"]) {
+        try {
+            const f = new Intl.DateTimeFormat(`en-u-ca-${cal}`, { year: "numeric", month: "numeric", day: "numeric", timeZone: "UTC" });
+            if (f.resolvedOptions().calendar === cal) { lunarDateFormatter = f; break; }
+        } catch (e) {}
+    }
+    return lunarDateFormatter;
+}
+
+const lunarToSolarCache = new Map();
+// The solar date of lunar month/day (never a leap month) in the lunar year that starts in `lunarYear`.
+// A lunar 30th that the month doesn't have that year is celebrated on the 29th.
+function lunarToSolar(lunarYear, month, day) {
+    const cacheKey = `${lunarYear}-${month}-${day}`;
+    if (lunarToSolarCache.has(cacheKey)) return lunarToSolarCache.get(cacheKey);
+    const f = getLunarDateFormatter();
+    let result = null;
+    if (f) {
+        // Lunar new year falls Jan 21–Feb 20 and a leap month can push later months ~30 days on, so
+        // scanning from 20 days before to 75 days after this estimate always covers the real date.
+        // Scanning forward means a regular month is found before a leap month with the same number.
+        const approx = Date.UTC(lunarYear, 0, 21) + ((month - 1) * 29.53 + day - 1) * 86400000;
+        outer:
+        for (const dd of (day === 30 ? [30, 29] : [day])) {
+            for (let off = -20; off <= 75; off++) {
+                const t = new Date(approx + off * 86400000);
+                const parts = {};
+                f.formatToParts(t).forEach(p => { parts[p.type] = p.value; });
+                if (parts.relatedYear && parts.relatedYear !== String(lunarYear)) continue;
+                if (parts.month === String(month) && parts.day === String(dd)) {
+                    result = new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+                    break outer;
+                }
+            }
+        }
+    }
+    lunarToSolarCache.set(cacheKey, result);
+    return result;
+}
+
+// The birthday's solar dates that could fall in `solarYear` (a late lunar-12th-month date of the
+// previous lunar year can land in January, so both are checked).
+function birthdayDatesInYear(b, solarYear) {
+    const [m, d] = b.md.split("-").map(Number);
+    if (!b.lunar) {
+        const lastDay = new Date(solarYear, m, 0).getDate(); // Feb 29 → Feb 28 in common years
+        return [new Date(solarYear, m - 1, Math.min(d, lastDay))];
+    }
+    return [lunarToSolar(solarYear - 1, m, d), lunarToSolar(solarYear, m, d)]
+        .filter(x => x && x.getFullYear() === solarYear);
+}
+
+// Days-together count for a date (day 1 = the anniversary date itself); 0 before it.
+function coupleDayNumber(date) {
+    if (!coupleDates.anniversary) return 0;
+    const n = localDayDiff(parseYmdLocal(coupleDates.anniversary), date) + 1;
+    return n > 0 ? n : 0;
+}
+
+// Events on one calendar day: the anniversary itself, 100-day multiples, yearly anniversaries and
+// birthdays. `short` is what fits a phone-width calendar cell; `label` is the full name.
+function coupleEventsOnDate(date) {
+    const events = [];
+    if (coupleDates.anniversary) {
+        const start = parseYmdLocal(coupleDates.anniversary);
+        const n = coupleDayNumber(date);
+        if (n === 1) events.push({ kind: "anniv", icon: "💞", label: "사귄 날", short: "사귄날" });
+        else if (n > 0 && n % 100 === 0) events.push({ kind: "anniv", icon: "💯", label: `${n}일`, short: `${n}일` });
+        const years = date.getFullYear() - start.getFullYear();
+        if (years > 0 && date.getMonth() === start.getMonth() && date.getDate() === start.getDate()) {
+            events.push({ kind: "anniv", icon: "💍", label: `${years}주년`, short: `${years}주년` });
+        }
+    }
+    [["birthdayA", partnerAName], ["birthdayB", partnerBName]].forEach(([k, name]) => {
+        const b = coupleDates[k];
+        if (b.md && birthdayDatesInYear(b, date.getFullYear()).some(x => x.getTime() === date.getTime())) {
+            events.push({ kind: "bday", icon: "🎂", label: `${name} 생일`, short: `🎂${name}` });
+        }
+    });
+    return events;
+}
+
+// Calendar-cell badges for those events (full label on wide screens, short one on phones — see CSS).
+function coupleEventBadgesHtml(events) {
+    if (events.length === 0) return "";
+    return `<div class="cal-couple-badges">${events.map(e => `
+        <span class="cal-couple-badge kind-${e.kind}" title="${escapeHtml(e.label)}">
+            <span class="ccb-full">${e.icon} ${escapeHtml(e.label)}</span><span class="ccb-short">${escapeHtml(e.short)}</span>
+        </span>`).join("")}</div>`;
+}
+
+// Dashboard: just the days-together count. Upcoming anniversaries/birthdays live on the calendar.
+function renderDdayCard() {
+    const card = document.getElementById("dday-card");
+    if (!card) return;
+    if (!coupleDates.anniversary) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+    const names = `<span class="dday-names">${escapeHtml(partnerAName)} ♥ ${escapeHtml(partnerBName)}</span>`;
+    const dayNum = coupleDayNumber(new Date());
+    const countHtml = dayNum > 0
+        ? `함께한 지 <strong>${dayNum.toLocaleString()}일째</strong>`
+        : `<strong>D-${localDayDiff(new Date(), parseYmdLocal(coupleDates.anniversary))}</strong>`;
+    card.innerHTML = `<div class="dday-head">${names}<span class="dday-count">${countHtml}</span></div>`;
+}
+
+function fillCoupleDateSettings() {
+    const ann = document.getElementById("settings-anniversary");
+    if (ann) ann.value = coupleDates.anniversary;
+    [["a", "birthdayA"], ["b", "birthdayB"]].forEach(([s, k]) => {
+        const input = document.getElementById(`settings-birthday-${s}`);
+        const lunar = document.getElementById(`settings-birthday-${s}-lunar`);
+        if (input) input.value = coupleDates[k].md;
+        if (lunar) lunar.checked = coupleDates[k].lunar;
+    });
+    const lblA = document.getElementById("label-birthday-a");
+    const lblB = document.getElementById("label-birthday-b");
+    if (lblA) lblA.textContent = `🎂 ${partnerAName} 생일`;
+    if (lblB) lblB.textContent = `🎂 ${partnerBName} 생일`;
+}
+
+// Reads the 설정 form; returns the dates, or null (after a toast) when a birthday can't be parsed.
+function readCoupleDateSettings() {
+    const ann = (document.getElementById("settings-anniversary")?.value || "").trim();
+    const out = { anniversary: /^\d{4}-\d{2}-\d{2}$/.test(ann) ? ann : "" };
+    for (const [s, k, name] of [["a", "birthdayA", partnerAName], ["b", "birthdayB", partnerBName]]) {
+        const lunar = !!document.getElementById(`settings-birthday-${s}-lunar`)?.checked;
+        const md = parseMonthDayInput(document.getElementById(`settings-birthday-${s}`)?.value, lunar);
+        if (md === null) {
+            showToast(`${name} 생일을 '월-일' 형식으로 입력해 주세요 (예: 02-17).`, "warning");
+            return null;
+        }
+        out[k] = { md, lunar };
+    }
+    return out;
+}
+
 // 11. Dashboard Analytics
 async function updateDashboardStats() {
+    renderDdayCard();
     const places = await getPlaces();
 
     const wishlistCount = places.filter(p => (p.isVisited === 0 || p.isVisited === false || p.isVisited === "0" || p.isVisited === "false") && p.isDeleted !== 1 && p.isVisited !== -1).length;
@@ -4822,6 +5019,7 @@ async function saveSettingsToCloud(attempt = 1) {
             partnerBName: partnerBName,
             naverClientId: naverClientId,
             kakaoApiKey: kakaoApiKey,
+            dates: coupleDates,
             naverSearchId: null,
             naverSearchSecret: null,
             geminiApiKey: null,
@@ -4881,7 +5079,7 @@ async function loadFromCloud() {
         // `places` is an OBJECT of individual place records ({nameKey: place}), not a single
         // stringified array — see savePlaceToCloud for why.
         const roomBase = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`;
-        const roomFields = ['places', 'partnerAName', 'partnerBName', 'naverClientId', 'kakaoApiKey', 'timestamp'];
+        const roomFields = ['places', 'partnerAName', 'partnerBName', 'naverClientId', 'kakaoApiKey', 'dates', 'timestamp'];
         const fieldResults = await Promise.all(roomFields.map(f =>
             fetch(`${roomBase}/${f}.json?t=${Date.now()}`, { cache: 'no-store' })
                 .then(r => r.ok ? r.json() : undefined)
@@ -4919,6 +5117,20 @@ async function loadFromCloud() {
             }
             if (namesChanged) {
                 updatePartnerNamesUI();
+            }
+
+            // Anniversary/birthdays: the room's copy wins, like the partner names above. A room that
+            // never had them (undefined) leaves this device's copy alone.
+            if (resData.dates && typeof resData.dates === 'object') {
+                const cloudDates = normalizeCoupleDates(resData.dates);
+                if (JSON.stringify(cloudDates) !== JSON.stringify(coupleDates)) {
+                    storeCoupleDates(cloudDates);
+                    fillCoupleDateSettings();
+                    renderDdayCard();
+                    renderCalendar();
+                }
+            } else if (namesChanged) {
+                renderDdayCard();
             }
 
             if (resData.naverClientId && resData.naverClientId !== naverClientId) {
@@ -6155,6 +6367,8 @@ async function saveSettings() {
         return;
     }
     document.getElementById("settings-firebase-url").value = firebaseUrVal;
+    const coupleDatesVal = readCoupleDateSettings();
+    if (!coupleDatesVal) return;
 
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
@@ -6194,6 +6408,12 @@ async function saveSettings() {
         }
         await renderLovelyMemoryGallery();
     }
+
+    // After a room switch this writes the form's dates into the NEW room — the form showed the old
+    // room's values, which is what the person just chose to save.
+    storeCoupleDates(coupleDatesVal);
+    fillCoupleDateSettings();
+    await renderCalendar();
 
     updatePartnerNamesUI();
 
@@ -6675,10 +6895,14 @@ async function renderCalendar() {
             badgesHtml += `</div>`;
         }
 
+        const specialDays = coupleEventsOnDate(new Date(currentCalendarYear, currentCalendarMonth, d));
+        if (specialDays.length > 0) cell.classList.add("has-couple-event");
+
         cell.innerHTML = `
             <div class="day-number-row">
                 <span class="day-number">${d}</span>
             </div>
+            ${coupleEventBadgesHtml(specialDays)}
             ${badgesHtml}
         `;
 
@@ -6720,7 +6944,10 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
 
     const dateObj = new Date(dateStr);
     const formattedTitle = !isNaN(dateObj.getTime()) ? `${dateObj.getFullYear()}년 ${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일 데이트 기록` : `${dateStr} 데이트 기록`;
-    titleEl.textContent = formattedTitle;
+    const dayEvents = /^\d{4}-\d{2}-\d{2}$/.test(dateStr || "") ? coupleEventsOnDate(parseYmdLocal(dateStr)) : [];
+    titleEl.textContent = dayEvents.length > 0
+        ? `${formattedTitle} · ${dayEvents.map(e => `${e.icon} ${e.label}`).join(" · ")}`
+        : formattedTitle;
 
     const allDatePlaces = places.filter(p => {
         if (p.isDeleted === 1 || p.isVisited === -1) return false;
