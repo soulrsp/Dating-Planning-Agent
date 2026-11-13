@@ -2768,3 +2768,385 @@ body {
     .cal-couple-badge .ccb-full { display: none; }
     .cal-couple-badge .ccb-short { display: inline; }
 }
+
+/* ---- Photo studio (collage / filter editor), picker & 꾸민 사진 album — app.js section 16 ---- */
+.studio-card {
+    max-width: 560px;
+    width: 94%;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+.studio-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    padding: 1rem 1.1rem;
+    gap: 1rem;
+}
+.studio-empty {
+    padding: 1.2rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--color-text-med);
+    background: rgba(255, 101, 132, 0.06);
+    border-radius: 14px;
+}
+.studio-preview-wrap {
+    display: flex;
+    justify-content: center;
+    background: repeating-conic-gradient(#f4eef0 0% 25%, #fbf8f9 0% 50%) 50% / 16px 16px;
+    border-radius: 14px;
+    padding: 0.6rem;
+}
+.studio-preview-wrap canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 46vh;
+    width: auto;
+    height: auto;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(74, 40, 52, 0.18);
+}
+.studio-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.studio-label {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--color-text-high);
+}
+.studio-label span {
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--color-text-med);
+}
+.studio-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.studio-chip {
+    border: 1px solid rgba(255, 101, 132, 0.3);
+    background: #fff;
+    color: var(--color-text-dark);
+    border-radius: 999px;
+    padding: 0.32rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.studio-chip.small {
+    font-size: 0.72rem;
+    padding: 0.25rem 0.6rem;
+    font-weight: 600;
+}
+.studio-chip.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+}
+.studio-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    color: var(--color-text-med);
+}
+.studio-row > label:first-child {
+    width: 2.6rem;
+    flex-shrink: 0;
+    font-weight: 700;
+}
+.studio-row input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--color-primary);
+}
+.studio-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+.studio-swatches {
+    display: flex;
+    gap: 0.45rem;
+}
+.studio-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid rgba(74, 40, 52, 0.15);
+    cursor: pointer;
+}
+.studio-swatch.active {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(255, 101, 132, 0.25);
+}
+.studio-link-btn {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.72rem;
+    color: var(--color-text-med);
+    text-decoration: underline;
+    cursor: pointer;
+}
+#studio-caption {
+    width: 100%;
+    box-sizing: border-box;
+}
+.studio-selected {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 6px 4px 6px 2px;
+}
+.studio-thumb {
+    position: relative;
+    flex-shrink: 0;
+    width: 58px;
+    height: 58px;
+}
+.studio-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+.studio-thumb-no {
+    position: absolute;
+    left: 3px;
+    bottom: 3px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.studio-thumb-remove {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(30, 27, 31, 0.8);
+    color: #fff;
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.studio-add-btn {
+    flex-shrink: 0;
+    width: 58px;
+    height: 58px;
+    border-radius: 10px;
+    border: 2px dashed rgba(255, 101, 132, 0.45);
+    background: rgba(255, 101, 132, 0.05);
+    color: var(--color-primary);
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.studio-add-btn span {
+    font-size: 0.55rem;
+    margin-top: 3px;
+}
+.studio-footer {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1.1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--color-card-border);
+    background: #FFFDFC;
+}
+.studio-footer .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    gap: 4px;
+}
+.studio-footer .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.studio-danger {
+    color: var(--color-danger) !important;
+    border-color: rgba(225, 29, 72, 0.35) !important;
+}
+
+/* Picker */
+.studio-picker-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.75rem 1rem;
+}
+.studio-picker-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--color-text-med);
+}
+.studio-picker-group + .studio-picker-group {
+    margin-top: 0.9rem;
+}
+.studio-picker-title {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--color-text-high);
+    margin-bottom: 0.35rem;
+}
+.studio-picker-title span {
+    font-weight: 500;
+    font-size: 0.7rem;
+    color: var(--color-text-med);
+}
+.studio-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+.studio-pick {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 101, 132, 0.08);
+    cursor: pointer;
+}
+.studio-pick img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.studio-pick.selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 3px solid var(--color-primary);
+    border-radius: 8px;
+    background: rgba(255, 101, 132, 0.18);
+}
+.studio-pick-no {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 1;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #fff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
+}
+.studio-pick.selected .studio-pick-no {
+    display: flex;
+}
+
+/* 꾸민 사진 album in the gallery tab */
+.creations-section {
+    padding: 0 1.5rem 1rem 1.5rem;
+}
+.creations-header h4 {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--color-text-high);
+    margin: 0 0 0.5rem 0;
+}
+.creations-header h4 span {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-med);
+}
+.creations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 0.5rem;
+}
+.creation-tile {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 1px solid var(--color-card-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    cursor: pointer;
+}
+.creation-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.creation-pending {
+    position: absolute;
+    left: 4px;
+    bottom: 4px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(30, 27, 31, 0.7);
+    border-radius: 6px;
+    padding: 1px 5px;
+}
+.creation-viewer-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+}
+.creation-viewer-body img {
+    max-width: 100%;
+    max-height: 62vh;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(74, 40, 52, 0.18);
+}
+.creation-viewer-meta {
+    font-size: 0.78rem;
+    color: var(--color-text-med);
+    text-align: center;
+}
+@media (max-width: 768px) {
+    .creations-section {
+        padding: 0 0.75rem 0.75rem;
+    }
+    .creations-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .studio-card {
+        width: 100%;
+        max-height: 94vh;
+        border-radius: 20px;
+    }
+}

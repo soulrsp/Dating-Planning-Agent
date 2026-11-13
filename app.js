@@ -71,6 +71,12 @@ const db = new Dexie("AuraDatePlannerDB");
 db.version(2).stores({
     places: "++id, name, category, url, lat, lng, priority, notes, isVisited, rating, review, expense, payer, peopleCount, photo, createdAt"
 });
+// v3 adds the "꾸민 사진" album (collages / filtered photos — section 16). Rows carry their room id,
+// since unlike places this table isn't emptied wholesale on a room switch.
+db.version(3).stores({
+    places: "++id, name, category, url, lat, lng, priority, notes, isVisited, rating, review, expense, payer, peopleCount, photo, createdAt",
+    creations: "id, room, createdAt"
+});
 
 // Every row carries its photos inline (base64, ~200KB each — 80MB+ for the couple's room), so each
 // db.places.toArray() copies ALL of that out of IndexedDB (~130ms on a desktop, far more on a phone).
@@ -452,6 +458,8 @@ async function ensureLocalDbMatchesRoom() {
     // photos it vouches for just got wiped from the DB — reset it or they'd never be re-downloaded.
     localStorage.removeItem(photosVersionStorageKey());
     lastKnownPhotosVersion = 0;
+    // 꾸민 사진 rows are tagged with their room; drop other rooms' so one device holds one room's album.
+    try { await db.creations.where("room").notEqual(syncRoomId).delete(); } catch (e) {}
     localStorage.setItem(LOCAL_DB_ROOM_KEY, syncRoomId);
     return true;
 }
@@ -4777,6 +4785,7 @@ function startCloudSyncLoop() {
         await flushPendingPhotoUploads();
         await loadPhotosFromCloud();
         await loadMemoryPhotosFromCloud();
+        await syncCreations();
     }, 45000);
 
     // A pending edit from before the last reload never got a chance to retry (the JS context that
@@ -4795,6 +4804,7 @@ function startCloudSyncLoop() {
     loadFromCloud();
     loadPhotosFromCloud();
     loadMemoryPhotosFromCloud();
+    syncCreations();
 }
 
 // Derives the same per-place cloud key used by uploadPhotoToCloud/photoVersions, so a place's
@@ -5956,6 +5966,7 @@ window.forceCloudSync = async function() {
         await loadFromCloud();
         await forceResyncAllPlacePhotos();
         await loadMemoryPhotosFromCloud();
+        await syncCreations(true);
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
@@ -7034,6 +7045,7 @@ async function renderGallery() {
     if (!container) return;
 
     container.innerHTML = "";
+    renderCreationsSection();
     const allPlaces = await getPlaces();
     const places = allPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
     
@@ -7945,3 +7957,711 @@ async function runRecoveryMode() {
         }
     });
 }
+
+// ==========================================
+// 16. Photo Studio — collages, filters & the "꾸민 사진" album
+// ==========================================
+// One editor for both features: pick 1 photo → filter/frame it; pick 2-9 → lay them out as a collage
+// (then the same filter/frame step applies to every cell). The result is a single JPEG.
+//
+// Storage: each result is its OWN cloud node, aura-rooms/{room}/creations/{id} = { img, kind,
+// createdAt, sources, caption }, plus a creationsVersion number other devices poll. Unlike place
+// photos (one list per place, replaced whole), adding or deleting one creation never rewrites the
+// others, so two phones saving at the same time can't overwrite each other. Locally they live in the
+// Dexie "creations" table, tagged with their room; uploaded:false marks one still waiting to go out.
+
+const STUDIO_EXPORT_LONG_SIDE = 2048;
+const STUDIO_PREVIEW_LONG_SIDE = 720;
+const STUDIO_MAX_PHOTOS = 9;
+
+// Cell rects are fractions of the photo area; aspect = width / height of that area.
+const STUDIO_LAYOUTS = [
+    { id: "single", name: "원본", count: 1, aspect: null, cells: [[0, 0, 1, 1]] },
+    { id: "2-side", name: "나란히", count: 2, aspect: 1, cells: [[0, 0, .5, 1], [.5, 0, .5, 1]] },
+    { id: "2-stack", name: "위아래", count: 2, aspect: 0.8, cells: [[0, 0, 1, .5], [0, .5, 1, .5]] },
+    { id: "3-hero", name: "큰 사진 + 2", count: 3, aspect: 0.8, cells: [[0, 0, 1, .6], [0, .6, .5, .4], [.5, .6, .5, .4]] },
+    { id: "3-side", name: "왼쪽 크게", count: 3, aspect: 1, cells: [[0, 0, .5, 1], [.5, 0, .5, .5], [.5, .5, .5, .5]] },
+    { id: "4-grid", name: "2×2", count: 4, aspect: 1, cells: [[0, 0, .5, .5], [.5, 0, .5, .5], [0, .5, .5, .5], [.5, .5, .5, .5]] },
+    { id: "4-strip", name: "네컷", count: 4, aspect: 1 / 3, cells: [[0, 0, 1, .25], [0, .25, 1, .25], [0, .5, 1, .25], [0, .75, 1, .25]] },
+    { id: "6-grid", name: "2×3", count: 6, aspect: 2 / 3, cells: [0, 1, 2].flatMap(r => [[0, r / 3, .5, 1 / 3], [.5, r / 3, .5, 1 / 3]]) },
+    { id: "9-grid", name: "3×3", count: 9, aspect: 1, cells: [0, 1, 2].flatMap(r => [0, 1, 2].map(c => [c / 3, r / 3, 1 / 3, 1 / 3])) }
+];
+
+// Fitting layouts for n photos: exact fits first; 5 → 2×3 and 7-8 → 3×3 leave soft empty cells.
+function studioLayoutsFor(n) {
+    const exact = STUDIO_LAYOUTS.filter(l => l.count === n);
+    if (exact.length) return exact;
+    return STUDIO_LAYOUTS.filter(l => l.count > n && l.count <= n + 2).slice(0, 1);
+}
+
+const STUDIO_FILTERS = [
+    { id: "none", name: "원본", p: {} },
+    { id: "film", name: "필름", p: { contrast: -8, saturation: -15, warmth: 6, fade: 0.25, grain: 10, vignette: 0.25 } },
+    { id: "warm", name: "따뜻하게", p: { warmth: 18, saturation: 8, brightness: 4 } },
+    { id: "cool", name: "시원하게", p: { warmth: -16, saturation: -4, brightness: 3 } },
+    { id: "pink", name: "핑크빛", p: { pink: 16, brightness: 6, saturation: -6, fade: 0.15 } },
+    { id: "mono", name: "흑백", p: { grayscale: 1, contrast: 12 } },
+    { id: "vintage", name: "빈티지", p: { sepia: 0.45, fade: 0.3, contrast: -10, vignette: 0.35, grain: 8 } },
+    { id: "vivid", name: "선명하게", p: { contrast: 16, saturation: 22 } }
+];
+
+const STUDIO_BACKGROUNDS = [
+    { id: "white", label: "흰색", color: "#FFFFFF", text: "#4A2834" },
+    { id: "pink", label: "핑크", color: "#FFE4EC", text: "#B5179E" },
+    { id: "cream", label: "크림", color: "#FFF6E5", text: "#7A5230" },
+    { id: "black", label: "검정", color: "#1E1B1F", text: "#FFFFFF" }
+];
+
+const studio = {
+    photos: [],          // [{ src, placeId, placeName, dateMs }]
+    layoutId: "single",
+    filterId: "none",
+    adjust: { brightness: 0, contrast: 0, saturation: 0 },
+    gap: 12,             // in export pixels (scaled down for the preview)
+    rounded: false,
+    bg: "white",
+    frame: "none",       // none | polaroid | stamp
+    caption: "",
+    renderQueued: false,
+    busy: false
+};
+
+// ── Image loading ────────────────────────────────────────────────────────────────────────────────
+const studioImageCache = new Map();
+function studioLoadImage(src) {
+    if (studioImageCache.has(src)) return studioImageCache.get(src);
+    const p = new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("사진을 불러오지 못했어요"));
+        img.src = src;
+    });
+    studioImageCache.set(src, p);
+    p.catch(() => studioImageCache.delete(src));
+    return p;
+}
+
+// ── Pixel filter (no ctx.filter — Safari on older iPhones doesn't support it) ────────────────────
+function studioFilterParams() {
+    const preset = (STUDIO_FILTERS.find(f => f.id === studio.filterId) || STUDIO_FILTERS[0]).p;
+    return {
+        brightness: (preset.brightness || 0) + studio.adjust.brightness,
+        contrast: (preset.contrast || 0) + studio.adjust.contrast,
+        saturation: (preset.saturation || 0) + studio.adjust.saturation,
+        warmth: preset.warmth || 0,
+        pink: preset.pink || 0,
+        sepia: preset.sepia || 0,
+        grayscale: preset.grayscale || 0,
+        fade: preset.fade || 0,
+        grain: preset.grain || 0,
+        vignette: preset.vignette || 0
+    };
+}
+
+function studioIsNeutral(p) {
+    return !p.brightness && !p.contrast && !p.saturation && !p.warmth && !p.pink && !p.sepia && !p.grayscale && !p.fade && !p.grain;
+}
+
+function studioApplyPixels(ctx, w, h, p) {
+    if (studioIsNeutral(p)) return;
+    const data = ctx.getImageData(0, 0, w, h);
+    const d = data.data;
+    const br = p.brightness * 1.5;
+    const C = Math.max(-200, Math.min(200, p.contrast * 1.8));
+    const k = (259 * (C + 255)) / (255 * (259 - C));
+    const sat = 1 + p.saturation / 100;
+    const warm = p.warmth * 0.8, pink = p.pink;
+    const fadeMix = p.fade * 0.3, fadeTo = 170 * fadeMix;
+    for (let i = 0; i < d.length; i += 4) {
+        let r = d[i] + br, g = d[i + 1] + br, b = d[i + 2] + br;
+        r = (r - 128) * k + 128; g = (g - 128) * k + 128; b = (b - 128) * k + 128;
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = gray + (r - gray) * sat; g = gray + (g - gray) * sat; b = gray + (b - gray) * sat;
+        if (warm) { r += warm; b -= warm; }
+        if (pink) { r += pink * 0.7; g -= pink * 0.25; b += pink * 0.35; }
+        if (p.sepia) {
+            const sr = 0.393 * r + 0.769 * g + 0.189 * b, sg = 0.349 * r + 0.686 * g + 0.168 * b, sb = 0.272 * r + 0.534 * g + 0.131 * b;
+            r += (sr - r) * p.sepia; g += (sg - g) * p.sepia; b += (sb - b) * p.sepia;
+        }
+        if (p.grayscale) {
+            const y = 0.299 * r + 0.587 * g + 0.114 * b;
+            r += (y - r) * p.grayscale; g += (y - g) * p.grayscale; b += (y - b) * p.grayscale;
+        }
+        if (fadeMix) { r = r * (1 - fadeMix) + fadeTo; g = g * (1 - fadeMix) + fadeTo; b = b * (1 - fadeMix) + fadeTo; }
+        if (p.grain) { const n = (Math.random() - 0.5) * p.grain * 2; r += n; g += n; b += n; }
+        d[i] = r < 0 ? 0 : r > 255 ? 255 : r;
+        d[i + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+        d[i + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+    }
+    ctx.putImageData(data, 0, 0);
+}
+
+function studioRoundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+// One cell: cover-crop the photo into w×h, filter it, add the vignette.
+function studioRenderCell(img, w, h, p) {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const ctx = c.getContext("2d");
+    const scale = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
+    const sw = c.width / scale, sh = c.height / scale;
+    ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+    studioApplyPixels(ctx, c.width, c.height, p);
+    if (p.vignette) {
+        const g = ctx.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.35,
+            c.width / 2, c.height / 2, Math.hypot(c.width, c.height) / 2);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, `rgba(0,0,0,${p.vignette * 0.6})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, c.width, c.height);
+    }
+    return c;
+}
+
+const STUDIO_FONT = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif`;
+
+// Draws the whole composition onto `canvas` with its long side = longSide px.
+async function studioRender(canvas, longSide) {
+    const layout = STUDIO_LAYOUTS.find(l => l.id === studio.layoutId) || STUDIO_LAYOUTS[0];
+    const images = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
+    const bg = STUDIO_BACKGROUNDS.find(b => b.id === studio.bg) || STUDIO_BACKGROUNDS[0];
+    const caption = studio.caption.trim();
+
+    let areaAspect = layout.aspect;
+    if (!areaAspect) {
+        const im = images[0];
+        areaAspect = Math.max(0.5, Math.min(2, im.naturalWidth / im.naturalHeight));
+    }
+    // Frame margins, as fractions of the photo area's width.
+    const polaroid = studio.frame === "polaroid";
+    const isStrip = layout.id === "4-strip";
+    const side = polaroid ? 0.06 : 0;
+    const top = polaroid ? 0.06 : 0;
+    let bottom = polaroid ? 0.24 : 0;
+    if (!polaroid && (caption || isStrip)) bottom = isStrip ? 0.32 : 0.12;
+
+    const totalW = 1 + side * 2;
+    const totalH = 1 / areaAspect + top + bottom;
+    const scale = longSide / Math.max(totalW, totalH);
+    const W = Math.round(totalW * scale), H = Math.round(totalH * scale);
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = bg.color;
+    ctx.fillRect(0, 0, W, H);
+
+    const unit = W / totalW;                 // px per photo-area width
+    const ax = side * unit, ay = top * unit, aw = unit, ah = unit / areaAspect;
+    const px = (studio.gap / STUDIO_EXPORT_LONG_SIDE) * longSide; // gap scales with output size
+    const multi = layout.cells.length > 1;
+    const p = studioFilterParams();
+
+    layout.cells.forEach((cell, i) => {
+        // Outer edges get a full gap (only when there's a border to show), inner edges half each side.
+        const outer = multi || polaroid ? px : 0;
+        const left = cell[0] <= 0.001 ? outer : px / 2;
+        const topGap = cell[1] <= 0.001 ? (top > 0 ? 0 : outer) : px / 2;
+        const right = cell[0] + cell[2] >= 0.999 ? outer : px / 2;
+        const bottomGap = cell[1] + cell[3] >= 0.999 ? (bottom > 0 ? px / 2 : outer) : px / 2;
+        const x = ax + cell[0] * aw + left;
+        const y = ay + cell[1] * ah + topGap;
+        const w = cell[2] * aw - left - right;
+        const h = cell[3] * ah - topGap - bottomGap;
+        if (w <= 0 || h <= 0) return;
+        const radius = studio.rounded ? Math.min(w, h) * 0.06 : 0;
+        ctx.save();
+        if (radius) { studioRoundRectPath(ctx, x, y, w, h, radius); ctx.clip(); }
+        if (images[i]) {
+            ctx.drawImage(studioRenderCell(images[i], w, h, p), x, y, w, h);
+        } else {
+            ctx.fillStyle = bg.id === "black" ? "rgba(255,255,255,0.08)" : "rgba(255,101,132,0.10)";
+            ctx.fillRect(x, y, w, h);
+        }
+        ctx.restore();
+    });
+
+    // Date stamp: orange film-camera date in the bottom-right of the photo area.
+    if (studio.frame === "stamp") {
+        const d = studioDisplayDate();
+        const text = `'${String(d.getFullYear()).slice(2)} ${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getDate()).padStart(2, "0")}`;
+        const size = Math.round(aw * 0.045);
+        ctx.save();
+        ctx.font = `bold ${size}px "Courier New", monospace`;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.shadowColor = "rgba(255,120,30,0.9)";
+        ctx.shadowBlur = size * 0.5;
+        ctx.fillStyle = "#FF9A3C";
+        ctx.fillText(text, ax + aw - size * 1.2, ay + ah - size * 0.9);
+        ctx.restore();
+    }
+
+    if (bottom > 0) {
+        const bandTop = ay + ah, bandH = H - bandTop;
+        const text = caption || (isStrip ? studioDefaultCaption() : "");
+        if (text) {
+            const size = Math.round(Math.min(bandH * 0.32, aw * (isStrip ? 0.085 : polaroid ? 0.068 : 0.055)));
+            ctx.save();
+            ctx.fillStyle = bg.text;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = `700 ${size}px ${STUDIO_FONT}`;
+            const maxW = aw * 0.9;
+            let t = text;
+            if (ctx.measureText(t).width > maxW) {
+                while (ctx.measureText(t + "…").width > maxW && t.length > 1) t = t.slice(0, -1);
+                t += "…";
+            }
+            ctx.fillText(t, ax + aw / 2, bandTop + bandH / 2);
+            ctx.restore();
+        }
+    }
+}
+
+function studioDisplayDate() {
+    const ms = studio.photos.map(p => p.dateMs).find(v => v > 0);
+    return ms ? new Date(ms) : new Date();
+}
+
+function studioDefaultCaption() {
+    const d = studioDisplayDate();
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Suggested captions: date, place name(s), D+N (when 사귄 날 is set).
+function studioCaptionSuggestions() {
+    if (studio.photos.length === 0) return [];
+    const out = [studioDefaultCaption()];
+    const names = [...new Set(studio.photos.map(p => p.placeName).filter(Boolean))];
+    if (names.length) out.push(names.slice(0, 2).join(" · ") + (names.length > 2 ? " 외" : ""));
+    const n = coupleDayNumber(startOfLocalDay(studioDisplayDate()));
+    if (n > 0) out.push(`${partnerAName} ♥ ${partnerBName} D+${n}`);
+    if (names.length) out.push(`${studioDefaultCaption()} · ${names[0]}`);
+    return [...new Set(out)];
+}
+
+// ── Editor UI ────────────────────────────────────────────────────────────────────────────────────
+function studioQueueRender() {
+    if (studio.renderQueued) return;
+    studio.renderQueued = true;
+    requestAnimationFrame(async () => {
+        studio.renderQueued = false;
+        const canvas = document.getElementById("studio-preview");
+        if (!canvas || studio.photos.length === 0) return;
+        try { await studioRender(canvas, STUDIO_PREVIEW_LONG_SIDE); }
+        catch (e) { console.error("[Studio] preview failed:", e); }
+    });
+}
+
+function studioRenderControls() {
+    const strip = document.getElementById("studio-selected");
+    if (strip) {
+        strip.innerHTML = studio.photos.map((ph, i) => `
+            <div class="studio-thumb">
+                <img src="${ph.src}" alt="">
+                <span class="studio-thumb-no">${i + 1}</span>
+                <button type="button" class="studio-thumb-remove" onclick="studioRemovePhoto(${i})" title="빼기">×</button>
+            </div>`).join("") +
+            (studio.photos.length < STUDIO_MAX_PHOTOS
+                ? `<button type="button" class="studio-add-btn" onclick="openStudioPicker()">＋<span>사진 고르기</span></button>` : "");
+    }
+    const layouts = studioLayoutsFor(studio.photos.length);
+    if (!layouts.some(l => l.id === studio.layoutId)) studio.layoutId = layouts[0] ? layouts[0].id : "single";
+    const layoutEl = document.getElementById("studio-layouts");
+    if (layoutEl) {
+        layoutEl.innerHTML = layouts.map(l => `<button type="button" class="studio-chip${l.id === studio.layoutId ? " active" : ""}" onclick="studioSet('layoutId', ${jsArg(l.id)})">${escapeHtml(l.name)}</button>`).join("");
+    }
+    const filterEl = document.getElementById("studio-filters");
+    if (filterEl) {
+        filterEl.innerHTML = STUDIO_FILTERS.map(f => `<button type="button" class="studio-chip${f.id === studio.filterId ? " active" : ""}" onclick="studioSet('filterId', ${jsArg(f.id)})">${escapeHtml(f.name)}</button>`).join("");
+    }
+    const bgEl = document.getElementById("studio-backgrounds");
+    if (bgEl) {
+        bgEl.innerHTML = STUDIO_BACKGROUNDS.map(b => `<button type="button" class="studio-swatch${b.id === studio.bg ? " active" : ""}" style="background:${b.color}" onclick="studioSet('bg', ${jsArg(b.id)})" title="${b.label}" aria-label="배경 ${b.label}"></button>`).join("");
+    }
+    document.querySelectorAll("#studio-frames .studio-chip").forEach(btn => btn.classList.toggle("active", btn.dataset.frame === studio.frame));
+    const sugEl = document.getElementById("studio-caption-suggestions");
+    if (sugEl) {
+        sugEl.innerHTML = studioCaptionSuggestions().map(s => `<button type="button" class="studio-chip small" onclick="studioUseCaption(${jsArg(s)})">${escapeHtml(s)}</button>`).join("");
+    }
+    const cap = document.getElementById("studio-caption");
+    if (cap && cap.value !== studio.caption) cap.value = studio.caption;
+    ["brightness", "contrast", "saturation"].forEach(k => {
+        const el = document.getElementById(`studio-adj-${k}`);
+        if (el) el.value = studio.adjust[k];
+    });
+    const gapEl = document.getElementById("studio-gap");
+    if (gapEl) gapEl.value = studio.gap;
+    const roundEl = document.getElementById("studio-rounded");
+    if (roundEl) roundEl.checked = studio.rounded;
+    const empty = studio.photos.length === 0;
+    document.getElementById("studio-preview-wrap")?.classList.toggle("hidden", empty);
+    document.getElementById("studio-empty")?.classList.toggle("hidden", !empty);
+    document.querySelectorAll(".studio-needs-photo").forEach(el => { el.disabled = empty || studio.busy; });
+    studioQueueRender();
+}
+
+window.studioSet = function(key, value) {
+    studio[key] = value;
+    studioRenderControls();
+};
+window.studioSetAdjust = function(key, value) {
+    studio.adjust[key] = Number(value) || 0;
+    studioQueueRender();
+};
+window.studioSetGap = function(value) { studio.gap = Number(value) || 0; studioQueueRender(); };
+window.studioSetRounded = function(checked) { studio.rounded = !!checked; studioQueueRender(); };
+window.studioSetCaption = function(value) { studio.caption = String(value || "").slice(0, 60); studioQueueRender(); };
+window.studioUseCaption = function(text) { studio.caption = text; studioRenderControls(); };
+window.studioRemovePhoto = function(i) { studio.photos.splice(i, 1); studioRenderControls(); };
+window.studioResetAdjust = function() { studio.adjust = { brightness: 0, contrast: 0, saturation: 0 }; studioRenderControls(); };
+
+// Opens the editor; `photos` preselects ({ src, placeId, placeName, dateMs }).
+window.openPhotoStudio = function(photos = []) {
+    Object.assign(studio, {
+        photos: photos.slice(0, STUDIO_MAX_PHOTOS), layoutId: "single", filterId: "none",
+        adjust: { brightness: 0, contrast: 0, saturation: 0 }, gap: 12, rounded: false,
+        bg: "white", frame: "none", caption: "", busy: false
+    });
+    document.getElementById("modal-photo-studio")?.classList.add("active");
+    studioRenderControls();
+    setTimeout(() => lucide.createIcons(), 50);
+    if (studio.photos.length === 0) openStudioPicker();
+};
+
+window.closePhotoStudio = function() {
+    document.getElementById("modal-photo-studio")?.classList.remove("active");
+    studioImageCache.clear();
+};
+
+// From the gallery lightbox: start with the photo being viewed.
+window.openStudioFromSlider = async function() {
+    const src = activeGalleryPhotos[activePhotoIndex];
+    if (!src) return;
+    const place = typeof activePlaceInfo.id === "number" ? await db.places.get(activePlaceInfo.id) : null;
+    closeGallerySliderModal();
+    openPhotoStudio([{ src, placeId: activePlaceInfo.id, placeName: activePlaceInfo.name, dateMs: place ? parseAnyDate(place.createdAt || place.date) : 0 }]);
+};
+
+async function studioExportCanvas() {
+    const canvas = document.createElement("canvas");
+    await studioRender(canvas, STUDIO_EXPORT_LONG_SIDE);
+    return canvas;
+}
+
+function studioCanvasToBlob(canvas) {
+    return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("이미지 변환 실패")), "image/jpeg", 0.88));
+}
+
+function studioFileName() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `AURA_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.jpg`;
+}
+
+// Share sheet when the browser can share files (iPhone/Android → 사진 앱에 저장, 카톡 등), else download.
+async function studioShareOrDownload(blob, fileName) {
+    try {
+        const file = new File([blob], fileName, { type: "image/jpeg" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file] });
+            return;
+        }
+    } catch (e) {
+        if (e && e.name === "AbortError") return; // the person closed the share sheet
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function studioWithBusy(label, fn) {
+    if (studio.busy) return;
+    studio.busy = true;
+    studioRenderControls();
+    showToast(label, "info");
+    try { await fn(); }
+    catch (e) { console.error("[Studio]", e); showToast("사진을 만들지 못했어요: " + (e && e.message ? e.message : e), "danger"); }
+    finally { studio.busy = false; studioRenderControls(); }
+}
+
+window.studioSaveToPhone = function() {
+    if (!studio.photos.length) return;
+    studioWithBusy("사진을 만드는 중이에요... ✨", async () => {
+        const blob = await studioCanvasToBlob(await studioExportCanvas());
+        await studioShareOrDownload(blob, studioFileName());
+    });
+};
+
+window.studioSaveToAlbum = function() {
+    if (!studio.photos.length) return;
+    studioWithBusy("꾸민 사진에 저장하는 중... ☁️", async () => {
+        const canvas = await studioExportCanvas();
+        const row = {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            room: syncRoomId,
+            img: canvas.toDataURL("image/jpeg", 0.88),
+            kind: studio.photos.length > 1 ? "collage" : "filter",
+            createdAt: Date.now(),
+            caption: studio.caption.trim(),
+            sources: studio.photos.map(p => ({ placeName: p.placeName || "", dateMs: p.dateMs || 0 })),
+            uploaded: false
+        };
+        await db.creations.put(row);
+        const ok = await uploadCreation(row);
+        await renderCreationsSection();
+        showToast(ok ? "꾸민 사진에 저장했어요! 두 사람 모두 갤러리에서 볼 수 있어요 💖"
+                     : "이 기기에 저장했어요. 인터넷이 연결되면 자동으로 올라가요 ☁️", ok ? "success" : "warning");
+        closePhotoStudio();
+        if (currentActiveTab !== "gallery") switchTab("gallery");
+    });
+};
+
+// ── Photo picker (photos of every place, newest date first) ──────────────────────────────────────
+let studioPickerSelection = [];
+let studioPickerPlaces = [];
+let studioPickerObserver = null;
+
+window.openStudioPicker = async function() {
+    studioPickerSelection = studio.photos.map(p => p.src);
+    const listEl = document.getElementById("studio-picker-list");
+    if (!listEl) return;
+    studioPickerPlaces = (await getPlaces())
+        .filter(p => p.isDeleted !== 1 && p.isVisited !== -1)
+        .map(p => ({ p, photos: p.photos || (p.photo ? [p.photo] : []) }))
+        .filter(x => x.photos.length > 0)
+        .sort((a, b) => parseAnyDate(b.p.createdAt || b.p.date) - parseAnyDate(a.p.createdAt || a.p.date));
+    listEl.innerHTML = studioPickerPlaces.length === 0
+        ? `<div class="studio-picker-empty">아직 사진이 있는 장소가 없어요. 다녀온 곳에 사진을 먼저 올려주세요 📸</div>`
+        : studioPickerPlaces.map((x, pi) => `
+            <div class="studio-picker-group">
+                <div class="studio-picker-title">${escapeHtml(x.p.name)} <span>${escapeHtml(formatDisplayDateRange(x.p.createdAt || x.p.date, x.p.endDate) || "")} · ${x.photos.length}장</span></div>
+                <div class="studio-picker-grid">
+                    ${x.photos.map((_, i) => `<button type="button" class="studio-pick" data-pi="${pi}" data-i="${i}" onclick="studioTogglePick(${pi}, ${i})"><img src="${LAZY_PIXEL}" data-pi="${pi}" data-i="${i}" alt=""><span class="studio-pick-no"></span></button>`).join("")}
+                </div>
+            </div>`).join("");
+    if (studioPickerObserver) studioPickerObserver.disconnect();
+    studioPickerObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
+        entries.forEach(en => {
+            if (!en.isIntersecting) return;
+            const img = en.target;
+            const x = studioPickerPlaces[+img.dataset.pi];
+            if (x) img.src = x.photos[+img.dataset.i];
+            studioPickerObserver.unobserve(img);
+        });
+    }, { root: listEl, rootMargin: "300px" }) : null;
+    listEl.querySelectorAll("img[data-pi]").forEach(img => {
+        if (studioPickerObserver) studioPickerObserver.observe(img);
+        else img.src = studioPickerPlaces[+img.dataset.pi].photos[+img.dataset.i];
+    });
+    studioUpdatePickerMarks();
+    document.getElementById("modal-studio-picker")?.classList.add("active");
+    listEl.scrollTop = 0;
+};
+
+function studioUpdatePickerMarks() {
+    document.querySelectorAll("#studio-picker-list .studio-pick").forEach(btn => {
+        const x = studioPickerPlaces[+btn.dataset.pi];
+        const src = x && x.photos[+btn.dataset.i];
+        const n = studioPickerSelection.indexOf(src);
+        btn.classList.toggle("selected", n >= 0);
+        btn.querySelector(".studio-pick-no").textContent = n >= 0 ? String(n + 1) : "";
+    });
+    const doneBtn = document.getElementById("studio-picker-done");
+    if (doneBtn) doneBtn.textContent = `완료 (${studioPickerSelection.length}/${STUDIO_MAX_PHOTOS})`;
+}
+
+window.studioTogglePick = function(pi, i) {
+    const x = studioPickerPlaces[pi];
+    const src = x && x.photos[i];
+    if (!src) return;
+    const at = studioPickerSelection.indexOf(src);
+    if (at >= 0) studioPickerSelection.splice(at, 1);
+    else if (studioPickerSelection.length >= STUDIO_MAX_PHOTOS) { showToast(`한 번에 ${STUDIO_MAX_PHOTOS}장까지 고를 수 있어요.`, "info"); return; }
+    else studioPickerSelection.push(src);
+    studioUpdatePickerMarks();
+};
+
+window.closeStudioPicker = function(apply) {
+    if (apply) {
+        const known = new Map(studio.photos.map(p => [p.src, p]));
+        studio.photos = studioPickerSelection.map(src => {
+            if (known.has(src)) return known.get(src);
+            const x = studioPickerPlaces.find(x => x.photos.includes(src));
+            return { src, placeId: x ? x.p.id : null, placeName: x ? x.p.name : "", dateMs: x ? parseAnyDate(x.p.createdAt || x.p.date) : 0 };
+        });
+        studioRenderControls();
+    }
+    document.getElementById("modal-studio-picker")?.classList.remove("active");
+    if (studioPickerObserver) { studioPickerObserver.disconnect(); studioPickerObserver = null; }
+    const listEl = document.getElementById("studio-picker-list");
+    if (listEl) listEl.innerHTML = ""; // release the decoded thumbnails
+    if (studio.photos.length === 0) closePhotoStudio();
+};
+
+// ── Cloud sync for 꾸민 사진 ─────────────────────────────────────────────────────────────────────
+function creationsVersionStorageKey() { return `aura_creations_version_${syncRoomId}`; }
+function creationsRoomBase() { return `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`; }
+
+async function bumpCreationsVersion() {
+    const ts = Date.now();
+    const r = await fetch(`${creationsRoomBase()}/creationsVersion.json?print=silent`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ts)
+    });
+    if (r.ok) localStorage.setItem(creationsVersionStorageKey(), String(ts));
+    return r.ok;
+}
+
+// Uploads one creation and confirms it landed (reads back its createdAt). Returns true on success.
+async function uploadCreation(row) {
+    if (!syncRoomId || row.room !== syncRoomId) return false;
+    try {
+        const { id, img, kind, createdAt, caption, sources } = row;
+        const nodeUrl = `${creationsRoomBase()}/creations/${encodeURIComponent(id)}`;
+        const r = await fetch(`${nodeUrl}.json?print=silent`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ img, kind, createdAt, caption, sources })
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const check = await fetchJsonWithTimeout(`${nodeUrl}/createdAt.json?t=${Date.now()}`, 15000);
+        if (check !== createdAt) throw new Error("verify mismatch");
+        await db.creations.update(id, { uploaded: true });
+        await bumpCreationsVersion();
+        return true;
+    } catch (e) {
+        console.error("[Creations] upload failed:", e);
+        return false;
+    }
+}
+
+let creationsSyncInFlight = false;
+// Pushes this device's not-yet-uploaded creations, then pulls what changed (only when the room's
+// creationsVersion moved, or `force`). New ones download one per request; ones deleted elsewhere
+// (gone from the cloud listing) are removed here — but never a local one that hasn't gone out yet.
+async function syncCreations(force = false) {
+    if (!syncRoomId || creationsSyncInFlight) return;
+    creationsSyncInFlight = true;
+    let changed = false;
+    try {
+        const pending = await db.creations.where("room").equals(syncRoomId).filter(c => !c.uploaded).toArray();
+        for (const row of pending) { if (await uploadCreation(row)) changed = true; }
+
+        const remoteVersion = await fetchJsonWithTimeout(`${creationsRoomBase()}/creationsVersion.json?t=${Date.now()}`, 15000);
+        const known = parseInt(localStorage.getItem(creationsVersionStorageKey()) || "0", 10) || 0;
+        if (!force && (!remoteVersion || remoteVersion === known)) return;
+
+        const listing = await fetchJsonWithTimeout(`${creationsRoomBase()}/creations.json?shallow=true&t=${Date.now()}`, 15000) || {};
+        const cloudIds = new Set(Object.keys(listing));
+        const local = await db.creations.where("room").equals(syncRoomId).toArray();
+        const localIds = new Set(local.map(c => c.id));
+
+        for (const c of local) {
+            if (c.uploaded && !cloudIds.has(c.id)) { await db.creations.delete(c.id); changed = true; }
+        }
+        let allOk = true;
+        for (const id of cloudIds) {
+            if (localIds.has(id)) continue;
+            try {
+                const node = await fetchJsonWithTimeout(`${creationsRoomBase()}/creations/${encodeURIComponent(id)}.json?t=${Date.now()}`, 60000);
+                if (node && typeof node.img === "string" && node.img.startsWith("data:image/")) {
+                    await db.creations.put({
+                        id, room: syncRoomId, img: node.img, kind: node.kind === "collage" ? "collage" : "filter",
+                        createdAt: Number(node.createdAt) || 0, caption: String(node.caption || "").slice(0, 60),
+                        sources: Array.isArray(node.sources) ? node.sources.slice(0, STUDIO_MAX_PHOTOS) : [],
+                        uploaded: true
+                    });
+                    changed = true;
+                }
+            } catch (e) {
+                allOk = false;
+                console.error("[Creations] download failed for", id, e);
+            }
+        }
+        if (allOk && remoteVersion) localStorage.setItem(creationsVersionStorageKey(), String(remoteVersion));
+    } catch (e) {
+        console.error("[Creations] sync failed:", e);
+    } finally {
+        creationsSyncInFlight = false;
+        if (changed) renderCreationsSection();
+    }
+}
+
+// ── 꾸민 사진 section in the gallery tab + its viewer ───────────────────────────────────────────
+let creationsShown = [];
+async function renderCreationsSection() {
+    const wrap = document.getElementById("creations-section");
+    const grid = document.getElementById("creations-grid");
+    if (!wrap || !grid) return;
+    let rows = [];
+    try { rows = await db.creations.where("room").equals(syncRoomId).toArray(); } catch (e) {}
+    rows.sort((a, b) => b.createdAt - a.createdAt);
+    creationsShown = rows;
+    wrap.classList.toggle("hidden", rows.length === 0);
+    const countEl = document.getElementById("creations-count");
+    if (countEl) countEl.textContent = `${rows.length}장`;
+    grid.innerHTML = rows.map((c, i) => `
+        <button type="button" class="creation-tile" onclick="openCreationViewer(${i})">
+            <img src="${c.img}" alt="꾸민 사진" loading="lazy">
+            ${c.uploaded ? "" : `<span class="creation-pending" title="아직 클라우드에 올라가지 않았어요">업로드 대기</span>`}
+        </button>`).join("");
+}
+
+let activeCreationIndex = 0;
+window.openCreationViewer = function(i) {
+    const c = creationsShown[i];
+    if (!c) return;
+    activeCreationIndex = i;
+    const img = document.getElementById("creation-viewer-img");
+    if (img) img.src = c.img;
+    const meta = document.getElementById("creation-viewer-meta");
+    if (meta) {
+        const d = new Date(c.createdAt);
+        const names = [...new Set((c.sources || []).map(s => s.placeName).filter(Boolean))];
+        meta.textContent = `${c.kind === "collage" ? "콜라주" : "필터"} · ${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} 만듦` +
+            (names.length ? ` · ${names.join(", ")}` : "") + (c.uploaded ? "" : " · 아직 업로드 전");
+    }
+    document.getElementById("modal-creation-viewer")?.classList.add("active");
+    setTimeout(() => lucide.createIcons(), 50);
+};
+window.closeCreationViewer = function() {
+    document.getElementById("modal-creation-viewer")?.classList.remove("active");
+};
+
+window.saveCreationToPhone = async function() {
+    const c = creationsShown[activeCreationIndex];
+    if (!c) return;
+    const blob = await (await fetch(c.img)).blob();
+    await studioShareOrDownload(blob, `AURA_꾸민사진_${c.id}.jpg`);
+};
+
+window.deleteActiveCreation = async function() {
+    const c = creationsShown[activeCreationIndex];
+    if (!c) return;
+    if (!(await showConfirmModal("이 꾸민 사진을 삭제할까요?\n\n두 사람 기기 모두에서 사라지고 되돌릴 수 없어요."))) return;
+    try {
+        if (c.uploaded && syncRoomId) {
+            const r = await fetch(`${creationsRoomBase()}/creations/${encodeURIComponent(c.id)}.json`, { method: "DELETE" });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            await bumpCreationsVersion();
+        }
+        await db.creations.delete(c.id);
+        closeCreationViewer();
+        await renderCreationsSection();
+        showToast("꾸민 사진을 삭제했어요.", "success");
+    } catch (e) {
+        showToast("삭제하지 못했어요. 인터넷 연결을 확인해 주세요.", "danger");
+    }
+};

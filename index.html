@@ -80,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261113_v401">
+    <link rel="stylesheet" href="style.css?v=20261113_v402">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -379,6 +379,17 @@
                             <h3 class="card-heading" style="margin-bottom:0.2rem;"><i data-lucide="camera" class="margin-right-sm text-primary"></i>추억 포토 갤러리 📸</h3>
                             <span class="sub-text" id="gallery-photo-count" style="font-size:0.8rem; color:var(--color-text-med);">함께 다녀온 곳에 등록된 모든 커플 사진들</span>
                         </div>
+                        <button type="button" class="btn btn-primary" onclick="openPhotoStudio()" style="padding:0.45rem 0.9rem; font-size:0.82rem; gap:4px;">
+                            <i data-lucide="wand-sparkles" style="width:15px; height:15px;"></i> 사진 꾸미기
+                        </button>
+                    </div>
+
+                    <!-- 꾸민 사진: collages / filtered photos saved from the photo studio (app.js section 16) -->
+                    <div id="creations-section" class="creations-section hidden">
+                        <div class="creations-header">
+                            <h4>✨ 꾸민 사진 <span id="creations-count"></span></h4>
+                        </div>
+                        <div id="creations-grid" class="creations-grid"></div>
                     </div>
 
                     <div class="gallery-grid" id="gallery-photos-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1.25rem; padding: 0 1.5rem 1.5rem 1.5rem;">
@@ -858,6 +869,9 @@
                     <button class="btn btn-outline" title="이 사진 다운" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="downloadCurrentSliderPhoto()">
                         <i data-lucide="download" style="width:14px; height:14px;"></i>
                     </button>
+                    <button class="btn btn-outline" title="이 사진 꾸미기" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(255,101,132,0.85); color:#fff; border:none; backdrop-filter:blur(6px);" onclick="openStudioFromSlider()">
+                        <i data-lucide="wand-sparkles" style="width:14px; height:14px;"></i>
+                    </button>
                     <button class="btn btn-outline" id="btn-set-cover-photo" title="대표 사진 설정" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:rgba(0,0,0,0.5); color:#fff; border-color:rgba(255,255,255,0.4); backdrop-filter:blur(6px);" onclick="setCoverPhoto()">
                         <i data-lucide="star" style="width:14px; height:14px;"></i>
                     </button>
@@ -884,6 +898,98 @@
 
             <div class="gallery-slider-thumbs" id="gallery-slider-thumbs">
                 <!-- Thumbnails inserted dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Photo Studio (collage / filter / frame editor — app.js section 16) -->
+    <div class="modal-overlay" id="modal-photo-studio">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>✨ 사진 꾸미기</h3>
+                <button class="modal-close" onclick="closePhotoStudio()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body studio-body">
+                <div id="studio-empty" class="studio-empty hidden">꾸밀 사진을 골라주세요. 1장이면 필터, 여러 장이면 콜라주가 돼요.</div>
+                <div id="studio-preview-wrap" class="studio-preview-wrap">
+                    <canvas id="studio-preview"></canvas>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">사진 <span>(최대 9장 · 고른 순서대로 들어가요)</span></div>
+                    <div id="studio-selected" class="studio-selected"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">레이아웃</div>
+                    <div id="studio-layouts" class="studio-chips"></div>
+                    <div class="studio-row">
+                        <label for="studio-gap">테두리</label>
+                        <input type="range" id="studio-gap" min="0" max="60" step="2" oninput="studioSetGap(this.value)">
+                        <label class="studio-check"><input type="checkbox" id="studio-rounded" onchange="studioSetRounded(this.checked)"> 둥근 모서리</label>
+                    </div>
+                    <div class="studio-row">
+                        <label>배경색</label>
+                        <div id="studio-backgrounds" class="studio-swatches"></div>
+                    </div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">필터</div>
+                    <div id="studio-filters" class="studio-chips"></div>
+                    <div class="studio-row"><label for="studio-adj-brightness">밝기</label><input type="range" id="studio-adj-brightness" min="-50" max="50" oninput="studioSetAdjust('brightness', this.value)"></div>
+                    <div class="studio-row"><label for="studio-adj-contrast">대비</label><input type="range" id="studio-adj-contrast" min="-50" max="50" oninput="studioSetAdjust('contrast', this.value)"></div>
+                    <div class="studio-row"><label for="studio-adj-saturation">채도</label><input type="range" id="studio-adj-saturation" min="-50" max="50" oninput="studioSetAdjust('saturation', this.value)"></div>
+                    <button type="button" class="studio-link-btn" onclick="studioResetAdjust()">밝기·대비·채도 초기화</button>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">프레임 · 문구</div>
+                    <div id="studio-frames" class="studio-chips">
+                        <button type="button" class="studio-chip" data-frame="none" onclick="studioSet('frame', 'none')">없음</button>
+                        <button type="button" class="studio-chip" data-frame="polaroid" onclick="studioSet('frame', 'polaroid')">폴라로이드</button>
+                        <button type="button" class="studio-chip" data-frame="stamp" onclick="studioSet('frame', 'stamp')">날짜 도장</button>
+                    </div>
+                    <input type="text" id="studio-caption" maxlength="60" placeholder="사진 아래 문구 (비워두면 없음)" oninput="studioSetCaption(this.value)">
+                    <div id="studio-caption-suggestions" class="studio-chips"></div>
+                </div>
+            </div>
+            <div class="studio-footer">
+                <button type="button" class="btn btn-outline studio-needs-photo" onclick="studioSaveToPhone()"><i data-lucide="download"></i> 폰에 저장</button>
+                <button type="button" class="btn btn-primary studio-needs-photo" onclick="studioSaveToAlbum()"><i data-lucide="cloud-upload"></i> 꾸민 사진에 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Photo Studio picker (choose up to 9 photos from all places) -->
+    <div class="modal-overlay" id="modal-studio-picker">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>📸 사진 고르기</h3>
+                <button class="modal-close" onclick="closeStudioPicker(false)"><i data-lucide="x"></i></button>
+            </div>
+            <div id="studio-picker-list" class="studio-picker-list"></div>
+            <div class="studio-footer">
+                <button type="button" class="btn btn-outline" onclick="closeStudioPicker(false)">취소</button>
+                <button type="button" class="btn btn-primary" id="studio-picker-done" onclick="closeStudioPicker(true)">완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: 꾸민 사진 viewer -->
+    <div class="modal-overlay" id="modal-creation-viewer">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>✨ 꾸민 사진</h3>
+                <button class="modal-close" onclick="closeCreationViewer()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="creation-viewer-body">
+                <img id="creation-viewer-img" alt="꾸민 사진">
+                <div id="creation-viewer-meta" class="creation-viewer-meta"></div>
+            </div>
+            <div class="studio-footer">
+                <button type="button" class="btn btn-outline studio-danger" onclick="deleteActiveCreation()"><i data-lucide="trash-2"></i> 삭제</button>
+                <button type="button" class="btn btn-primary" onclick="saveCreationToPhone()"><i data-lucide="download"></i> 폰에 저장</button>
             </div>
         </div>
     </div>
@@ -1053,13 +1159,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261113_v401"></script>
+    <script src="app.js?v=20261113_v402"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261113_v401').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261113_v402').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
