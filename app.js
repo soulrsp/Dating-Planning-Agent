@@ -147,7 +147,13 @@ let partnerAName = localStorage.getItem("aura_partner_a_name") || "SH";
 let partnerBName = localStorage.getItem("aura_partner_b_name") || "SA";
 // Resolved from the URL immediately (not deferred to DOMContentLoaded) because room-scoped state
 // below (memory photos) needs the correct room before it initializes, not after.
-let syncRoomId = new URLSearchParams(window.location.search).get("room") || localStorage.getItem("aura_sync_room_id") || "0";
+// Room ids come from links people tap (?room=...) and end up in cloud paths and on screen, so only
+// letters (incl. Korean), digits, "_" and "-" are kept. Anything else — markup, quotes, or the
+// . $ # [ ] / characters Firebase forbids in keys — is dropped.
+function sanitizeRoomId(value) {
+    return String(value || "").normalize("NFC").replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 64);
+}
+let syncRoomId = sanitizeRoomId(new URLSearchParams(window.location.search).get("room")) || sanitizeRoomId(localStorage.getItem("aura_sync_room_id")) || "0";
 let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
 
 // Cloud Sync Engine variables
@@ -481,7 +487,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     
     // Check for room ID in query string (takes precedence)
     const urlParams = new URLSearchParams(window.location.search);
-    const queryRoom = urlParams.get("room");
+    const queryRoom = sanitizeRoomId(urlParams.get("room"));
     if (queryRoom) {
         syncRoomId = queryRoom;
         document.getElementById("settings-sync-room-id").value = queryRoom;
@@ -614,7 +620,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!syncRoomId) {
                 let roomId = prompt("연결할 커플 동기화 방 이름을 입력하세요 (예: love1004, 초코딸기)", "love1004");
                 if (!roomId) return;
-                roomId = roomId.trim();
+                roomId = sanitizeRoomId(roomId.trim());
                 if (roomId) {
                     syncRoomId = roomId;
                     localStorage.setItem("aura_sync_room_id", roomId);
@@ -665,10 +671,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             popover.innerHTML = `
                 <div style="font-size:0.75rem; color:var(--color-text-low); margin-bottom:0.5rem; font-weight:600; text-align:center;">커플 이름 수정 💕</div>
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.6rem;">
-                    <input id="edit-name-a" type="text" value="${partnerAName}" placeholder="A 이름" 
+                    <input id="edit-name-a" type="text" value="${escapeHtml(partnerAName)}" placeholder="A 이름" 
                         style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
                     <span style="display:flex; align-items:center; color:var(--color-primary); font-size:0.85rem;">♥</span>
-                    <input id="edit-name-b" type="text" value="${partnerBName}" placeholder="B 이름" 
+                    <input id="edit-name-b" type="text" value="${escapeHtml(partnerBName)}" placeholder="B 이름" 
                         style="flex:1; padding:0.4rem 0.6rem; border:1px solid rgba(255,101,132,0.2); border-radius:10px; font-size:0.85rem; font-family:var(--font-body); background:rgba(255,255,255,0.8); color:var(--color-text-high); outline:none; text-align:center; width:80px;">
                 </div>
                 <button id="btn-save-couple-names" style="width:100%; padding:0.45rem; border:none; background:linear-gradient(135deg, var(--color-primary) 0%, #FF85A1 100%); color:white; border-radius:10px; font-size:0.8rem; font-weight:700; cursor:pointer; font-family:var(--font-body); transition:all 0.2s ease;">
@@ -1294,9 +1300,9 @@ async function updateMapMarkers() {
             const infowindow = new naver.maps.InfoWindow({
                 content: `
                     <div style="padding: 10px; font-family:var(--font-body); width:180px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
-                        <strong style="color:var(--color-text-high); font-size:0.9rem;">${place.name}</strong>
-                        <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${place.category}</div>
-                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${place.notes || '메모 없음'}</p>
+                        <strong style="color:var(--color-text-high); font-size:0.9rem;">${escapeHtml(place.name)}</strong>
+                        <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${escapeHtml(place.category)}</div>
+                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${escapeHtml(place.notes) || '메모 없음'}</p>
                     </div>
                 `,
                 borderWidth: 0,
@@ -1361,9 +1367,9 @@ async function updateMapMarkers() {
             const popupCatBadge = categoryBadgeClassAndStyle(popupCategoryText);
             const popupContent = `
                 <div class="map-popup-card" style="font-family:var(--font-body); min-width:140px;">
-                    <strong style="font-size: 0.9rem; color: var(--color-text-high);">${place.name}</strong>
-                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${popupCategoryText}</span>
-                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${place.notes || ''}</p>
+                    <strong style="font-size: 0.9rem; color: var(--color-text-high);">${escapeHtml(place.name)}</strong>
+                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${escapeHtml(popupCategoryText)}</span>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${escapeHtml(place.notes)}</p>
                 </div>
             `;
             
@@ -2377,19 +2383,19 @@ function renderMapSearchResults(results) {
 
             cardsHtml += `
                 <div class="search-result-card" id="search-res-item-${idx}">
-                    <div class="search-result-title">${idx + 1}. ${res.name} ${distBadge}</div>
-                    <div class="search-result-addr">${res.address}</div>
+                    <div class="search-result-title">${idx + 1}. ${escapeHtml(res.name)} ${distBadge}</div>
+                    <div class="search-result-addr">${escapeHtml(res.address)}</div>
                     <div class="search-result-actions">
                         <button class="btn btn-outline search-btn-sm" onclick="focusMapSearchResult(${idx}, ${res.lat}, ${res.lng})">
                             🎯 위치보기
                         </button>
-                        <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult('${encodedData}')">
+                        <button class="btn btn-primary search-btn-sm" onclick="saveMapSearchResult(${jsArg(encodedData)})">
                             💖 위시리스트
                         </button>
-                        <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                        <button class="btn btn-secondary search-btn-sm" style="background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited(${jsArg(encodedData)})">
                             📸 다녀온 곳
                         </button>
-                        <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl('${encodedData}')">
+                        <button class="btn btn-outline search-btn-sm" onclick="copyNaverMapUrl(${jsArg(encodedData)})">
                             📋 URL 복사
                         </button>
                     </div>
@@ -2435,17 +2441,17 @@ function renderMapSearchResults(results) {
             const infowindow = new naver.maps.InfoWindow({
                 content: `
                     <div style="padding: 10px; font-family:var(--font-body); width:230px; background:white; border-radius:14px; border:2px solid var(--color-warning); box-shadow: 0 8px 24px rgba(0,0,0,0.15);">
-                        <strong style="color:var(--color-text-high); font-size:0.85rem; display:block; margin-bottom:2px;">${idx + 1}. ${res.name}</strong>
-                        <div style="font-size:0.7rem; color:#FF9F1C; margin-bottom:8px;">${res.address}</div>
+                        <strong style="color:var(--color-text-high); font-size:0.85rem; display:block; margin-bottom:2px;">${idx + 1}. ${escapeHtml(res.name)}</strong>
+                        <div style="font-size:0.7rem; color:#FF9F1C; margin-bottom:8px;">${escapeHtml(res.address)}</div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:4px; margin-bottom:4px;">
-                            <button class="btn btn-primary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center;" onclick="saveMapSearchResult('${encodedData}')">
+                            <button class="btn btn-primary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center;" onclick="saveMapSearchResult(${jsArg(encodedData)})">
                                 💖 위시리스트
                             </button>
-                            <button class="btn btn-secondary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">
+                            <button class="btn btn-secondary" style="padding:0.3rem 0.4rem; font-size:0.7rem; justify-content:center; background:linear-gradient(135deg, #FF9F1C, #FFBF69); color:white; border:none;" onclick="saveMapSearchResultVisited(${jsArg(encodedData)})">
                                 📸 다녀온 곳
                             </button>
                         </div>
-                        <button class="btn btn-outline" style="padding:0.3rem 0.4rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="copyNaverMapUrl('${encodedData}')">
+                        <button class="btn btn-outline" style="padding:0.3rem 0.4rem; font-size:0.7rem; width:100%; justify-content:center;" onclick="copyNaverMapUrl(${jsArg(encodedData)})">
                             📋 네이버 지도 URL 복사
                         </button>
                     </div>
@@ -2483,13 +2489,13 @@ function renderMapSearchResults(results) {
             const encodedData = encodeURIComponent(JSON.stringify(res));
             const popupContent = `
                 <div style="font-family:var(--font-body); min-width:180px; padding:4px;">
-                    <strong style="font-size: 0.85rem; color: var(--color-text-high); display:block;">${idx + 1}. ${res.name}</strong>
-                    <div style="font-size: 0.7rem; color: var(--color-text-low); margin-bottom:6px;">${res.address}</div>
+                    <strong style="font-size: 0.85rem; color: var(--color-text-high); display:block;">${idx + 1}. ${escapeHtml(res.name)}</strong>
+                    <div style="font-size: 0.7rem; color: var(--color-text-low); margin-bottom:6px;">${escapeHtml(res.address)}</div>
                     <div style="display:flex; gap:4px; margin-bottom:4px;">
-                        <button class="btn btn-primary" style="padding:0.25rem 0.4rem; font-size:0.7rem;" onclick="saveMapSearchResult('${encodedData}')">💖 위시리스트</button>
-                        <button class="btn btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.7rem; background:#FF9F1C; color:white; border:none;" onclick="saveMapSearchResultVisited('${encodedData}')">📸 다녀온 곳</button>
+                        <button class="btn btn-primary" style="padding:0.25rem 0.4rem; font-size:0.7rem;" onclick="saveMapSearchResult(${jsArg(encodedData)})">💖 위시리스트</button>
+                        <button class="btn btn-secondary" style="padding:0.25rem 0.4rem; font-size:0.7rem; background:#FF9F1C; color:white; border:none;" onclick="saveMapSearchResultVisited(${jsArg(encodedData)})">📸 다녀온 곳</button>
                     </div>
-                    <button class="btn btn-outline" style="padding:0.25rem 0.4rem; font-size:0.7rem; width:100%;" onclick="copyNaverMapUrl('${encodedData}')">📋 URL 복사</button>
+                    <button class="btn btn-outline" style="padding:0.25rem 0.4rem; font-size:0.7rem; width:100%;" onclick="copyNaverMapUrl(${jsArg(encodedData)})">📋 URL 복사</button>
                 </div>
             `;
             
@@ -3569,19 +3575,33 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+// A value passed as an argument inside an inline onclick="fn(...)" attribute. Wrapping a name in
+// '...' by hand broke every button for names with an apostrophe ("McDonald's") and let a crafted
+// name run script; JSON.stringify makes it a valid JS string, escapeHtml keeps it inside the attribute.
+function jsArg(value) {
+    return escapeHtml(JSON.stringify(value == null ? "" : String(value)));
+}
+
+// Links saved on a place are shared with the partner's device — only http(s) may become an href,
+// so a "javascript:..." URL can't run when the other person taps it.
+function safeUrl(url) {
+    const u = String(url || "").trim();
+    return /^https?:\/\//i.test(u) ? u : "";
+}
+
 function renderCommentsBlock(place) {
     const textA = place.commentA ? escapeHtml(place.commentA) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
     const textB = place.commentB ? escapeHtml(place.commentB) : '<span style="color:var(--color-text-low); font-style:italic;">코멘트 작성하기 ✏️</span>';
 
     return `
         <div class="place-comments-box" style="font-size:0.78rem; background:rgba(255,255,255,0.75); padding:0.5rem 0.65rem; border-radius:10px; border:1px dashed rgba(255,101,132,0.25); display:flex; flex-direction:column; gap:0.35rem;">
-            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${partnerAName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${partnerAName}</span>
+            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'A')" title="${escapeHtml(partnerAName)} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${escapeHtml(partnerAName)}</span>
                 <div style="flex-grow:1; min-width:0; white-space:pre-wrap; word-break:break-word; line-height:1.4;">${textA}</div>
                 <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0; margin-top:2px;"></i>
             </div>
-            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${partnerBName} 코멘트 작성/수정 (클릭)">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${partnerBName}</span>
+            <div style="display:flex; align-items:flex-start; gap:6px; cursor:pointer;" onclick="quickEditComment(${place.id}, 'B')" title="${escapeHtml(partnerBName)} 코멘트 작성/수정 (클릭)">
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:2px 7px; border-radius:6px; font-size:0.7rem; flex-shrink:0; margin-top:1px;">💬 ${escapeHtml(partnerBName)}</span>
                 <div style="flex-grow:1; min-width:0; white-space:pre-wrap; word-break:break-word; line-height:1.4;">${textB}</div>
                 <i data-lucide="edit-2" style="width:11px; height:11px; color:var(--color-text-low); flex-shrink:0; margin-top:2px;"></i>
             </div>
@@ -3872,13 +3892,13 @@ function renderFestivalList() {
                 <span class="place-category-badge ${badge.cls}" style="${badge.style}">축제·행사</span>
                 <span style="font-size:0.75rem; font-weight:700; color:var(--color-primary);">${formatFestivalDateRange(ev.startDate, ev.endDate)}</span>
             </div>
-            <h4 class="place-title" style="font-size:1.05rem;">${ev.title}</h4>
+            <h4 class="place-title" style="font-size:1.05rem;">${escapeHtml(ev.title)}</h4>
             <div class="place-meta-item" style="justify-content:space-between; gap:6px;">
                 <span style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
-                    <i data-lucide="map-pin" style="flex-shrink:0;"></i><span>${ev.addr || "위치 정보 없음"}</span>
+                    <i data-lucide="map-pin" style="flex-shrink:0;"></i><span>${escapeHtml(ev.addr) || "위치 정보 없음"}</span>
                 </span>
                 ${(ev.lat && ev.lng) ? `
-                <button type="button" class="btn btn-outline" style="flex-shrink:0; padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewFestivalOnMap('${ev.id}')">
+                <button type="button" class="btn btn-outline" style="flex-shrink:0; padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewFestivalOnMap(${jsArg(ev.id)})">
                     지도에서 보기
                 </button>` : ""}
             </div>
@@ -3886,12 +3906,12 @@ function renderFestivalList() {
             <button type="button" class="festival-desc-toggle" onclick="toggleFestivalDesc(this)" style="all:unset; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.78rem; color:var(--color-text-med);">
                 <i data-lucide="chevron-right" style="width:14px;height:14px; transition:transform 0.2s;"></i><span>설명 보기</span>
             </button>
-            <p class="place-notes" style="display:none;">${ev.overview}</p>` : ""}
+            <p class="place-notes" style="display:none;">${escapeHtml(ev.overview)}</p>` : ""}
             <div class="place-actions" style="flex-wrap:nowrap;">
-                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="askAIAboutFestival('${ev.id}')">
+                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="askAIAboutFestival(${jsArg(ev.id)})">
                     <i data-lucide="sparkles" style="width:14px;height:14px; flex-shrink:0;"></i>AI에게 물어보기
                 </button>
-                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="addFestivalToWishlist('${ev.id}')">
+                <button class="btn btn-outline" style="flex:1; justify-content:center; padding:0.45rem 0.4rem; font-size:0.78rem; white-space:nowrap; gap:4px;" onclick="addFestivalToWishlist(${jsArg(ev.id)})">
                     <i data-lucide="heart-plus" style="width:14px;height:14px; flex-shrink:0;"></i>위시리스트 담기
                 </button>
             </div>
@@ -3999,9 +4019,9 @@ window.viewFestivalOnMap = function(id) {
 
         const popupHtml = `
             <div style="padding:10px; font-family:var(--font-body); min-width:160px; max-width:220px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
-                <strong style="font-size:0.9rem; color:var(--color-text-high);">${ev.title}</strong>
+                <strong style="font-size:0.9rem; color:var(--color-text-high);">${escapeHtml(ev.title)}</strong>
                 <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">축제·행사</div>
-                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${ev.addr || ""}</p>
+                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${escapeHtml(ev.addr)}</p>
             </div>
         `;
 
@@ -4116,19 +4136,19 @@ async function renderPlacesList() {
                 let cardContent = `
                     <div class="place-card-top-actions">
                         <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, ${jsArg(place.name)})" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${displayCategory}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${escapeHtml(displayCategory)}</span>
                         <span class="place-priority-dot priority-${place.priority}"></span>
                     </div>
-                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
+                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${escapeHtml(place.name)}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
                         <div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateHtml}</div>
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
-                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${escapeHtml(cleanAddress) || '등록된 주소 정보'}</div>
+                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, ${jsArg(encodeURIComponent(place.name))})">
                                 <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
                             </button>
                         </div>
@@ -4139,8 +4159,8 @@ async function renderPlacesList() {
 
                 cardContent += `
                     <div class="place-actions">
-                        ${place.url ? `<a href="${place.url}" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
-                        <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, '${place.name}')">
+                        ${safeUrl(place.url) ? `<a href="${escapeHtml(safeUrl(place.url))}" rel="noopener" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
+                        <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, ${jsArg(place.name)})">
                             <i data-lucide="check"></i> 방문 완료 📸
                         </button>
                     </div>
@@ -4202,18 +4222,18 @@ async function renderPlacesList() {
                 let cardContent = `
                     <div class="place-card-top-actions">
                         <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, '${place.name}')" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
+                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, ${jsArg(place.name)})" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
                     </div>
                     <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${displayCategory}</span>
+                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${escapeHtml(displayCategory)}</span>
                     </div>
-                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${place.name}</h4>
+                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${escapeHtml(place.name)}</h4>
                     
                     <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
                         ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
                         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${cleanAddress || '등록된 주소 정보'}</div>
-                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, '${encodeURIComponent(place.name)}')">
+                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${escapeHtml(cleanAddress) || '등록된 주소 정보'}</div>
+                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, ${jsArg(encodeURIComponent(place.name))})">
                                 <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
                             </button>
                         </div>
@@ -4372,13 +4392,13 @@ async function updateDashboardStats() {
                 let commentsHtml = '';
                 if (commentA) {
                     commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
-                        <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                        <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${escapeHtml(partnerAName)}</span>
                         <span>${escapeHtml(commentA)}</span>
                     </div>`;
                 }
                 if (commentB) {
                     commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
-                        <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                        <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${escapeHtml(partnerBName)}</span>
                         <span>${escapeHtml(commentB)}</span>
                     </div>`;
                 }
@@ -4534,8 +4554,8 @@ function startCloudSyncLoop() {
 
     if (pulse) pulse.style.display = "inline-block";
     if (mobilePulse) mobilePulse.style.display = "inline-block";
-    if (statusText) statusText.innerHTML = `연결 룸: <strong>${syncRoomId}</strong> 🔗`;
-    if (mobileStatusText) mobileStatusText.innerHTML = `룸:${syncRoomId} 🔗`;
+    if (statusText) statusText.innerHTML = `연결 룸: <strong>${escapeHtml(syncRoomId)}</strong> 🔗`;
+    if (mobileStatusText) mobileStatusText.textContent = `룸:${syncRoomId} 🔗`;
     if (banner) {
         banner.style.background = "rgba(255, 101, 132, 0.1)";
         banner.style.color = "var(--color-primary)";
@@ -5795,7 +5815,7 @@ function appendChatMessage(text, sender, isThinking = false) {
     bubbleWrapper.innerHTML = `
         <div class="msg-bubble">
             ${isThinking ? `<div class="thinking-spinner"></div>` : ''}
-            <span>${text.replace(/\n/g, "<br>")}</span>
+            <span>${escapeHtml(text).replace(/\n/g, "<br>")}</span>
         </div>
     `;
     
@@ -5870,10 +5890,10 @@ function renderAICourseCard(course) {
         placesHtml += `
             <div class="itinerary-step">
                 <div class="itinerary-step-header">
-                    <strong>${index + 1}. ${place.name}</strong>
-                    <span style="font-size:0.75rem; color:var(--color-primary);">${place.category}</span>
+                    <strong>${index + 1}. ${escapeHtml(place.name)}</strong>
+                    <span style="font-size:0.75rem; color:var(--color-primary);">${escapeHtml(place.category)}</span>
                 </div>
-                <div class="itinerary-step-desc">${place.notes}</div>
+                <div class="itinerary-step-desc">${escapeHtml(place.notes)}</div>
                 <div class="itinerary-transit">
                     <i data-lucide="coins" style="width:12px; height:12px;"></i>
                     <span>예상 비용: ${formatCurrency(place.estimatedCost)}</span>
@@ -5894,12 +5914,12 @@ function renderAICourseCard(course) {
     bubbleWrapper.innerHTML = `
         <div class="msg-bubble" style="width: 100%;">
             <div style="margin-bottom: 0.5rem;">🌸 <strong>AI 플래너가 추천하는 데이트 코스</strong></div>
-            <div>${course.description}</div>
+            <div>${escapeHtml(course.description)}</div>
 
             <div class="itinerary-card" id="${uniqueCourseId}">
                 <div class="itinerary-card-title">
                     <i data-lucide="heart"></i>
-                    <span>${course.itinerary_title}</span>
+                    <span>${escapeHtml(course.itinerary_title)}</span>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:0.5rem; margin:0.75rem 0;">
                     ${placesHtml}
@@ -5946,9 +5966,9 @@ window.viewCoursePlaceOnMap = function(courseId, idx) {
 
         const popupHtml = `
             <div style="padding:10px; font-family:var(--font-body); min-width:160px; max-width:220px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
-                <strong style="font-size:0.9rem; color:var(--color-text-high);">${place.name}</strong>
-                <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${place.category || ""}</div>
-                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${place.address || ""}</p>
+                <strong style="font-size:0.9rem; color:var(--color-text-high);">${escapeHtml(place.name)}</strong>
+                <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${escapeHtml(place.category)}</div>
+                <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${escapeHtml(place.address)}</p>
             </div>
         `;
 
@@ -6094,7 +6114,7 @@ async function saveSettings() {
     const tourApiKeyVal = tourApiInputEl ? tourApiInputEl.value.trim() : tourApiKey;
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
-    const syncRoomVal = document.getElementById("settings-sync-room-id").value.trim();
+    const syncRoomVal = sanitizeRoomId(document.getElementById("settings-sync-room-id").value.trim());
     const firebaseUrVal = document.getElementById("settings-firebase-url").value.trim();
     
     localStorage.setItem("aura_gemini_key", apiKeyVal);
@@ -6274,7 +6294,7 @@ function showToast(message, type = "success") {
         color = "var(--color-danger)";
     }
     
-    toast.innerHTML = `<i data-lucide="${icon}" style="color:${color}; fill:${type === 'success' ? color : 'none'}; width:16px; height:16px;"></i><span>${message}</span>`;
+    toast.innerHTML = `<i data-lucide="${icon}" style="color:${color}; fill:${type === 'success' ? color : 'none'}; width:16px; height:16px;"></i><span>${escapeHtml(message)}</span>`;
     document.body.appendChild(toast);
     lucide.createIcons();
     
@@ -6711,13 +6731,13 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
         let commentsHtml = '';
         if (commentA) {
             commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${escapeHtml(partnerAName)}</span>
                 <span>${escapeHtml(commentA)}</span>
             </div>`;
         }
         if (commentB) {
             commentsHtml += `<div style="font-size:0.78rem; color:var(--color-text-med); margin-top:2px; display:flex; align-items:flex-start; gap:5px;">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 6px; border-radius:5px; font-size:0.7rem; flex-shrink:0;">💬 ${escapeHtml(partnerBName)}</span>
                 <span>${escapeHtml(commentB)}</span>
             </div>`;
         }
@@ -6803,13 +6823,13 @@ async function renderGallery() {
         let commentsHtml = '';
         if (commentA) {
             commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${partnerAName}</span>
+                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${escapeHtml(partnerAName)}</span>
                 <span>${escapeHtml(commentA)}</span>
             </div>`;
         }
         if (commentB) {
             commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${partnerBName}</span>
+                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${escapeHtml(partnerBName)}</span>
                 <span>${escapeHtml(commentB)}</span>
             </div>`;
         }
