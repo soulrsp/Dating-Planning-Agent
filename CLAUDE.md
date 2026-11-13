@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 AURA — a Korean couple's date-planner PWA. Static site, no backend, no build step, no bundler.
-Three files carry almost the entire app: [`app.js`](app.js) (~6300 lines), [`index.html`](index.html)
-(~960 lines), [`style.css`](style.css) (~2600 lines), plus a tiny [`sw.js`](sw.js) service worker.
+Four files carry almost the entire app: [`app.js`](app.js) (~8000 lines), [`studio.js`](studio.js)
+(~2400 lines, the 사진 꾸미기 photo studio — see its section below), [`index.html`](index.html) (~1250 lines),
+[`style.css`](style.css) (~3300 lines), plus a tiny [`sw.js`](sw.js) service worker.
 Served from two places (neither via CI): **Firebase Hosting** at `https://dating-planning-agent.firebaseapp.com/`
 (the primary one — it shares an origin with the Firebase Auth helper, which is what makes Google sign-in
 work on iOS Safari) and GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/` (legacy; sign-in
@@ -15,8 +16,11 @@ repository tracking `origin/main` at `github.com/soulrsp/Dating-Planning-Agent` 
 and push directly here (with the user's confirmation per its normal push-safety rules); a push to `main`
 deploys to GitHub Pages only. Updating Firebase Hosting is a separate step: `node deploy-hosting.js`, which
 copies an explicit whitelist of files (not the whole directory — it also holds `secrets/` and
-`API 모음.txt`) into `.hosting-dist/` and runs `firebase deploy --only hosting`. That needs the user's own
-`firebase login`, so hand them the command rather than running it. `localStorage`/IndexedDB are per-origin,
+`API 모음.txt`) into `.hosting-dist/` and runs `firebase deploy --only hosting`. **A new top-level file must be
+added to `FILES` in `deploy-hosting.js`** or Hosting will 404 it (`node deploy-hosting.js --no-deploy` shows
+the list). It uses the user's own `firebase login`; the user has allowed Claude to run it after a push they
+approved, as a standalone command, exactly `node deploy-hosting.js` (the allow rule doesn't match it
+chained with `&&`). Afterwards, confirm the live `app.js?v=` changed. `localStorage`/IndexedDB are per-origin,
 so each URL has its own Gemini/TourAPI keys and local cache; open the new URL with `?room=<id>` once. **Never commit `API 모음.txt`** (real Naver/Gemini/
 Supabase secrets in plaintext) — it's already in `.gitignore`, but double-check before any `git add`
 that touches the repo root.
@@ -32,15 +36,16 @@ python -m http.server 8123
 
 This matches `.claude/launch.json` (`aura-static`, port 8123) so `preview_start` picks it up
 automatically. There is no test suite, linter, or build command — the only mechanical check available
-is `node --check app.js` for syntax validation before calling a change done.
+is `node --check app.js && node --check studio.js` for syntax validation before calling a change done.
 
 ## Critical workflow rule: cache-busting version bump
 
-`index.html` loads `style.css?v=<version>` and `app.js?v=<version>`, and `sw.js` has its own
-`CACHE_NAME` containing the same version string. **Every one of the three must be bumped together on
-every change that touches `app.js`, `index.html`, or `style.css`**, or returning users get a stale
-cached copy. Grep the current version (`grep -n "v=[0-9]" index.html`) and bump all three references by
-one in lockstep — there's no script for this, it's manual.
+`index.html` loads `style.css?v=<version>`, `app.js?v=<version>`, `studio.js?v=<version>` and registers
+`sw.js?v=<version>`, and `sw.js` has its own `CACHE_NAME` containing the same version string. **All of them
+must be bumped together on every change that touches `app.js`, `studio.js`, `index.html`, or `style.css`**,
+or returning users get a stale cached copy. Simplest is to replace the version string everywhere at once
+(`sed -i "s/<old>/<new>/g" index.html sw.js`) and grep it back (`grep -n "v=[0-9]" index.html`).
+There's no script for this; it's manual.
 
 ## Auth & multi-tenant "room" model
 
@@ -121,7 +126,7 @@ without a Naver key configured.
 The file is organized as sequentially numbered sections via `// N. Section Name` comments (numbering
 has some historical drift/dupes — trust the comment text over the number):
 
-1. Dexie DB init (single `places` table, schema in `db.version(2).stores(...)`)
+1. Dexie DB init (`places` table, plus `creations` for the photo studio since `db.version(3)`)
 2. State & settings variables (all the `localStorage`-backed globals)
 3. `DOMContentLoaded` init — blocks on the auth gate before anything else runs
 4. Tab navigation (`switchTab()` — tabs are shown/hidden via CSS class, **never torn down**, so
@@ -140,6 +145,53 @@ has some historical drift/dupes — trust the comment text over the number):
 13. AI chatbot interface (Gemini-backed date-course planner)
 14. Settings logic
 15. UI helpers, calendar/memory gallery engines, mobile pairing/QR modal
+16. (moved out) Photo Studio, now [`studio.js`](studio.js)
+
+## Photo Studio (`studio.js`)
+
+사진 꾸미기 lives in its own file, loaded right after `app.js` as a plain script; the two share one
+global scope. `app.js` only calls into it (`syncCreations`, `renderCreationsSection`) behind
+`typeof … === "function"` guards, so the rest of the app survives if it fails to load. The Dexie
+`creations` table is still declared in `app.js` section 1 (one schema, one place). Inside, the parts are
+headed `// ── …` comments: layouts/filters/patterns → base render → stickers & text overlays → AI 꾸미기
+→ 움직이는 사진 (video) → 카톡 프사 maker → painting effects & 뽀샤시 → 얼굴 보정 → photo picker →
+꾸민 사진 cloud album.
+
+- **Shared global scope bites.** A top-level `const`/`let`/`function` in either file shadows a
+  `window` property of the same name for every script. A `const kakao` in the studio once hid the
+  Kakao Maps SDK's `window.kakao` and silently broke the Kakao place search in `app.js`. Never use
+  SDK global names (`kakao`, `naver`, `L`, `firebase`, `lucide`, `Dexie`, `JSZip`) for your own
+  globals; `app.js` now reads `window.kakao.maps` explicitly.
+- **Storage.** Each saved creation is its own cloud node, `aura-rooms/{room}/creations/{id}`
+  (`{img, kind, createdAt, caption, sources}`), plus a `creationsVersion` number other devices poll.
+  Adding or deleting one never rewrites the others, so it isn't subject to the photo-list
+  last-write-wins rules above. Local rows carry `room` and are cleaned by `ensureLocalDbMatchesRoom()`;
+  `uploaded:false` marks one still waiting to go out. Videos are **never** uploaded (several MB each
+  would eat the free-tier quota). They are offered to the phone only.
+- **Preview = export.** Everything is drawn from proportions: overlay items are fractions of the canvas,
+  sized against `studioRefSize` (√(W·H)), and patterns scale with the output. That way the 720px
+  preview and the 2048px export match. The preview caches the photo/frame layer (`studioBaseCanvas`)
+  and only recomposes overlays while dragging. Call `studioQueueRender(false)` for overlay-only
+  changes and `studioQueueRender()` when anything underneath changed.
+- **No `ctx.filter`.** Older iPhone Safari lacks it. Filters, painting effects, 뽀샤시 and blurs are
+  pixel loops (box blur = sliding sums, Kuwahara = summed-area tables). Heavy effects run on a copy
+  capped at `STUDIO_ART_WORK_MAX` and are scaled back up.
+- **Share sheet needs a fresh tap.** iPhone opens `navigator.share` only right after a user gesture,
+  so call it straight from the button handler. That's why the slideshow video shows a preview with
+  its own "폰에 저장" button instead of sharing once recording ends.
+- **Photos to Gemini.** AI 꾸미기 sends the composed picture through `callGeminiRaw(…, extraParts)`
+  (an `inlineData` part). The first use asks consent once (`aura_ai_photo_ok`). Answers are cached
+  per layout geometry (`studioAiKey`). Image *generation* (Gemini style transfer) was deliberately not
+  built: no image model has a free tier, about $0.034/image.
+- **얼굴 보정 (MediaPipe).** `@mediapipe/tasks-vision` is pinned (`STUDIO_MP_VERSION`) and
+  dynamic-`import()`ed from jsDelivr; the model comes from `storage.googleapis.com`. It loads lazily
+  on first use (about 7MB) with the CPU delegate and runs on-device only. Reshaping works on each
+  original photo (`studioSourceImages`) before layout. Jaw pushes must be *averaged*, not summed:
+  summing overlapping pushes folded the image into ripples.
+- KakaoTalk publishes no pixel spec for personal profiles. The maker uses 1080² (profile and the
+  two couple halves) and 1080×1920 (background). Profile videos stay under KakaoTalk's 6s limit
+  and background videos under 15s.
+
 
 ## Gemini integration notes
 
@@ -151,7 +203,9 @@ each `generateContent` call are wrapped in `AbortController` timeouts (5s / 20s)
 (unguarded discovery fetch hanging forever) taught that every Gemini network call here must have an
 explicit timeout, since `fetch()` has none by default. Retryable failures (404 "not found", 429/quota,
 503/"overloaded"/"high demand") fall through to the next candidate rather than failing the whole
-request; treat any new Gemini error class the same way unless it's clearly non-retryable.
+request; treat any new Gemini error class the same way unless it's clearly non-retryable. Its optional
+4th argument `extraParts` (e.g. `[{ inlineData: { mimeType, data } }]`) sends images with the prompt.
+The flash models accept image input on the free tier.
 
 ## The `notes` field convention
 
