@@ -3300,3 +3300,25 @@ body {
 #modal-photo-studio .studio-preview-wrap.is-compact canvas {
     max-height: 26vh;
 }
+
+/* ---- iPhone Safari: pop-ups fit the VISIBLE screen and sit above the bottom tab bar (v410) ----
+   `vh` is measured as if Safari's address bar were hidden, so a 94vh card ran underneath the bar and
+   its footer buttons were cut off; `dvh` follows the bar. Pop-ups also shared z-index 1000 with the
+   mobile tab bar, which then drew over their footers. (Toasts 9000 and the auth gate 9999 stay above.) */
+.modal-overlay { z-index: 1100; }
+@supports (height: 100dvh) {
+    .modal-body { max-height: calc(100dvh - 180px); }
+    .studio-body { max-height: none; }
+    .lightbox-card { max-height: 90dvh; }
+    .lightbox-card img { max-height: 85dvh; }
+    .gallery-slider-card { max-height: 92dvh; }
+    #modal-edit-place .modal-card { max-height: 92dvh !important; }
+    .studio-card { max-height: 92dvh; }
+    .studio-preview-wrap canvas { max-height: 46dvh; }
+    #modal-photo-studio .studio-preview-wrap.is-compact canvas { max-height: 26dvh; }
+    @media (max-width: 768px) {
+        .modal-card { max-height: 88dvh; }
+        .gallery-slider-card { max-height: 90dvh !important; }
+        .studio-card { max-height: calc(100dvh - 24px); }
+    }
+}
