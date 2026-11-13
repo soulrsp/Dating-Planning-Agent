@@ -80,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261113_v403">
+    <link rel="stylesheet" href="style.css?v=20261113_v405">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -930,6 +930,28 @@
                     <div id="studio-sticker-grid" class="studio-sticker-grid"></div>
                 </div>
 
+                <div class="studio-section studio-ai-section">
+                    <div class="studio-label">🤖 AI 꾸미기 <span>(얼굴을 찾아서 자동으로 붙여요 · Gemini 키 필요)</span></div>
+                    <div id="studio-ai-themes" class="studio-chips"></div>
+                    <button type="button" class="studio-chip small studio-ai-btn studio-ai-caption-btn" onclick="studioAiCaptions()">✍️ 어울리는 문구 추천받기</button>
+                    <div id="studio-ai-status" class="studio-ai-status"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">🎬 움직이는 사진</div>
+                    <div id="studio-video-hint" class="studio-ai-status"></div>
+                    <div class="studio-chips">
+                        <button type="button" class="studio-chip small active studio-needs-photo" onclick="studioMakeVideo('normal')">🎬 영상 만들기</button>
+                        <button type="button" class="studio-chip small studio-needs-photo" onclick="studioMakeVideo('profile')">💛 카톡 프사 영상 (6초)</button>
+                        <button type="button" class="studio-chip small studio-needs-photo" onclick="studioMakeVideo('background')">📱 카톡 배경 영상</button>
+                    </div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">💛 카톡 프사 · 배경 <span>(커플 프사 반반 나누기도 돼요)</span></div>
+                    <button type="button" class="studio-chip small active studio-needs-photo studio-ai-caption-btn" onclick="openKakaoMaker()">💛 카톡용으로 만들기</button>
+                </div>
+
                 <div class="studio-section">
                     <div class="studio-label">레이아웃</div>
                     <div id="studio-layouts" class="studio-chips"></div>
@@ -954,6 +976,12 @@
                 </div>
 
                 <div class="studio-section">
+                    <div class="studio-label">그림 효과 · 보정 <span>(기기 안에서 처리돼요)</span></div>
+                    <div id="studio-arts" class="studio-chips"></div>
+                    <div class="studio-row"><label for="studio-smooth">뽀샤시</label><input type="range" id="studio-smooth" min="0" max="100" step="5" onchange="studioSetSmooth(this.value)"></div>
+                </div>
+
+                <div class="studio-section">
                     <div class="studio-label">프레임 · 문구</div>
                     <div id="studio-frames" class="studio-chips">
                         <button type="button" class="studio-chip" data-frame="none" onclick="studioSet('frame', 'none')">없음</button>
@@ -968,6 +996,31 @@
             <div class="studio-footer">
                 <button type="button" class="btn btn-outline studio-needs-photo" onclick="studioSaveToPhone()"><i data-lucide="download"></i> 폰에 저장</button>
                 <button type="button" class="btn btn-primary studio-needs-photo" onclick="studioSaveToAlbum()"><i data-lucide="cloud-upload"></i> 꾸민 사진에 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: 카톡 프사 maker (profile 1:1 / couple 반반 / background 9:16) -->
+    <div class="modal-overlay" id="modal-kakao">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>💛 카톡 프사 만들기</h3>
+                <button class="modal-close" onclick="closeKakaoMaker()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body studio-body">
+                <div id="kakao-tabs" class="studio-chips">
+                    <button type="button" class="studio-chip" data-mode="profile" onclick="kakaoSetMode('profile')">프사 (정사각형)</button>
+                    <button type="button" class="studio-chip" data-mode="couple" onclick="kakaoSetMode('couple')">💑 커플 반반</button>
+                    <button type="button" class="studio-chip" data-mode="background" onclick="kakaoSetMode('background')">배경 (세로)</button>
+                </div>
+                <div class="studio-preview-wrap"><canvas id="kakao-preview"></canvas></div>
+                <div id="kakao-zoom-row" class="studio-row"><label for="kakao-zoom">확대</label><input type="range" id="kakao-zoom" min="0" max="100" oninput="kakaoSetZoom(this.value)"></div>
+                <div id="kakao-hint" class="studio-item-hint"></div>
+                <div class="studio-item-hint">사진 위를 끌어서 자를 위치를 옮겨요</div>
+            </div>
+            <div class="studio-footer">
+                <button type="button" class="btn btn-outline" onclick="closeKakaoMaker()">닫기</button>
+                <button type="button" class="btn btn-primary" onclick="kakaoSave()"><i data-lucide="download"></i> 폰에 저장</button>
             </div>
         </div>
     </div>
@@ -1170,13 +1223,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261113_v403"></script>
+    <script src="app.js?v=20261113_v405"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261113_v403').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261113_v405').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

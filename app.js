@@ -2252,8 +2252,10 @@ async function getAvailableGeminiModels() {
     return cachedGeminiModelList;
 }
 
-// Core robust Gemini API Caller with automatic model fallback
-async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = true) {
+// Core robust Gemini API Caller with automatic model fallback.
+// extraParts: optional extra request parts placed before the prompt, e.g. images as
+// { inlineData: { mimeType, data } } (the flash models all accept images).
+async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = true, extraParts = []) {
     if (!geminiApiKey) throw new Error("Gemini API Key가 등록되지 않았습니다.");
 
     let lastError = null;
@@ -2268,6 +2270,7 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             if (systemInstruction) {
                 parts.push({ text: systemInstruction });
             }
+            parts.push(...extraParts);
             parts.push({ text: userPrompt });
 
             const requestBody = {
@@ -8029,6 +8032,8 @@ const studio = {
     bg: "white",
     frame: "none",       // none | polaroid | stamp
     caption: "",
+    art: "none",         // painting effect, see STUDIO_ARTS
+    smooth: 0,           // 뽀샤시 strength 0-100
     logo: false,         // "AURA · date" line in the bottom band (on by default for 네컷)
     items: [],           // stickers / text laid over everything — see studioDrawItems
     selectedId: null,
@@ -8065,7 +8070,9 @@ function studioFilterParams() {
         grayscale: preset.grayscale || 0,
         fade: preset.fade || 0,
         grain: preset.grain || 0,
-        vignette: preset.vignette || 0
+        vignette: preset.vignette || 0,
+        art: studio.art || "none",
+        smooth: studio.smooth || 0
     };
 }
 
@@ -8126,6 +8133,8 @@ function studioRenderCell(img, w, h, p) {
     const scale = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
     const sw = c.width / scale, sh = c.height / scale;
     ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+    if (p.smooth > 0) studioApplySmooth(c, p.smooth);
+    if (p.art && p.art !== "none") studioApplyArt(c, p.art);
     studioApplyPixels(ctx, c.width, c.height, p);
     if (p.vignette) {
         const g = ctx.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.35,
@@ -8340,7 +8349,8 @@ function studioDefaultCaption() {
 // Suggested captions: date, place name(s), D+N (when 사귄 날 is set).
 function studioCaptionSuggestions() {
     if (studio.photos.length === 0) return [];
-    const out = [studioDefaultCaption()];
+    const ai = studioAiResult && studioAiResult.key === studioAiKey() ? studioAiResult.captions : [];
+    const out = [...ai, studioDefaultCaption()];
     const names = [...new Set(studio.photos.map(p => p.placeName).filter(Boolean))];
     if (names.length) out.push(names.slice(0, 2).join(" · ") + (names.length > 2 ? " 외" : ""));
     const n = coupleDayNumber(startOfLocalDay(studioDisplayDate()));
@@ -8417,6 +8427,11 @@ function studioRenderControls() {
     document.querySelectorAll("#studio-frames .studio-chip").forEach(btn => btn.classList.toggle("active", btn.dataset.frame === studio.frame));
     document.getElementById("studio-logo-chip")?.classList.toggle("active", studio.logo);
     studioRenderStickerTray();
+    studioRenderAiThemes();
+    const videoHint = document.getElementById("studio-video-hint");
+    if (videoHint) videoHint.textContent = studio.photos.length >= 2
+        ? `사진 ${studio.photos.length}장이 차례로 넘어가고 완성된 사진으로 끝나요 (보통 약 ${Math.round(studioVideoSeconds(studio.photos.length))}초 · 카톡 프사용은 6초, 배경용은 15초 이내)`
+        : "사진을 2장 이상 고르면 만들 수 있어요";
     studioRenderItemPanel();
     const sugEl = document.getElementById("studio-caption-suggestions");
     if (sugEl) {
@@ -8428,6 +8443,10 @@ function studioRenderControls() {
         const el = document.getElementById(`studio-adj-${k}`);
         if (el) el.value = studio.adjust[k];
     });
+    const artEl = document.getElementById("studio-arts");
+    if (artEl) artEl.innerHTML = STUDIO_ARTS.map(a => `<button type="button" class="studio-chip${a.id === studio.art ? " active" : ""}" onclick="studioSetArt(${jsArg(a.id)})">${escapeHtml(a.name)}</button>`).join("");
+    const smoothEl = document.getElementById("studio-smooth");
+    if (smoothEl) smoothEl.value = studio.smooth;
     const gapEl = document.getElementById("studio-gap");
     if (gapEl) gapEl.value = studio.gap;
     const roundEl = document.getElementById("studio-rounded");
@@ -8462,9 +8481,10 @@ window.openPhotoStudio = function(photos = []) {
     Object.assign(studio, {
         photos: photos.slice(0, STUDIO_MAX_PHOTOS), layoutId: "single", filterId: "none",
         adjust: { brightness: 0, contrast: 0, saturation: 0 }, gap: 12, rounded: false,
-        bg: "white", frame: "none", caption: "", logo: false, items: [], selectedId: null, busy: false
+        bg: "white", frame: "none", caption: "", logo: false, art: "none", smooth: 0, items: [], selectedId: null, busy: false
     });
     studioBaseCanvas = null;
+    studioAiSetStatus("");
     studioLoadTextFonts();
     studioAttachGestures();
     document.getElementById("modal-photo-studio")?.classList.add("active");
@@ -8506,9 +8526,11 @@ function studioFileName() {
 }
 
 // Share sheet when the browser can share files (iPhone/Android → 사진 앱에 저장, 카톡 등), else download.
+// iPhone only opens the share sheet right after a tap, so call this straight from a button handler
+// (the slideshow video waits for its own "폰에 저장" tap for that reason).
 async function studioShareOrDownload(blob, fileName) {
     try {
-        const file = new File([blob], fileName, { type: "image/jpeg" });
+        const file = new File([blob], fileName, { type: blob.type || "image/jpeg" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file] });
             return;
@@ -9041,6 +9063,822 @@ function studioRenderItemPanel() {
         <div class="studio-swatches studio-swatches-sm">${STUDIO_TEXT_COLORS.map(c => `<button type="button" class="studio-swatch${c === sel.color ? " active" : ""}" style="background:${c}" onclick="studioSetItemProp('color', ${jsArg(c)})" aria-label="글씨 색 ${c}"></button>`).join("")}</div>
         <div class="studio-chips">${STUDIO_TEXT_STYLES.map(s => `<button type="button" class="studio-chip small${s.id === sel.style ? " active" : ""}" onclick="studioSetItemProp('style', ${jsArg(s.id)})">${escapeHtml(s.name)}</button>`).join("")}</div>`;
 }
+
+// ── AI 꾸미기: Gemini finds the faces → themed stickers placed on each one, plus caption ideas ──────
+// One Gemini call per composition sends the picture (photos + frame, no stickers) at 1024px and gets
+// back face boxes ([ymin, xmin, ymax, xmax] on a 0-1000 scale over the whole picture) and a few short
+// captions. The answer is cached against the layout geometry, so trying themes one after another
+// reuses it. The picture leaves the device (to Google, on the person's own key), so the first use
+// asks once (aura_ai_photo_ok).
+const STUDIO_AI_THEMES = [
+    { id: "crown", name: "👑 왕관" },
+    { id: "flower", name: "🌸 꽃 화관" },
+    { id: "ribbon", name: "🎀 리본" },
+    { id: "glasses", name: "🕶️ 선글라스" },
+    { id: "blush", name: "💗 볼하트" },
+    { id: "sparkle", name: "✨ 반짝" }
+];
+let studioAiResult = null;   // { key, faces: [{ x0, y0, x1, y1 } as 0-1 fractions], captions: [] }
+let studioAiBusy = false;
+
+function studioAiKey() {
+    return JSON.stringify([studio.layoutId, studio.frame, studio.gap, !!studio.caption.trim(), studio.logo,
+        studio.photos.map(p => `${p.src.length}:${p.src.slice(-24)}`)]);
+}
+
+function studioAiSetStatus(text) {
+    const el = document.getElementById("studio-ai-status");
+    if (el) el.textContent = text || "";
+}
+
+function studioParseJsonLoose(text) {
+    const t = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    try { return JSON.parse(t); } catch (_) { }
+    const m = t.match(/[\[{][\s\S]*[\]}]/);
+    return m ? JSON.parse(m[0]) : null;
+}
+
+async function studioAiAnalyze() {
+    const key = studioAiKey();
+    if (studioAiResult && studioAiResult.key === key) return studioAiResult;
+    if (!geminiApiKey) throw new Error("설정 탭에서 Gemini API 키를 먼저 등록해 주세요");
+    if (localStorage.getItem("aura_ai_photo_ok") !== "1") {
+        if (!confirm("AI 꾸미기는 이 사진을 Google Gemini로 보내서 얼굴 위치를 찾아요.\n(등록한 내 Gemini 키로 보내고, 앱 서버에는 저장되지 않아요)\n\n계속할까요?")) {
+            throw Object.assign(new Error("cancelled"), { cancelled: true });
+        }
+        try { localStorage.setItem("aura_ai_photo_ok", "1"); } catch (_) { }
+    }
+    const canvas = document.createElement("canvas");
+    await studioRenderBase(canvas, 1024);
+    const data = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+    const names = [...new Set(studio.photos.map(p => p.placeName).filter(Boolean))].slice(0, 3).join(", ");
+    const prompt = `이 사진은 커플(${partnerAName}, ${partnerBName})의 데이트 사진이에요${names ? ` (장소: ${names})` : ""}.
+두 가지를 JSON으로 답해 주세요.
+1. "faces": 사진 속 모든 사람 얼굴(최대 8개)의 위치. 각 항목은 {"box_2d": [ymin, xmin, ymax, xmax]} 이고, 좌표는 사진 전체를 0~1000으로 본 정수예요. 상자는 이마 위쪽부터 턱 끝까지, 양쪽 볼 바깥까지 얼굴만 감싸게 해 주세요(머리카락·목 제외). 얼굴이 없으면 빈 배열.
+2. "captions": 사진 분위기에 어울리는 한국어 짧은 문구 4개(각 14자 이내, 귀엽고 다정한 말투, 이모지 0~1개).
+예: {"faces":[{"box_2d":[120,300,420,520]}],"captions":["오늘도 너랑 ♥"]}`;
+    const text = await callGeminiRaw(prompt, "", true, [{ inlineData: { mimeType: "image/jpeg", data } }]);
+    const json = studioParseJsonLoose(text) || {};
+    const faces = (Array.isArray(json.faces) ? json.faces : [])
+        .map(f => Array.isArray(f) ? f : f && f.box_2d)
+        .filter(b => Array.isArray(b) && b.length === 4 && b.every(v => Number.isFinite(Number(v))))
+        .map(b => {
+            const [y0, x0, y1, x1] = b.map(v => studioClamp(Number(v) / 1000, 0, 1));
+            return { x0: Math.min(x0, x1), y0: Math.min(y0, y1), x1: Math.max(x0, x1), y1: Math.max(y0, y1) };
+        })
+        .filter(f => f.x1 - f.x0 > 0.01 && f.y1 - f.y0 > 0.01)
+        .slice(0, 8);
+    const captions = (Array.isArray(json.captions) ? json.captions : [])
+        .map(c => String(c || "").trim().slice(0, 24)).filter(Boolean).slice(0, 4);
+    studioAiResult = { key, faces, captions };
+    return studioAiResult;
+}
+
+// Stickers for one face. Sizes and offsets are in face-box units; all come back as canvas fractions.
+function studioAiStickersFor(theme, face, W, H) {
+    const R = studioRefSize(W, H);
+    const fw = (face.x1 - face.x0) * W, fh = (face.y1 - face.y0) * H;
+    const cx = (face.x0 + face.x1) / 2 * W, top = face.y0 * H;
+    const st = (emoji, x, y, size, rot = 0) => ({
+        type: "sticker", emoji, ai: true, rot,
+        x: studioClamp(x / W, 0, 1), y: studioClamp(y / H, 0, 1), s: studioClamp(size / R, 0.03, 1)
+    });
+    switch (theme) {
+        case "crown": return [st("👑", cx, top - fh * 0.3, fw * 0.75)];
+        case "flower": return [-2, -1, 0, 1, 2].map(i => {
+            const t = i / 4;
+            return st(["🌸", "🌷", "🌼", "🌷", "🌸"][i + 2], cx + t * fw * 0.95, top - fh * 0.06 + t * t * fh * 0.55, fw * 0.27, t * 0.7);
+        });
+        case "ribbon": return [st("🎀", cx + fw * 0.36, top - fh * 0.04, fw * 0.45, 0.3)];
+        case "glasses": return [st("🕶️", cx, top + fh * 0.42, fw * 0.95)];
+        case "blush": return [st("💗", cx - fw * 0.29, top + fh * 0.68, fw * 0.2, -0.2), st("💗", cx + fw * 0.29, top + fh * 0.68, fw * 0.2, 0.2)];
+        case "sparkle": return [
+            st("✨", cx - fw * 0.65, top + fh * 0.12, fw * 0.32),
+            st("✨", cx + fw * 0.62, top + fh * 0.38, fw * 0.25),
+            st("✨", cx - fw * 0.52, top + fh * 0.88, fw * 0.2)
+        ];
+    }
+    return [];
+}
+
+window.studioAiApplyTheme = async function(theme) {
+    if (studioAiBusy || !studio.photos.length) return;
+    studioAiBusy = true;
+    document.querySelectorAll(".studio-ai-btn").forEach(b => { b.disabled = true; });
+    studioAiSetStatus("AI가 얼굴을 찾는 중이에요... 🔍");
+    try {
+        const res = await studioAiAnalyze();
+        studioRenderControls(); // shows any new caption ideas
+        if (!res.faces.length) {
+            studioAiSetStatus("얼굴을 찾지 못했어요. 얼굴이 크게 나온 사진으로 해보세요 🥲");
+            return;
+        }
+        const canvas = document.getElementById("studio-preview");
+        const W = canvas.width, H = canvas.height;
+        // Swap the previous AI theme instead of piling a second one on top; hand-placed items stay.
+        const kept = studio.items.filter(it => !it.ai);
+        const added = res.faces.flatMap(f => studioAiStickersFor(theme, f, W, H)).slice(0, Math.max(0, STUDIO_MAX_ITEMS - kept.length));
+        studio.items = kept.concat(added.map(it => Object.assign(it, { id: `it${++studioItemSeq}` })));
+        studio.selectedId = null;
+        studioRenderItemPanel();
+        studioQueueRender(false);
+        studioAiSetStatus(`얼굴 ${res.faces.length}개에 붙였어요! 위치는 손으로 고칠 수 있어요 ✨`);
+    } catch (e) {
+        if (e && e.cancelled) { studioAiSetStatus(""); return; }
+        console.error("[Studio AI]", e);
+        studioAiSetStatus("AI 꾸미기 실패: " + (e && e.message ? e.message : e));
+    } finally {
+        studioAiBusy = false;
+        document.querySelectorAll(".studio-ai-btn").forEach(b => { b.disabled = false; });
+    }
+};
+
+window.studioAiRemove = function() {
+    studio.items = studio.items.filter(it => !it.ai);
+    if (studio.selectedId && !studioSelectedItem()) studio.selectedId = null;
+    studioRenderItemPanel();
+    studioQueueRender(false);
+    studioAiSetStatus("");
+};
+
+window.studioAiCaptions = async function() {
+    if (studioAiBusy || !studio.photos.length) return;
+    studioAiBusy = true;
+    document.querySelectorAll(".studio-ai-btn").forEach(b => { b.disabled = true; });
+    studioAiSetStatus("AI가 문구를 고르는 중이에요... ✍️");
+    try {
+        const res = await studioAiAnalyze();
+        studioRenderControls();
+        studioAiSetStatus(res.captions.length ? "아래 '프레임 · 문구'에 ✨ 추천 문구를 넣어뒀어요" : "추천 문구를 받지 못했어요");
+        if (res.captions.length) document.getElementById("studio-caption-suggestions")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (e) {
+        if (e && e.cancelled) { studioAiSetStatus(""); return; }
+        console.error("[Studio AI]", e);
+        studioAiSetStatus("AI 문구 추천 실패: " + (e && e.message ? e.message : e));
+    } finally {
+        studioAiBusy = false;
+        document.querySelectorAll(".studio-ai-btn").forEach(b => { b.disabled = false; });
+    }
+};
+
+function studioRenderAiThemes() {
+    const el = document.getElementById("studio-ai-themes");
+    if (!el || el.childElementCount) return;
+    el.innerHTML = STUDIO_AI_THEMES.map(t => `<button type="button" class="studio-chip small studio-ai-btn" onclick="studioAiApplyTheme(${jsArg(t.id)})">${escapeHtml(t.name)}</button>`).join("") +
+        `<button type="button" class="studio-chip small" onclick="studioAiRemove()">AI 스티커 지우기</button>`;
+}
+
+// ── 움직이는 사진: a short slideshow video of the chosen photos, ending on the finished collage ─────
+// Drawn frame by frame on a visible canvas and recorded with MediaRecorder (iPhone Safari 14.5+ records
+// MP4; Chrome/Android WebM or MP4). Safari has had bugs where a canvas stream records blank, so the
+// canvas stays on screen while recording and a suspiciously small result is reported as unsupported
+// instead of saved. Videos are only offered to the phone (share sheet / download), never uploaded —
+// a few MB each would eat the free-tier database quota.
+// Modes: normal 4:5 clip; KakaoTalk profile video (square, KakaoTalk allows up to 6s); KakaoTalk
+// background video (9:16, up to 15s). Lengths stay a little under those limits because recording
+// runs slightly long; photos get less screen time when the length is capped.
+const STUDIO_VIDEO_MODES = {
+    normal: { w: 720, h: 900, maxTotal: 0, end: 2.4, name: "움직이는 사진" },
+    profile: { w: 720, h: 720, maxTotal: 5.7, end: 1.6, name: "카톡 프사 영상" },
+    background: { w: 720, h: 1280, maxTotal: 14.5, end: 2.4, name: "카톡 배경 영상" }
+};
+function studioVideoTiming(mode, n) {
+    const m = STUDIO_VIDEO_MODES[mode] || STUDIO_VIDEO_MODES.normal;
+    const show = m.maxTotal ? Math.min(1.7, (m.maxTotal - m.end) / n) : 1.7;
+    return { ...m, show, fade: Math.min(0.45, show * 0.35), total: n * show + m.end };
+}
+
+function studioVideoMime() {
+    if (typeof MediaRecorder === "undefined" || !HTMLCanvasElement.prototype.captureStream) return null;
+    const types = ["video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+    return types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (_) { return false; } }) || null;
+}
+
+function studioVideoSeconds(n, mode = "normal") { return studioVideoTiming(mode, n).total; }
+
+let studioVideoState = null; // { blob, url, ext }
+
+function studioVideoOverlay() {
+    let ov = document.getElementById("studio-video-overlay");
+    if (!ov) {
+        ov = document.createElement("div");
+        ov.id = "studio-video-overlay";
+        ov.className = "studio-video-overlay";
+        document.body.appendChild(ov);
+    }
+    return ov;
+}
+
+window.closeStudioVideo = function() {
+    const ov = document.getElementById("studio-video-overlay");
+    if (ov) ov.remove();
+    if (studioVideoState) URL.revokeObjectURL(studioVideoState.url);
+    studioVideoState = null;
+};
+
+window.studioSaveVideo = function() {
+    if (!studioVideoState) return;
+    studioShareOrDownload(studioVideoState.blob, studioFileName().replace(/\.jpg$/, "." + studioVideoState.ext));
+};
+
+window.studioMakeVideo = async function(mode = "normal") {
+    if (studio.busy) return;
+    if (studio.photos.length < 2) { showToast("움직이는 사진은 사진 2장 이상부터 만들 수 있어요", "warning"); return; }
+    const mime = studioVideoMime();
+    if (!mime) { showToast("이 브라우저에서는 영상 만들기를 지원하지 않아요 🥲", "warning"); return; }
+    const cfg = studioVideoTiming(mode, studio.photos.length);
+    studio.busy = true;
+    studioRenderControls();
+    const ov = studioVideoOverlay();
+    ov.innerHTML = `<div class="studio-video-card"><div class="studio-video-title">🎬 ${cfg.name} 만드는 중...</div>
+        <canvas id="studio-video-canvas" width="${cfg.w}" height="${cfg.h}"></canvas>
+        <div class="studio-video-sub" id="studio-video-sub">준비하는 중이에요</div></div>`;
+    let stream = null;
+    try {
+        const canvas = document.getElementById("studio-video-canvas");
+        const ctx = canvas.getContext("2d");
+        const W = cfg.w, H = cfg.h;
+        const p = studioFilterParams();
+        const images = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
+        const frames = images.map(img => studioRenderCell(img, W * 1.08, H * 1.08, p));
+        const finale = await studioExportCanvas();
+        const bg = STUDIO_BACKGROUNDS.find(b => b.id === studio.bg) || STUDIO_BACKGROUNDS[0];
+        const n = frames.length, total = cfg.total;
+
+        // Scene k (0..n-1 = photos, n = finished collage); each photo slowly zooms, alternating in/out.
+        const drawScene = (k, prog, alpha) => {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            if (k < n) {
+                const e = k % 2 ? prog : 1 - prog;
+                const d = 1 + 0.07 * e;
+                ctx.drawImage(frames[k], (W - W * d) / 2, (H - H * d) / 2, W * d, H * d);
+            } else {
+                ctx.fillStyle = bg.color;
+                ctx.fillRect(0, 0, W, H);
+                const fit = Math.min(W / finale.width, H / finale.height) * (0.94 + 0.04 * Math.min(1, prog));
+                const fw = finale.width * fit, fh = finale.height * fit;
+                ctx.drawImage(finale, (W - fw) / 2, (H - fh) / 2, fw, fh);
+            }
+            ctx.restore();
+        };
+        const draw = t => {
+            const k = Math.min(n, Math.floor(t / cfg.show));
+            const local = t - k * cfg.show;
+            const span = k < n ? cfg.show + cfg.fade : cfg.end;
+            drawScene(k, local / span, 1);
+            if (k < n && local > cfg.show - cfg.fade) {
+                drawScene(k + 1, 0, (local - (cfg.show - cfg.fade)) / cfg.fade);
+            }
+        };
+
+        draw(0);
+        stream = canvas.captureStream(30);
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
+        const chunks = [];
+        rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+        const stopped = new Promise((resolve, reject) => { rec.onstop = resolve; rec.onerror = e => reject(e.error || new Error("녹화 오류")); });
+        rec.start(500);
+        const sub = document.getElementById("studio-video-sub");
+        const t0 = performance.now();
+        await new Promise(resolve => {
+            const tick = () => {
+                const t = (performance.now() - t0) / 1000;
+                draw(Math.min(t, total));
+                if (sub) sub.textContent = `${Math.min(total, t).toFixed(0)}초 / ${total.toFixed(0)}초 · 화면을 켜 둔 채로 기다려 주세요`;
+                if (t >= total) resolve(); else setTimeout(tick, 1000 / 30);
+            };
+            tick();
+        });
+        await new Promise(r => setTimeout(r, 150));
+        rec.stop();
+        await stopped;
+        const blob = new Blob(chunks, { type: mime.split(";")[0] });
+        // A real recording of ~10s at this size is hundreds of KB at least; a near-empty file means the
+        // browser recorded blank frames (the old Safari canvas-capture bug).
+        if (blob.size < 30 * 1024) throw new Error("이 기기에서는 영상이 제대로 만들어지지 않았어요");
+        const url = URL.createObjectURL(blob);
+        studioVideoState = { blob, url, ext: mime.includes("mp4") ? "mp4" : "webm" };
+        if (studioVideoState.ext !== "mp4" && mode !== "normal") showToast("이 브라우저는 webm으로 저장돼요. 카톡에서 안 열리면 아이폰 사파리에서 만들어 주세요", "warning");
+        ov.innerHTML = `<div class="studio-video-card"><div class="studio-video-title">🎬 ${cfg.name} 완성! (${total.toFixed(1)}초)</div>
+            <video src="${url}" autoplay loop muted playsinline></video>
+            <div class="studio-video-sub">${(blob.size / 1024 / 1024).toFixed(1)}MB · 폰에만 저장돼요 (꾸민 사진 앨범에는 올라가지 않아요)</div>
+            <div class="studio-video-actions">
+                <button type="button" class="btn btn-outline" onclick="closeStudioVideo()">닫기</button>
+                <button type="button" class="btn btn-primary" onclick="studioSaveVideo()"><i data-lucide="download"></i> 폰에 저장</button>
+            </div></div>`;
+        if (window.lucide) lucide.createIcons();
+    } catch (e) {
+        console.error("[Studio video]", e);
+        closeStudioVideo();
+        showToast("영상을 만들지 못했어요: " + (e && e.message ? e.message : e), "danger");
+    } finally {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        studio.busy = false;
+        studioRenderControls();
+    }
+};
+
+// ── 카톡 프사 만들기: square profile, couple "반반" split, 9:16 background ─────────────────────────
+// Works from the finished picture (studioExportCanvas — stickers included). For the profile and the
+// couple split the person drags a crop frame over it (zoom slider for size); the couple frame is 2:1
+// and becomes two squares, the left half for one person's profile and the right half for the other's,
+// so side by side they make the whole picture. The background version keeps the whole picture and
+// fills the tall 9:16 screen with a blurred copy of it. KakaoTalk publishes no pixel spec for personal
+// profiles, so this uses 1080px squares and 1080×1920, which it shows well.
+const KAKAO_MODES = {
+    profile: { aspect: 1, hint: "카톡 프사는 정사각형으로 보이고, 친구 목록에서는 동그랗게 잘려요. 얼굴을 가운데 원 안에 맞춰주세요." },
+    couple: { aspect: 2, hint: "왼쪽 반은 SH_NAME 프사, 오른쪽 반은 SA_NAME 프사가 돼요. 둘이 나란히 놓이면 한 장의 사진이 돼요 💑" },
+    background: { aspect: 0, hint: "카톡 배경(세로 화면)용이에요. 사진 전체가 보이고, 빈 곳은 같은 사진을 흐리게 깔아요." }
+};
+const kakao = { mode: "profile", src: null, backdrop: null, cx: 0.5, cy: 0.5, zoom: 0, drag: null };
+
+window.openKakaoMaker = async function() {
+    if (!studio.photos.length || studio.busy) return;
+    await studioWithBusy("카톡용 사진을 준비하는 중... 💛", async () => {
+        kakao.src = await studioExportCanvas();
+        // The blurred backdrop comes from the first photo itself: blurring the finished picture would
+        // mostly blur its white frame.
+        kakao.backdrop = await studioLoadImage(studio.photos[0].src).catch(() => kakao.src);
+        kakao.mode = "profile";
+        kakaoAutoFrame();
+        document.getElementById("modal-kakao")?.classList.add("active");
+        kakaoAttachGestures();
+        kakaoRender();
+        setTimeout(() => lucide.createIcons(), 30);
+    });
+};
+
+window.closeKakaoMaker = function() {
+    document.getElementById("modal-kakao")?.classList.remove("active");
+    kakao.src = null;
+    kakao.backdrop = null;
+};
+
+window.kakaoSetMode = function(mode) {
+    kakao.mode = mode;
+    kakaoAutoFrame();
+    kakaoRender();
+};
+
+window.kakaoSetZoom = function(v) {
+    kakao.zoom = studioClamp(Number(v) / 100, 0, 1);
+    kakaoClampCenter();
+    kakaoRender();
+};
+
+// Largest crop of the mode's aspect that fits, shrunk by the zoom slider (down to 30%).
+function kakaoCropRect() {
+    const src = kakao.src, a = KAKAO_MODES[kakao.mode].aspect;
+    let mw, mh;
+    if (src.width / src.height > a) { mh = src.height; mw = mh * a; } else { mw = src.width; mh = mw / a; }
+    const k = 1 - kakao.zoom * 0.7;
+    const w = mw * k, h = mh * k;
+    return { x: kakao.cx * src.width - w / 2, y: kakao.cy * src.height - h / 2, w, h };
+}
+
+function kakaoClampCenter() {
+    if (!kakao.src || !KAKAO_MODES[kakao.mode].aspect) return;
+    const r = kakaoCropRect(), W = kakao.src.width, H = kakao.src.height;
+    kakao.cx = studioClamp(kakao.cx, r.w / 2 / W, 1 - r.w / 2 / W);
+    kakao.cy = studioClamp(kakao.cy, r.h / 2 / H, 1 - r.h / 2 / H);
+}
+
+// Start framed on the faces when AI 꾸미기 already found them for this picture; else the centre.
+function kakaoAutoFrame() {
+    kakao.cx = 0.5; kakao.cy = 0.5; kakao.zoom = 0;
+    const a = KAKAO_MODES[kakao.mode].aspect;
+    const faces = studioAiResult && studioAiResult.key === studioAiKey() ? studioAiResult.faces : [];
+    if (a && faces.length && kakao.src) {
+        const W = kakao.src.width, H = kakao.src.height;
+        const x0 = Math.min(...faces.map(f => f.x0)) * W, x1 = Math.max(...faces.map(f => f.x1)) * W;
+        const y0 = Math.min(...faces.map(f => f.y0)) * H, y1 = Math.max(...faces.map(f => f.y1)) * H;
+        kakao.cx = (x0 + x1) / 2 / W;
+        kakao.cy = (y0 + y1) / 2 / H;
+        // Aim for the faces filling ~55% of the frame's width (and fitting its height).
+        const fullW = kakaoCropRectAtZoom(0).w;
+        const wantW = Math.max((x1 - x0) / 0.55, (y1 - y0) * a / 0.6);
+        kakao.zoom = studioClamp((1 - wantW / fullW) / 0.7, 0, 1);
+    }
+    kakaoClampCenter();
+    const z = document.getElementById("kakao-zoom");
+    if (z) z.value = Math.round(kakao.zoom * 100);
+}
+function kakaoCropRectAtZoom(zoom) { const keep = kakao.zoom; kakao.zoom = zoom; const r = kakaoCropRect(); kakao.zoom = keep; return r; }
+
+function kakaoBackgroundCanvas(W, H) {
+    const src = kakao.src, back = kakao.backdrop || src;
+    const bw = back.naturalWidth || back.width, bh = back.naturalHeight || back.height;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d");
+    // Blur without ctx.filter (older iPhone Safari): a real box blur on a small copy, scaled back up.
+    const tiny = document.createElement("canvas");
+    const cover = Math.max(W / bw, H / bh);
+    tiny.width = 120; tiny.height = Math.max(1, Math.round(120 * H / W));
+    const tctx = tiny.getContext("2d");
+    tctx.drawImage(back, (bw - W / cover) / 2, (bh - H / cover) / 2, W / cover, H / cover, 0, 0, tiny.width, tiny.height);
+    const td = tctx.getImageData(0, 0, tiny.width, tiny.height);
+    const ch = studioSplit(td);
+    const blurred = [ch.R, ch.G, ch.B].map(c => studioBoxBlur(studioBoxBlur(c, tiny.width, tiny.height, 5), tiny.width, tiny.height, 5));
+    for (let i = 0, j = 0; i < ch.R.length; i++, j += 4) { td.data[j] = blurred[0][i]; td.data[j + 1] = blurred[1][i]; td.data[j + 2] = blurred[2][i]; }
+    tctx.putImageData(td, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(tiny, 0, 0, W, H);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(0, 0, W, H);
+    const fit = Math.min(W * 0.9 / src.width, H * 0.8 / src.height);
+    const fw = src.width * fit, fh = src.height * fit;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
+    ctx.shadowBlur = W * 0.03;
+    ctx.shadowOffsetY = W * 0.01;
+    ctx.drawImage(src, (W - fw) / 2, (H - fh) / 2, fw, fh);
+    ctx.restore();
+    return c;
+}
+
+function kakaoRender() {
+    const canvas = document.getElementById("kakao-preview");
+    if (!canvas || !kakao.src) return;
+    const mode = KAKAO_MODES[kakao.mode];
+    document.querySelectorAll("#kakao-tabs .studio-chip").forEach(b => b.classList.toggle("active", b.dataset.mode === kakao.mode));
+    document.getElementById("kakao-zoom-row")?.classList.toggle("hidden", !mode.aspect);
+    const hint = document.getElementById("kakao-hint");
+    if (hint) hint.textContent = mode.hint.replace("SH_NAME", partnerAName).replace("SA_NAME", partnerBName);
+    const ctx = canvas.getContext("2d");
+    if (!mode.aspect) {
+        canvas.width = 405; canvas.height = 720;
+        ctx.drawImage(kakaoBackgroundCanvas(405, 720), 0, 0);
+        canvas.style.touchAction = "";
+        return;
+    }
+    canvas.style.touchAction = "none";
+    const src = kakao.src;
+    const scale = 640 / Math.max(src.width, src.height);
+    canvas.width = Math.round(src.width * scale);
+    canvas.height = Math.round(src.height * scale);
+    ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+    const r = kakaoCropRect();
+    const x = r.x * scale, y = r.y * scale, w = r.w * scale, h = r.h * scale;
+    // Dim everything outside the frame.
+    ctx.save();
+    ctx.fillStyle = "rgba(20,12,18,0.55)";
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.rect(x, y, w, h);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    const circle = (cx, cy, rad) => { ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke(); };
+    if (kakao.mode === "profile") {
+        circle(x + w / 2, y + h / 2, w / 2);
+    } else {
+        ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
+        circle(x + w / 4, y + h / 2, h / 2);
+        circle(x + w * 3 / 4, y + h / 2, h / 2);
+        ctx.setLineDash([]);
+        ctx.font = `800 ${Math.max(12, Math.round(h * 0.09))}px ${STUDIO_FONT}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.fillStyle = "#fff";
+        [[partnerAName, x + w / 4], [partnerBName, x + w * 3 / 4]].forEach(([t, tx]) => { ctx.strokeText(t, tx, y + 6); ctx.fillText(t, tx, y + 6); });
+    }
+    ctx.restore();
+}
+
+let kakaoGesturesAttached = false;
+function kakaoAttachGestures() {
+    const canvas = document.getElementById("kakao-preview");
+    if (!canvas || kakaoGesturesAttached) return;
+    kakaoGesturesAttached = true;
+    canvas.addEventListener("pointerdown", e => {
+        if (!KAKAO_MODES[kakao.mode].aspect || !kakao.src) return;
+        e.preventDefault();
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { }
+        kakao.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, cx: kakao.cx, cy: kakao.cy };
+    });
+    canvas.addEventListener("pointermove", e => {
+        const d = kakao.drag;
+        if (!d || d.id !== e.pointerId) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        kakao.cx = d.cx + (e.clientX - d.x) / rect.width;
+        kakao.cy = d.cy + (e.clientY - d.y) / rect.height;
+        kakaoClampCenter();
+        kakaoRender();
+    });
+    const end = e => { if (kakao.drag && kakao.drag.id === e.pointerId) kakao.drag = null; };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+}
+
+function kakaoOutputCanvases() {
+    const src = kakao.src;
+    const square = (sx, sy, sw, sh) => {
+        const c = document.createElement("canvas");
+        c.width = c.height = 1080;
+        const ctx = c.getContext("2d");
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, 1080, 1080);
+        return c;
+    };
+    if (kakao.mode === "background") return [{ canvas: kakaoBackgroundCanvas(1080, 1920), suffix: "kakao_bg" }];
+    const r = kakaoCropRect();
+    if (kakao.mode === "profile") return [{ canvas: square(r.x, r.y, r.w, r.h), suffix: "kakao_profile" }];
+    return [
+        { canvas: square(r.x, r.y, r.w / 2, r.h), suffix: `couple_${partnerAName}` },
+        { canvas: square(r.x + r.w / 2, r.y, r.w / 2, r.h), suffix: `couple_${partnerBName}` }
+    ];
+}
+
+// Called straight from the button so iPhone still treats it as a tap and opens the share sheet.
+window.kakaoSave = async function() {
+    if (!kakao.src) return;
+    try {
+        const outs = kakaoOutputCanvases();
+        const base = studioFileName().replace(/\.jpg$/, "");
+        const safe = s => String(s).replace(/[\\/:*?"<>|\s]+/g, "_");
+        const files = await Promise.all(outs.map(async o => new File([await studioCanvasToBlob(o.canvas)], `${base}_${safe(o.suffix)}.jpg`, { type: "image/jpeg" })));
+        if (navigator.canShare && navigator.canShare({ files })) {
+            try { await navigator.share({ files }); return; }
+            catch (e) { if (e && e.name === "AbortError") return; }
+        }
+        for (const f of files) {
+            await studioShareOrDownload(f, f.name);
+            await new Promise(r => setTimeout(r, 300));
+        }
+    } catch (e) {
+        console.error("[Kakao]", e);
+        showToast("저장하지 못했어요: " + (e && e.message ? e.message : e), "danger");
+    }
+};
+
+// ── 그림 효과 (유화 · 수채화 · 연필 스케치 · 만화) and 뽀샤시, all on the device ─────────────────
+// They run per cell inside studioRenderCell, before the colour filter. The heavy work happens on a
+// copy capped at STUDIO_ART_WORK_MAX px and is scaled back up: painterly looks don't need full
+// resolution, and it keeps a 2048px export to a few hundred ms and tens of MB on an iPhone.
+// Everything is O(pixels): box blurs are sliding sums, Kuwahara uses summed-area tables.
+const STUDIO_ARTS = [
+    { id: "none", name: "없음" },
+    { id: "oil", name: "🎨 유화" },
+    { id: "watercolor", name: "💧 수채화" },
+    { id: "sketch", name: "✏️ 연필 스케치" },
+    { id: "cartoon", name: "💥 만화" }
+];
+const STUDIO_ART_WORK_MAX = 1024;
+
+function studioHash01(x, y) {
+    let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+// Smooth value noise, cell = grid size in px; 0..1.
+function studioValueNoise(x, y, cell) {
+    const gx = x / cell, gy = y / cell, x0 = Math.floor(gx), y0 = Math.floor(gy);
+    const fx = gx - x0, fy = gy - y0, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const a = studioHash01(x0, y0), b = studioHash01(x0 + 1, y0), c = studioHash01(x0, y0 + 1), d = studioHash01(x0 + 1, y0 + 1);
+    return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+}
+
+function studioBoxBlur(src, w, h, r) {
+    if (r < 1) return Float32Array.from(src);
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h), d = 2 * r + 1;
+    for (let y = 0; y < h; y++) {
+        const row = y * w;
+        let acc = 0;
+        for (let k = -r; k <= r; k++) acc += src[row + Math.min(w - 1, Math.max(0, k))];
+        for (let x = 0; x < w; x++) {
+            tmp[row + x] = acc / d;
+            acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+        }
+    }
+    for (let x = 0; x < w; x++) {
+        let acc = 0;
+        for (let k = -r; k <= r; k++) acc += tmp[Math.min(h - 1, Math.max(0, k)) * w + x];
+        for (let y = 0; y < h; y++) {
+            out[y * w + x] = acc / d;
+            acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+        }
+    }
+    return out;
+}
+
+function studioSplit(img) {
+    const n = img.width * img.height, d = img.data;
+    const R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n), L = new Float32Array(n);
+    for (let i = 0, j = 0; i < n; i++, j += 4) {
+        R[i] = d[j]; G[i] = d[j + 1]; B[i] = d[j + 2];
+        L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+    }
+    return { R, G, B, L };
+}
+
+// Kuwahara: each pixel takes the mean colour of whichever of its four neighbouring quadrants is the
+// most uniform — flattens texture into brush-like patches while keeping edges.
+function studioKuwahara(ch, w, h, r) {
+    const W1 = w + 1, n = W1 * (h + 1);
+    const iR = new Float64Array(n), iG = new Float64Array(n), iB = new Float64Array(n), iL = new Float64Array(n), iL2 = new Float64Array(n);
+    for (let y = 0; y < h; y++) {
+        let sR = 0, sG = 0, sB = 0, sL = 0, sL2 = 0;
+        for (let x = 0; x < w; x++) {
+            const p = y * w + x, l = ch.L[p];
+            sR += ch.R[p]; sG += ch.G[p]; sB += ch.B[p]; sL += l; sL2 += l * l;
+            const q = (y + 1) * W1 + x + 1, up = y * W1 + x + 1;
+            iR[q] = iR[up] + sR; iG[q] = iG[up] + sG; iB[q] = iB[up] + sB; iL[q] = iL[up] + sL; iL2[q] = iL2[up] + sL2;
+        }
+    }
+    const R = new Float32Array(w * h), G = new Float32Array(w * h), B = new Float32Array(w * h);
+    const sum = (I, x0, y0, x1, y1) => I[(y1 + 1) * W1 + x1 + 1] - I[y0 * W1 + x1 + 1] - I[(y1 + 1) * W1 + x0] + I[y0 * W1 + x0];
+    for (let y = 0; y < h; y++) {
+        const ya = Math.max(0, y - r), yb = Math.min(h - 1, y + r);
+        for (let x = 0; x < w; x++) {
+            const xa = Math.max(0, x - r), xb = Math.min(w - 1, x + r);
+            let best = Infinity, bx0 = 0, by0 = 0, bx1 = 0, by1 = 0, bc = 1;
+            for (let q = 0; q < 4; q++) {
+                const x0 = q & 1 ? x : xa, x1 = q & 1 ? xb : x, y0 = q & 2 ? y : ya, y1 = q & 2 ? yb : y;
+                const c = (x1 - x0 + 1) * (y1 - y0 + 1);
+                const m = sum(iL, x0, y0, x1, y1) / c;
+                const v = sum(iL2, x0, y0, x1, y1) / c - m * m;
+                if (v < best) { best = v; bx0 = x0; by0 = y0; bx1 = x1; by1 = y1; bc = c; }
+            }
+            const p = y * w + x;
+            R[p] = sum(iR, bx0, by0, bx1, by1) / bc;
+            G[p] = sum(iG, bx0, by0, bx1, by1) / bc;
+            B[p] = sum(iB, bx0, by0, bx1, by1) / bc;
+        }
+    }
+    const L = new Float32Array(w * h);
+    for (let i = 0; i < L.length; i++) L[i] = 0.299 * R[i] + 0.587 * G[i] + 0.114 * B[i];
+    return { R, G, B, L };
+}
+
+// Sobel edge strength of a luminance plane, 0..~1.
+function studioEdges(L, w, h) {
+    const E = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            const p = y * w + x;
+            const gx = L[p - w + 1] + 2 * L[p + 1] + L[p + w + 1] - L[p - w - 1] - 2 * L[p - 1] - L[p + w - 1];
+            const gy = L[p + w - 1] + 2 * L[p + w] + L[p + w + 1] - L[p - w - 1] - 2 * L[p - w] - L[p - w + 1];
+            E[p] = Math.sqrt(gx * gx + gy * gy) / 255;
+        }
+    }
+    return E;
+}
+
+// Runs fn(imageData) on a copy of `canvas` no larger than maxSide, then scales the result back.
+// When `blend` is set, the result's alpha channel is used to mix it over the original.
+function studioOnWorkCopy(canvas, maxSide, fn) {
+    const scale = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
+    const w = Math.max(1, Math.round(canvas.width * scale)), h = Math.max(1, Math.round(canvas.height * scale));
+    const work = document.createElement("canvas");
+    work.width = w; work.height = h;
+    const wctx = work.getContext("2d");
+    wctx.drawImage(canvas, 0, 0, w, h);
+    const img = wctx.getImageData(0, 0, w, h);
+    const overlay = fn(img, w, h);
+    wctx.putImageData(img, 0, 0);
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    if (!overlay) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(work, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+}
+
+function studioApplyArt(canvas, art) {
+    studioOnWorkCopy(canvas, STUDIO_ART_WORK_MAX, (img, w, h) => {
+        const d = img.data, n = w * h, long = Math.max(w, h);
+        const src = studioSplit(img);
+        const put = (i, r, g, b) => {
+            const j = i * 4;
+            d[j] = r < 0 ? 0 : r > 255 ? 255 : r;
+            d[j + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+            d[j + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+            d[j + 3] = 255;
+        };
+        if (art === "oil") {
+            // Two passes: the second merges the first pass's patches into bigger, smoother strokes.
+            const rad = Math.max(2, Math.round(long / 120));
+            const k = studioKuwahara(studioKuwahara(src, w, h, rad), w, h, Math.max(2, Math.round(rad * 0.7)));
+            const cell = Math.max(2, long / 300);
+            for (let i = 0; i < n; i++) {
+                const x = i % w, y = (i / w) | 0;
+                // Canvas weave + a little directional "stroke" noise, then a richer, slightly punchier palette.
+                const tex = 1 + 0.05 * (studioValueNoise(x, y * 0.35, cell) - 0.5) + 0.03 * (studioHash01(x >> 1, y >> 1) - 0.5);
+                const gray = k.L[i];
+                const r = gray + (k.R[i] - gray) * 1.25, g = gray + (k.G[i] - gray) * 1.25, b = gray + (k.B[i] - gray) * 1.25;
+                put(i, ((r - 128) * 1.06 + 128) * tex, ((g - 128) * 1.06 + 128) * tex, ((b - 128) * 1.06 + 128) * tex);
+            }
+        } else if (art === "watercolor") {
+            const rad = Math.max(2, Math.round(long / 110));
+            let k = studioKuwahara(studioKuwahara(src, w, h, rad), w, h, Math.max(2, Math.round(rad * 0.6)));
+            // Soft bleed of the colour patches.
+            const r1 = Math.max(1, Math.round(long / 300));
+            k = { R: studioBoxBlur(k.R, w, h, r1), G: studioBoxBlur(k.G, w, h, r1), B: studioBoxBlur(k.B, w, h, r1), L: k.L };
+            const E = studioEdges(studioBoxBlur(k.L, w, h, 1), w, h);
+            const blotch = Math.max(8, long / 9), grain = Math.max(1, long / 700);
+            for (let i = 0; i < n; i++) {
+                const x = i % w, y = (i / w) | 0;
+                const e = Math.min(1, E[i] * 1.6);
+                let r = k.R[i], g = k.G[i], b = k.B[i];
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                r = gray + (r - gray) * 0.9; g = gray + (g - gray) * 0.9; b = gray + (b - gray) * 0.9;
+                // Wash toward the paper, darker pigment pooled at the edges, uneven blotches, paper grain.
+                const wash = 0.1 + 0.14 * studioValueNoise(x, y, blotch);
+                r = r * (1 - wash) + 252 * wash; g = g * (1 - wash) + 249 * wash; b = b * (1 - wash) + 243 * wash;
+                const pool = 1 - 0.45 * e;
+                const paper = 1 + 0.07 * (studioValueNoise(x, y, grain * 3) - 0.5) + 0.04 * (studioHash01(x, y) - 0.5);
+                put(i, r * pool * paper, g * pool * paper, b * pool * paper);
+            }
+        } else if (art === "sketch") {
+            // Colour dodge of the grey image with its blurred negative = pencil lines on paper.
+            const inv = new Float32Array(n);
+            for (let i = 0; i < n; i++) inv[i] = 255 - src.L[i];
+            const rb = Math.max(2, Math.round(long / 110));
+            const blur = studioBoxBlur(studioBoxBlur(inv, w, h, rb), w, h, rb);
+            for (let i = 0; i < n; i++) {
+                const x = i % w, y = (i / w) | 0;
+                let s = blur[i] >= 254 ? 255 : Math.min(255, src.L[i] * 255 / (255 - blur[i]));
+                s = 255 * Math.pow(s / 255, 2.4);
+                const hatch = 1 - 0.05 * studioHash01(x + y, (x - y) >> 1); // faint diagonal pencil texture
+                const v = s * hatch;
+                put(i, v * 0.99, v * 0.975, v * 0.95);
+            }
+        } else if (art === "cartoon") {
+            const k = studioKuwahara(src, w, h, Math.max(2, Math.round(long / 260)));
+            const E = studioEdges(studioBoxBlur(src.L, w, h, Math.max(1, Math.round(long / 600))), w, h);
+            const lv = 6, q = v => Math.round(v / 255 * lv) / lv * 255;
+            for (let i = 0; i < n; i++) {
+                let r = k.R[i], g = k.G[i], b = k.B[i];
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                r = gray + (r - gray) * 1.12; g = gray + (g - gray) * 1.12; b = gray + (b - gray) * 1.12;
+                r = r * 0.55 + q(r) * 0.45; g = g * 0.55 + q(g) * 0.45; b = b * 0.55 + q(b) * 0.45;
+                const ink = Math.min(1, Math.max(0, (E[i] - 0.28) * 3.5));
+                const t = 1 - ink * 0.9;
+                put(i, r * t + 25 * (1 - t), g * t + 20 * (1 - t), b * t + 30 * (1 - t));
+            }
+        }
+        return false;
+    });
+}
+
+// 뽀샤시: edge-preserving smoothing (self-guided filter) applied through a skin-colour mask, so skin
+// gets soft while eyes, hair and background keep their detail. strength 0..100.
+function studioApplySmooth(canvas, strength) {
+    studioOnWorkCopy(canvas, STUDIO_ART_WORK_MAX, (img, w, h) => {
+        const d = img.data, n = w * h, long = Math.max(w, h);
+        const r = Math.max(2, Math.round(long / 120));
+        const eps = Math.pow(255 * (0.04 + 0.08 * strength / 100), 2);
+        const ch = studioSplit(img);
+        const out = [ch.R, ch.G, ch.B].map(I => {
+            const II = new Float32Array(n);
+            for (let i = 0; i < n; i++) II[i] = I[i] * I[i];
+            const mI = studioBoxBlur(I, w, h, r), mII = studioBoxBlur(II, w, h, r);
+            const a = new Float32Array(n), b = new Float32Array(n);
+            for (let i = 0; i < n; i++) {
+                const v = mII[i] - mI[i] * mI[i];
+                a[i] = v / (v + eps);
+                b[i] = mI[i] - a[i] * mI[i];
+            }
+            const ma = studioBoxBlur(a, w, h, r), mb = studioBoxBlur(b, w, h, r);
+            const q = new Float32Array(n);
+            for (let i = 0; i < n; i++) q[i] = ma[i] * I[i] + mb[i];
+            return q;
+        });
+        // Skin mask from YCbCr (a classic, lighting-tolerant range), softened so it has no hard border.
+        const mask = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+            const R = ch.R[i], G = ch.G[i], B = ch.B[i];
+            const cb = 128 - 0.168736 * R - 0.331264 * G + 0.5 * B;
+            const cr = 128 + 0.5 * R - 0.418688 * G - 0.081312 * B;
+            mask[i] = cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 ? 1 : 0;
+        }
+        const soft = studioBoxBlur(mask, w, h, Math.max(2, Math.round(long / 250)));
+        const amt = Math.min(1, strength / 70);
+        const lift = strength * 0.12;
+        for (let i = 0, j = 0; i < n; i++, j += 4) {
+            const m = soft[i] * amt;
+            // Glow: smoothed skin is also lifted a touch and warmed toward pink.
+            d[j] = Math.min(255, out[0][i] + lift * 1.05);
+            d[j + 1] = Math.min(255, out[1][i] + lift * 0.9);
+            d[j + 2] = Math.min(255, out[2][i] + lift * 0.95);
+            d[j + 3] = Math.round(m * 255);
+        }
+        return true; // mix over the original through the mask in alpha
+    });
+}
+
+window.studioSetArt = function(id) { studio.art = id; studioRenderControls(); };
+window.studioSetSmooth = function(v) { studio.smooth = Number(v) || 0; studioQueueRender(); };
 
 // ── Photo picker (photos of every place, newest date first) ──────────────────────────────────────
 let studioPickerSelection = [];
