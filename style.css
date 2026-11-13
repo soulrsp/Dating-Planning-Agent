@@ -3150,3 +3150,83 @@ body {
         border-radius: 20px;
     }
 }
+
+/* ---- Photo studio: stickers & text overlays (v403) ---- */
+.studio-preview-wrap canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.studio-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.studio-sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+}
+.studio-sticker-btn {
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 101, 132, 0.06);
+    font-size: 1.45rem;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.studio-sticker-btn:active { transform: scale(0.9); }
+.studio-bubble-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.studio-bubble-btn {
+    border: 1px solid rgba(74, 40, 52, 0.12);
+    border-radius: 14px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: "Jua", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+.studio-bubble-btn.is-tag { border-radius: 999px; }
+.studio-bubble-btn.is-outline {
+    background: #fff;
+    -webkit-text-stroke: 0.4px rgba(74, 40, 52, 0.35);
+}
+.studio-item-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem;
+    border: 1.5px solid rgba(255, 101, 132, 0.35);
+    border-radius: 14px;
+    background: rgba(255, 101, 132, 0.04);
+}
+.studio-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-text-high);
+}
+.studio-item-actions { display: flex; gap: 0.3rem; }
+.studio-item-hint {
+    font-size: 0.7rem;
+    color: var(--color-text-med);
+}
+#studio-item-text {
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    font-size: 16px; /* 16px keeps iOS Safari from zooming in on focus */
+}
+.studio-swatches-sm { flex-wrap: wrap; }
+.studio-swatches-sm .studio-swatch { width: 24px; height: 24px; }
+.studio-swatches { flex-wrap: wrap; }
+@media (max-width: 768px) {
+    .studio-sticker-grid { grid-template-columns: repeat(8, 1fr); }
+    .studio-sticker-btn { font-size: 1.25rem; }
+}

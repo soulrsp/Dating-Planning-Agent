@@ -8005,11 +8005,18 @@ const STUDIO_FILTERS = [
     { id: "vivid", name: "선명하게", p: { contrast: 16, saturation: 22 } }
 ];
 
+// `pattern` backgrounds are drawn on the canvas (studioDrawPattern), sized relative to the output width
+// so the preview and the 2048px export look the same.
 const STUDIO_BACKGROUNDS = [
     { id: "white", label: "흰색", color: "#FFFFFF", text: "#4A2834" },
     { id: "pink", label: "핑크", color: "#FFE4EC", text: "#B5179E" },
     { id: "cream", label: "크림", color: "#FFF6E5", text: "#7A5230" },
-    { id: "black", label: "검정", color: "#1E1B1F", text: "#FFFFFF" }
+    { id: "black", label: "검정", color: "#1E1B1F", text: "#FFFFFF", dark: true },
+    { id: "check", label: "핑크 체크", color: "#FFF1F4", text: "#C2185B", pattern: "check", ink: "rgba(255,101,132,0.22)" },
+    { id: "hearts", label: "하트", color: "#FFE9F0", text: "#C2185B", pattern: "hearts", ink: "#FF9EB8" },
+    { id: "dots", label: "도트", color: "#FFF6E5", text: "#7A5230", pattern: "dots", ink: "rgba(232,160,80,0.42)" },
+    { id: "lilac", label: "라벤더 체크", color: "#F3EEFF", text: "#6A3FB5", pattern: "check", ink: "rgba(150,110,230,0.20)" },
+    { id: "stars", label: "밤하늘", color: "#1F2547", text: "#FFE9A8", pattern: "stars", ink: "#FFD86B", dark: true }
 ];
 
 const studio = {
@@ -8022,7 +8029,11 @@ const studio = {
     bg: "white",
     frame: "none",       // none | polaroid | stamp
     caption: "",
+    logo: false,         // "AURA · date" line in the bottom band (on by default for 네컷)
+    items: [],           // stickers / text laid over everything — see studioDrawItems
+    selectedId: null,
     renderQueued: false,
+    baseDirty: true,
     busy: false
 };
 
@@ -8129,8 +8140,9 @@ function studioRenderCell(img, w, h, p) {
 
 const STUDIO_FONT = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif`;
 
-// Draws the whole composition onto `canvas` with its long side = longSide px.
-async function studioRender(canvas, longSide) {
+// Draws the photos, background, frame and caption (everything except stickers/text) onto `canvas`
+// with its long side = longSide px.
+async function studioRenderBase(canvas, longSide) {
     const layout = STUDIO_LAYOUTS.find(l => l.id === studio.layoutId) || STUDIO_LAYOUTS[0];
     const images = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
     const bg = STUDIO_BACKGROUNDS.find(b => b.id === studio.bg) || STUDIO_BACKGROUNDS[0];
@@ -8147,7 +8159,7 @@ async function studioRender(canvas, longSide) {
     const side = polaroid ? 0.06 : 0;
     const top = polaroid ? 0.06 : 0;
     let bottom = polaroid ? 0.24 : 0;
-    if (!polaroid && (caption || isStrip)) bottom = isStrip ? 0.32 : 0.12;
+    if (!polaroid && (caption || isStrip || studio.logo)) bottom = isStrip ? 0.32 : (caption && studio.logo ? 0.16 : 0.12);
 
     const totalW = 1 + side * 2;
     const totalH = 1 / areaAspect + top + bottom;
@@ -8157,6 +8169,7 @@ async function studioRender(canvas, longSide) {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = bg.color;
     ctx.fillRect(0, 0, W, H);
+    if (bg.pattern) studioDrawPattern(ctx, bg, W, H);
 
     const unit = W / totalW;                 // px per photo-area width
     const ax = side * unit, ay = top * unit, aw = unit, ah = unit / areaAspect;
@@ -8182,7 +8195,7 @@ async function studioRender(canvas, longSide) {
         if (images[i]) {
             ctx.drawImage(studioRenderCell(images[i], w, h, p), x, y, w, h);
         } else {
-            ctx.fillStyle = bg.id === "black" ? "rgba(255,255,255,0.08)" : "rgba(255,101,132,0.10)";
+            ctx.fillStyle = bg.dark ? "rgba(255,255,255,0.08)" : "rgba(255,101,132,0.10)";
             ctx.fillRect(x, y, w, h);
         }
         ctx.restore();
@@ -8206,24 +8219,112 @@ async function studioRender(canvas, longSide) {
 
     if (bottom > 0) {
         const bandTop = ay + ah, bandH = H - bandTop;
-        const text = caption || (isStrip ? studioDefaultCaption() : "");
+        // With the logo on, the date moves into the logo line, so 네컷 doesn't print it twice.
+        const text = caption || (isStrip && !studio.logo ? studioDefaultCaption() : "");
+        const logoText = studio.logo ? `AURA  ·  ${studioDefaultCaption()}` : "";
+        const fit = (t, maxW) => {
+            if (ctx.measureText(t).width <= maxW) return t;
+            while (ctx.measureText(t + "…").width > maxW && t.length > 1) t = t.slice(0, -1);
+            return t + "…";
+        };
+        ctx.save();
+        ctx.fillStyle = bg.text;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const size = Math.round(Math.min(bandH * 0.32, aw * (isStrip ? 0.085 : polaroid ? 0.068 : 0.055)));
+        const logoSize = Math.round(size * (text ? 0.48 : 0.62));
+        const gapY = text && logoText ? size * 0.42 : 0;
+        const blockH = (text ? size : 0) + (logoText ? logoSize : 0) + gapY;
+        let y = bandTop + bandH / 2 - blockH / 2;
         if (text) {
-            const size = Math.round(Math.min(bandH * 0.32, aw * (isStrip ? 0.085 : polaroid ? 0.068 : 0.055)));
-            ctx.save();
-            ctx.fillStyle = bg.text;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
             ctx.font = `700 ${size}px ${STUDIO_FONT}`;
-            const maxW = aw * 0.9;
-            let t = text;
-            if (ctx.measureText(t).width > maxW) {
-                while (ctx.measureText(t + "…").width > maxW && t.length > 1) t = t.slice(0, -1);
-                t += "…";
+            ctx.fillText(fit(text, aw * 0.9), ax + aw / 2, y + size / 2);
+            y += size + gapY;
+        }
+        if (logoText) {
+            ctx.globalAlpha = 0.8;
+            ctx.font = `700 ${logoSize}px "Outfit", ${STUDIO_FONT}`;
+            ctx.fillText(fit(logoText, aw * 0.9), ax + aw / 2, y + logoSize / 2);
+        }
+        ctx.restore();
+    }
+}
+
+// ── Pattern backgrounds ──────────────────────────────────────────────────────────────────────────
+function studioHeartPath(ctx, x, y, s) {
+    // Heart centred on (x, y), roughly s wide.
+    const h = s * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h * 0.75);
+    ctx.bezierCurveTo(x - s * 0.62, y + h * 0.05, x - s * 0.42, y - h * 1.05, x, y - h * 0.38);
+    ctx.bezierCurveTo(x + s * 0.42, y - h * 1.05, x + s * 0.62, y + h * 0.05, x, y + h * 0.75);
+    ctx.closePath();
+}
+
+function studioStarPath(ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+        const rad = i % 2 ? r * 0.45 : r;
+        const a = -Math.PI / 2 + i * Math.PI / 5;
+        ctx[i ? "lineTo" : "moveTo"](x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+    }
+    ctx.closePath();
+}
+
+function studioDrawPattern(ctx, bg, W, H, cell = Math.sqrt(W * H) * 0.06) {
+    ctx.save();
+    ctx.fillStyle = bg.ink;
+    if (bg.pattern === "check") {
+        // Gingham: translucent bands both ways; where they cross they darken.
+        for (let x = 0; x < W; x += cell) ctx.fillRect(x, 0, cell / 2, H);
+        for (let y = 0; y < H; y += cell) ctx.fillRect(0, y, W, cell / 2);
+    } else if (bg.pattern === "dots") {
+        for (let row = 0, y = cell / 2; y < H + cell; y += cell * 0.8, row++) {
+            for (let x = (row % 2) * cell / 2; x < W + cell; x += cell) {
+                ctx.beginPath(); ctx.arc(x, y, cell * 0.13, 0, Math.PI * 2); ctx.fill();
             }
-            ctx.fillText(t, ax + aw / 2, bandTop + bandH / 2);
-            ctx.restore();
+        }
+    } else if (bg.pattern === "hearts") {
+        const step = cell * 1.3;
+        for (let row = 0, y = step / 2; y < H + step; y += step * 0.8, row++) {
+            for (let col = 0, x = (row % 2) * step / 2; x < W + step; x += step, col++) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(((row + col) % 2 ? 1 : -1) * 0.25);
+                studioHeartPath(ctx, 0, 0, cell * 0.42);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+    } else if (bg.pattern === "stars") {
+        // Fixed-seed scatter so the preview and the export put every star in the same place.
+        let seed = 7;
+        const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        const count = Math.round((W * H) / (cell * cell) * 0.9);
+        for (let i = 0; i < count; i++) {
+            const x = rnd() * W, y = rnd() * H, r = rnd();
+            ctx.globalAlpha = 0.45 + rnd() * 0.55;
+            if (r > 0.78) { studioStarPath(ctx, x, y, cell * (0.12 + r * 0.12)); ctx.fill(); }
+            else { ctx.beginPath(); ctx.arc(x, y, cell * (0.02 + r * 0.04), 0, Math.PI * 2); ctx.fill(); }
         }
     }
+    ctx.restore();
+}
+
+// Small swatch images for the pattern backgrounds (made once, from the same drawing code).
+const studioSwatchCache = new Map();
+function studioSwatchImage(bg) {
+    if (!bg.pattern) return "";
+    if (!studioSwatchCache.has(bg.id)) {
+        const c = document.createElement("canvas");
+        c.width = c.height = 120;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = bg.color;
+        ctx.fillRect(0, 0, 120, 120);
+        studioDrawPattern(ctx, bg, 120, 120, 26);
+        studioSwatchCache.set(bg.id, c.toDataURL("image/png"));
+    }
+    return studioSwatchCache.get(bg.id);
 }
 
 function studioDisplayDate() {
@@ -8249,15 +8350,37 @@ function studioCaptionSuggestions() {
 }
 
 // ── Editor UI ────────────────────────────────────────────────────────────────────────────────────
-function studioQueueRender() {
+// The preview keeps the photos/filter/frame part in an offscreen canvas and only redraws it when
+// something underneath changed (baseChanged), so dragging a sticker just recomposes the overlays
+// instead of re-running the pixel filter on every frame.
+let studioBaseCanvas = null;
+function studioQueueRender(baseChanged = true) {
+    if (baseChanged) studio.baseDirty = true;
     if (studio.renderQueued) return;
     studio.renderQueued = true;
     requestAnimationFrame(async () => {
         studio.renderQueued = false;
         const canvas = document.getElementById("studio-preview");
         if (!canvas || studio.photos.length === 0) return;
-        try { await studioRender(canvas, STUDIO_PREVIEW_LONG_SIDE); }
-        catch (e) { console.error("[Studio] preview failed:", e); }
+        try {
+            if (studio.baseDirty || !studioBaseCanvas) {
+                studio.baseDirty = false;
+                const base = document.createElement("canvas");
+                await studioRenderBase(base, STUDIO_PREVIEW_LONG_SIDE);
+                studioBaseCanvas = base;
+            }
+            if (canvas.width !== studioBaseCanvas.width || canvas.height !== studioBaseCanvas.height) {
+                canvas.width = studioBaseCanvas.width;
+                canvas.height = studioBaseCanvas.height;
+            }
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(studioBaseCanvas, 0, 0);
+            const rect = canvas.getBoundingClientRect();
+            studioDrawItems(ctx, canvas.width, canvas.height, {
+                selectedId: studio.selectedId,
+                uiScale: rect.width ? canvas.width / rect.width : 1
+            });
+        } catch (e) { console.error("[Studio] preview failed:", e); }
     });
 }
 
@@ -8285,9 +8408,16 @@ function studioRenderControls() {
     }
     const bgEl = document.getElementById("studio-backgrounds");
     if (bgEl) {
-        bgEl.innerHTML = STUDIO_BACKGROUNDS.map(b => `<button type="button" class="studio-swatch${b.id === studio.bg ? " active" : ""}" style="background:${b.color}" onclick="studioSet('bg', ${jsArg(b.id)})" title="${b.label}" aria-label="배경 ${b.label}"></button>`).join("");
+        bgEl.innerHTML = STUDIO_BACKGROUNDS.map(b => {
+            const img = studioSwatchImage(b);
+            const style = `background-color:${b.color};${img ? `background-image:url(${img});background-size:cover;` : ""}`;
+            return `<button type="button" class="studio-swatch${b.id === studio.bg ? " active" : ""}" style="${style}" onclick="studioSet('bg', ${jsArg(b.id)})" title="${b.label}" aria-label="배경 ${b.label}"></button>`;
+        }).join("");
     }
     document.querySelectorAll("#studio-frames .studio-chip").forEach(btn => btn.classList.toggle("active", btn.dataset.frame === studio.frame));
+    document.getElementById("studio-logo-chip")?.classList.toggle("active", studio.logo);
+    studioRenderStickerTray();
+    studioRenderItemPanel();
     const sugEl = document.getElementById("studio-caption-suggestions");
     if (sugEl) {
         sugEl.innerHTML = studioCaptionSuggestions().map(s => `<button type="button" class="studio-chip small" onclick="studioUseCaption(${jsArg(s)})">${escapeHtml(s)}</button>`).join("");
@@ -8310,9 +8440,12 @@ function studioRenderControls() {
 }
 
 window.studioSet = function(key, value) {
+    // 네컷 looks most like a photo-booth strip with the logo line, so turning it on switches the logo on.
+    if (key === "layoutId" && value === "4-strip" && studio.layoutId !== "4-strip") studio.logo = true;
     studio[key] = value;
     studioRenderControls();
 };
+window.studioToggleLogo = function() { studio.logo = !studio.logo; studioRenderControls(); };
 window.studioSetAdjust = function(key, value) {
     studio.adjust[key] = Number(value) || 0;
     studioQueueRender();
@@ -8329,8 +8462,11 @@ window.openPhotoStudio = function(photos = []) {
     Object.assign(studio, {
         photos: photos.slice(0, STUDIO_MAX_PHOTOS), layoutId: "single", filterId: "none",
         adjust: { brightness: 0, contrast: 0, saturation: 0 }, gap: 12, rounded: false,
-        bg: "white", frame: "none", caption: "", busy: false
+        bg: "white", frame: "none", caption: "", logo: false, items: [], selectedId: null, busy: false
     });
+    studioBaseCanvas = null;
+    studioLoadTextFonts();
+    studioAttachGestures();
     document.getElementById("modal-photo-studio")?.classList.add("active");
     studioRenderControls();
     setTimeout(() => lucide.createIcons(), 50);
@@ -8353,7 +8489,9 @@ window.openStudioFromSlider = async function() {
 
 async function studioExportCanvas() {
     const canvas = document.createElement("canvas");
-    await studioRender(canvas, STUDIO_EXPORT_LONG_SIDE);
+    await studioRenderBase(canvas, STUDIO_EXPORT_LONG_SIDE);
+    await studioWaitForItemFonts();
+    studioDrawItems(canvas.getContext("2d"), canvas.width, canvas.height, null);
     return canvas;
 }
 
@@ -8429,6 +8567,480 @@ window.studioSaveToAlbum = function() {
         if (currentActiveTab !== "gallery") switchTab("gallery");
     });
 };
+
+// ── Stickers & text laid over the picture ────────────────────────────────────────────────────────
+// Each item: { id, type: "sticker" | "text", x, y (centre, as fractions of the canvas W / H), s (size,
+// as a fraction of studioRefSize — √(W·H), so a tall 네컷 strip doesn't shrink stickers to its narrow width), rot (radians), emoji | text, font, color, style }.
+// Fractions keep the 720px preview and the 2048px export identical, and items stay put when the
+// layout or frame changes the canvas size. They're baked into the saved JPEG; nothing about them is
+// stored separately.
+const STUDIO_MAX_ITEMS = 30;
+function studioRefSize(W, H) { return Math.sqrt(W * H); }
+const STUDIO_EMOJI_FONT = `"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+
+const STUDIO_STICKER_SETS = [
+    { id: "love", name: "💖 하트", items: ["❤️", "🩷", "💕", "💖", "💗", "💘", "💝", "💞", "💓", "💌", "😍", "🥰", "😘", "💋", "🫶", "💑"] },
+    { id: "sparkle", name: "✨ 반짝", items: ["✨", "⭐", "🌟", "💫", "🎀", "🌸", "🌷", "🌹", "🌼", "🦋", "🍀", "🌈", "☁️", "🌙", "☀️", "❄️"] },
+    { id: "face", name: "😆 표정", items: ["😆", "🤭", "😎", "🥳", "🤪", "😳", "🥺", "😚", "😋", "🙈", "😴", "🤩", "😇", "🫠", "😤", "👍"] },
+    { id: "animal", name: "🐰 동물", items: ["🐶", "🐱", "🐰", "🐻", "🐼", "🐥", "🦊", "🐹", "🐨", "🐯", "🐧", "🐳", "🦄", "🐾", "🐣", "🐸"] },
+    { id: "date", name: "🍰 데이트", items: ["🍰", "🎂", "🍓", "🍒", "🧋", "☕", "🍷", "🥂", "🍿", "🍦", "🎡", "🎈", "🎁", "📸", "🎵", "🚗"] },
+    { id: "bubble", name: "💬 말풍선", bubbles: true }
+];
+
+const STUDIO_BUBBLES = [
+    { text: "사랑해 ♥", style: "bubble", color: "#FF6584" },
+    { text: "LOVE", style: "tag", color: "#E11D48" },
+    { text: "최고야!", style: "bubble", color: "#FFC93C" },
+    { text: "행복해", style: "tag", color: "#8B5CF6" },
+    { text: "보고싶어", style: "bubble", color: "#FFFFFF" },
+    { text: "오늘도 ♥", style: "tag", color: "#FFFFFF" },
+    { text: "귀여워", style: "bubble", color: "#34C3A0" },
+    { text: "맛있다!", style: "bubble", color: "#FF8A3D" },
+    { text: "HAPPY DAY", style: "outline", color: "#FF6584" },
+    { text: "♥ ♥ ♥", style: "outline", color: "#E11D48" },
+    { dday: true, style: "tag", color: "#FF6584" }
+];
+
+// Web fonts for text items. The stylesheet is only added when the studio opens, so people who never
+// use it don't download Korean font files. `scale` evens out fonts that draw small at the same px size.
+const STUDIO_TEXT_FONTS = [
+    { id: "basic", name: "기본", family: STUDIO_FONT, weight: 800 },
+    { id: "gaegu", name: "손글씨", family: `"Gaegu"`, weight: 700, scale: 1.1 },
+    { id: "pen", name: "펜글씨", family: `"Nanum Pen Script"`, weight: 400, scale: 1.3 },
+    { id: "jua", name: "동글동글", family: `"Jua"`, weight: 400 },
+    { id: "dohyeon", name: "굵게", family: `"Do Hyeon"`, weight: 400 },
+    { id: "gowun", name: "단정하게", family: `"Gowun Dodum"`, weight: 400 }
+];
+const STUDIO_TEXT_FONTS_CSS = "https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=Nanum+Pen+Script&family=Jua&family=Do+Hyeon&family=Gowun+Dodum&display=swap";
+const STUDIO_TEXT_COLORS = ["#FFFFFF", "#1E1B1F", "#FF6584", "#E11D48", "#FFC93C", "#FF8A3D", "#8B5CF6", "#34C3A0", "#4A90E2"];
+const STUDIO_TEXT_STYLES = [
+    { id: "plain", name: "기본" },
+    { id: "outline", name: "테두리" },
+    { id: "tag", name: "배경" },
+    { id: "bubble", name: "말풍선" }
+];
+
+let studioStickerSet = "love";
+let studioItemSeq = 0;
+
+function studioTextFont(id) { return STUDIO_TEXT_FONTS.find(f => f.id === id) || STUDIO_TEXT_FONTS[0]; }
+function studioSelectedItem() { return studio.items.find(it => it.id === studio.selectedId) || null; }
+function studioIsLight(hex) {
+    const n = parseInt(String(hex).slice(1), 16);
+    if (!Number.isFinite(n)) return true;
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.62;
+}
+const studioClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// Normalise to (-π, π] and snap to straight within ~4°, so a sticker is easy to put back level.
+function studioSnapAngle(r) {
+    const n = ((r + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    return Math.abs(n) < 0.07 ? 0 : n;
+}
+
+// ── Fonts ──
+let studioFontsCssPromise = null;
+function studioLoadTextFonts() {
+    if (studioFontsCssPromise) return studioFontsCssPromise;
+    studioFontsCssPromise = new Promise(resolve => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = STUDIO_TEXT_FONTS_CSS;
+        link.onload = () => resolve(true);
+        link.onerror = () => { studioFontsCssPromise = null; resolve(false); };
+        document.head.appendChild(link);
+        setTimeout(() => resolve(false), 8000);
+    });
+    return studioFontsCssPromise;
+}
+
+// Canvas text only uses a web font once it's loaded, and Google serves Korean fonts in slices per
+// character range, so load what THIS text needs, then redraw.
+const studioFontLoads = new Map();
+function studioEnsureItemFont(it) {
+    const f = studioTextFont(it.font);
+    if (f.id === "basic" || !document.fonts || !document.fonts.load) return null;
+    const key = `${f.id}|${it.text}`;
+    if (!studioFontLoads.has(key)) {
+        if (studioFontLoads.size > 200) studioFontLoads.clear();
+        studioFontLoads.set(key, studioLoadTextFonts()
+            .then(ok => ok ? document.fonts.load(`${f.weight} 48px ${f.family}`, it.text || "가") : null)
+            .catch(() => null)
+            .then(() => studioQueueRender(false)));
+    }
+    return studioFontLoads.get(key);
+}
+
+async function studioWaitForItemFonts() {
+    const loads = studio.items.filter(it => it.type === "text").map(studioEnsureItemFont).filter(Boolean);
+    if (!loads.length) return;
+    await Promise.race([Promise.all(loads), new Promise(r => setTimeout(r, 5000))]);
+}
+
+// ── Drawing ──
+function studioItemBox(ctx, it, M) {
+    const size = it.s * M;
+    if (it.type === "sticker") return { w: size * 1.15, h: size * 1.15, size };
+    const f = studioTextFont(it.font);
+    const fs = size * (f.scale || 1);
+    const font = `${f.weight} ${fs}px ${f.family}, ${STUDIO_FONT}`;
+    ctx.font = font;
+    const lines = String(it.text || " ").split("\n");
+    const lw = Math.max(...lines.map(l => ctx.measureText(l || " ").width));
+    const lh = fs * 1.22;
+    const boxed = it.style === "bubble" || it.style === "tag";
+    const padX = boxed ? fs * 0.6 : fs * 0.2;
+    const padY = boxed ? fs * 0.36 : fs * 0.12;
+    return { w: lw + padX * 2, h: lines.length * lh + padY * 2, size: fs, lines, lh, font };
+}
+
+function studioDrawItem(ctx, it, W, H) {
+    const M = studioRefSize(W, H);
+    const box = studioItemBox(ctx, it, M);
+    it._w = box.w / M;
+    it._h = box.h / M;
+    ctx.save();
+    ctx.translate(it.x * W, it.y * H);
+    ctx.rotate(it.rot || 0);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (it.type === "sticker") {
+        ctx.font = `${box.size}px ${STUDIO_EMOJI_FONT}`;
+        ctx.fillText(it.emoji, 0, box.size * 0.06);
+        ctx.restore();
+        return;
+    }
+    const fs = box.size;
+    const light = studioIsLight(it.color);
+    let textColor = it.color;
+    if (it.style === "tag" || it.style === "bubble") {
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.18)";
+        ctx.shadowBlur = fs * 0.3;
+        ctx.shadowOffsetY = fs * 0.08;
+        ctx.fillStyle = it.color;
+        studioRoundRectPath(ctx, -box.w / 2, -box.h / 2, box.w, box.h, it.style === "tag" ? Math.min(box.h / 2, fs * 0.9) : fs * 0.55);
+        ctx.fill();
+        if (it.style === "bubble") {
+            ctx.beginPath();
+            ctx.moveTo(-box.w * 0.22, box.h / 2 - 1);
+            ctx.lineTo(-box.w * 0.3, box.h / 2 + fs * 0.6);
+            ctx.lineTo(-box.w * 0.04, box.h / 2 - 1);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+        textColor = light ? "#3A2230" : "#FFFFFF";
+    }
+    ctx.font = box.font;
+    const y0 = -((box.lines.length - 1) * box.lh) / 2;
+    if (it.style === "outline") {
+        ctx.lineJoin = "round";
+        ctx.lineWidth = fs * 0.18;
+        ctx.strokeStyle = light ? "#3A2230" : "#FFFFFF";
+        box.lines.forEach((l, i) => ctx.strokeText(l, 0, y0 + i * box.lh));
+    } else if (it.style === "plain") {
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = fs * 0.18;
+        ctx.shadowOffsetY = fs * 0.04;
+    }
+    ctx.fillStyle = textColor;
+    box.lines.forEach((l, i) => ctx.fillText(l, 0, y0 + i * box.lh));
+    ctx.restore();
+}
+
+// Where the selected item's two corner buttons sit, in canvas px (k = canvas px per CSS px).
+function studioHandlePoints(it, W, H, k) {
+    const M = studioRefSize(W, H);
+    const pad = 6 * k;
+    const hw = (it._w || 0.1) * M / 2 + pad, hh = (it._h || 0.1) * M / 2 + pad;
+    const cx = it.x * W, cy = it.y * H;
+    const cos = Math.cos(it.rot || 0), sin = Math.sin(it.rot || 0);
+    const at = (lx, ly) => ({ x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos });
+    return { cx, cy, hw, hh, r: 13 * k, del: at(hw, -hh), rs: at(hw, hh) };
+}
+
+// opts null = export (no selection UI); otherwise { selectedId, uiScale }.
+function studioDrawItems(ctx, W, H, opts) {
+    for (const it of studio.items) {
+        if (it.type === "text" && opts) studioEnsureItemFont(it);
+        studioDrawItem(ctx, it, W, H);
+    }
+    const sel = opts && studio.items.find(it => it.id === opts.selectedId);
+    if (!sel) return;
+    const k = opts.uiScale || 1;
+    const hp = studioHandlePoints(sel, W, H, k);
+    ctx.save();
+    ctx.translate(hp.cx, hp.cy);
+    ctx.rotate(sel.rot || 0);
+    ctx.lineWidth = 2 * k;
+    ctx.setLineDash([6 * k, 4 * k]);
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.strokeRect(-hp.hw, -hp.hh, hp.hw * 2, hp.hh * 2);
+    ctx.lineDashOffset = 5 * k;
+    ctx.strokeStyle = "#FF6584";
+    ctx.strokeRect(-hp.hw, -hp.hh, hp.hw * 2, hp.hh * 2);
+    ctx.restore();
+    const button = (pt, color, glyph) => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, hp.r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = 4 * k;
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = "#fff";
+        ctx.font = `700 ${Math.round(hp.r * 1.25)}px ${STUDIO_FONT}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(glyph, pt.x, pt.y + k);
+        ctx.restore();
+    };
+    button(hp.del, "#E11D48", "×");
+    button(hp.rs, "#FF6584", "⤡");
+}
+
+// ── Touch / mouse editing on the preview ──
+function studioCanvasPoint(canvas, e) {
+    const r = canvas.getBoundingClientRect();
+    const k = canvas.width / (r.width || 1);
+    return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * (canvas.height / (r.height || 1)), k };
+}
+
+function studioHitItem(p, W, H) {
+    const M = studioRefSize(W, H);
+    for (let i = studio.items.length - 1; i >= 0; i--) {
+        const it = studio.items[i];
+        const dx = p.x - it.x * W, dy = p.y - it.y * H;
+        const cos = Math.cos(-(it.rot || 0)), sin = Math.sin(-(it.rot || 0));
+        const lx = dx * cos - dy * sin, ly = dx * sin + dy * cos;
+        const tol = 8 * p.k;
+        if (Math.abs(lx) <= (it._w || 0) * M / 2 + tol && Math.abs(ly) <= (it._h || 0) * M / 2 + tol) return it;
+    }
+    return null;
+}
+
+const studioPointers = new Map();
+let studioGesture = null;
+let studioGesturesAttached = false;
+
+function studioSizeLimits(it) { return it.type === "sticker" ? [0.04, 1] : [0.02, 0.4]; }
+
+function studioStartPinch(sel) {
+    const [a, b] = [...studioPointers.values()];
+    studioGesture = {
+        mode: "pinch", sel,
+        d0: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), a0: Math.atan2(b.y - a.y, b.x - a.x),
+        m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, s0: sel.s, rot0: sel.rot || 0, x0: sel.x, y0: sel.y
+    };
+}
+
+function studioAttachGestures() {
+    const canvas = document.getElementById("studio-preview");
+    if (!canvas || studioGesturesAttached) return;
+    studioGesturesAttached = true;
+
+    canvas.addEventListener("pointerdown", e => {
+        if (!studio.items.length) return; // nothing to grab: leave the touch to page scrolling
+        e.preventDefault();
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { }
+        const p = studioCanvasPoint(canvas, e);
+        studioPointers.set(e.pointerId, p);
+        const W = canvas.width, H = canvas.height;
+        const sel = studioSelectedItem();
+        if (studioPointers.size === 2) {
+            if (sel) studioStartPinch(sel);
+            return;
+        }
+        if (studioPointers.size > 2) return;
+        if (sel) {
+            const hp = studioHandlePoints(sel, W, H, p.k);
+            if (Math.hypot(p.x - hp.del.x, p.y - hp.del.y) <= hp.r * 1.5) {
+                studioGesture = null;
+                studioDeleteItem(sel.id);
+                return;
+            }
+            if (Math.hypot(p.x - hp.rs.x, p.y - hp.rs.y) <= hp.r * 1.5) {
+                studioGesture = {
+                    mode: "handle", sel, cx: hp.cx, cy: hp.cy,
+                    d0: Math.max(1, Math.hypot(p.x - hp.cx, p.y - hp.cy)), a0: Math.atan2(p.y - hp.cy, p.x - hp.cx),
+                    s0: sel.s, rot0: sel.rot || 0
+                };
+                return;
+            }
+        }
+        const hit = studioHitItem(p, W, H);
+        if (hit) {
+            const changed = studio.selectedId !== hit.id;
+            studio.selectedId = hit.id;
+            studio.items.splice(studio.items.indexOf(hit), 1);
+            studio.items.push(hit); // touching an item brings it to the front
+            studioGesture = { mode: "drag", sel: hit, dx: hit.x * W - p.x, dy: hit.y * H - p.y };
+            if (changed) studioRenderItemPanel();
+        } else {
+            studioGesture = null;
+            if (studio.selectedId) { studio.selectedId = null; studioRenderItemPanel(); }
+        }
+        studioQueueRender(false);
+    });
+
+    canvas.addEventListener("pointermove", e => {
+        if (!studioPointers.has(e.pointerId)) return;
+        e.preventDefault();
+        const p = studioCanvasPoint(canvas, e);
+        studioPointers.set(e.pointerId, p);
+        const g = studioGesture;
+        if (!g || !studio.items.includes(g.sel)) return;
+        const W = canvas.width, H = canvas.height, it = g.sel;
+        const [lo, hi] = studioSizeLimits(it);
+        if (g.mode === "drag") {
+            it.x = studioClamp((p.x + g.dx) / W, 0, 1);
+            it.y = studioClamp((p.y + g.dy) / H, 0, 1);
+        } else if (g.mode === "handle") {
+            const d = Math.hypot(p.x - g.cx, p.y - g.cy);
+            it.s = studioClamp(g.s0 * d / g.d0, lo, hi);
+            it.rot = studioSnapAngle(g.rot0 + Math.atan2(p.y - g.cy, p.x - g.cx) - g.a0);
+        } else if (g.mode === "pinch" && studioPointers.size >= 2) {
+            const [a, b] = [...studioPointers.values()];
+            it.s = studioClamp(g.s0 * Math.hypot(b.x - a.x, b.y - a.y) / g.d0, lo, hi);
+            it.rot = studioSnapAngle(g.rot0 + Math.atan2(b.y - a.y, b.x - a.x) - g.a0);
+            it.x = studioClamp(g.x0 + ((a.x + b.x) / 2 - g.m0.x) / W, 0, 1);
+            it.y = studioClamp(g.y0 + ((a.y + b.y) / 2 - g.m0.y) / H, 0, 1);
+        }
+        studioQueueRender(false);
+    });
+
+    const end = e => {
+        if (!studioPointers.delete(e.pointerId)) return;
+        if (studioPointers.size === 0) { studioGesture = null; return; }
+        // Lifting one finger of a pinch carries on as a drag with the finger still down.
+        const g = studioGesture;
+        if (g && g.mode === "pinch" && studio.items.includes(g.sel)) {
+            const p = [...studioPointers.values()][0];
+            studioGesture = { mode: "drag", sel: g.sel, dx: g.sel.x * canvas.width - p.x, dy: g.sel.y * canvas.height - p.y };
+        }
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+}
+
+// ── Adding / editing items ──
+function studioAddItem(item) {
+    if (studio.items.length >= STUDIO_MAX_ITEMS) {
+        showToast(`스티커·글씨는 ${STUDIO_MAX_ITEMS}개까지 넣을 수 있어요`, "warning");
+        return null;
+    }
+    // Fan new items out a little so several taps don't stack exactly on top of each other.
+    const n = studio.items.length % 6;
+    const it = Object.assign({
+        id: `it${++studioItemSeq}`, x: 0.5 + ((n % 3) - 1) * 0.12, y: 0.42 + Math.floor(n / 3) * 0.14, rot: 0
+    }, item);
+    studio.items.push(it);
+    studio.selectedId = it.id;
+    studioRenderItemPanel();
+    studioQueueRender(false);
+    return it;
+}
+
+window.studioAddSticker = function(emoji) {
+    studioAddItem({ type: "sticker", emoji, s: 0.15 });
+};
+
+window.studioAddBubble = function(i) {
+    const b = STUDIO_BUBBLES[i];
+    if (!b) return;
+    let text = b.text;
+    if (b.dday) {
+        const n = coupleDayNumber(startOfLocalDay(studioDisplayDate()));
+        text = n > 0 ? `D+${n} ♥` : "♥ 우리 ♥";
+    }
+    studioAddItem({ type: "text", text, font: "jua", color: b.color, style: b.style, s: 0.05 });
+};
+
+window.studioAddText = function() {
+    const it = studioAddItem({ type: "text", text: "우리의 하루", font: "gaegu", color: "#FFFFFF", style: "outline", s: 0.06 });
+    if (!it) return;
+    setTimeout(() => {
+        const el = document.getElementById("studio-item-text");
+        if (el) { el.focus(); el.select(); }
+    }, 30);
+};
+
+function studioDeleteItem(id) {
+    studio.items = studio.items.filter(it => it.id !== id);
+    if (studio.selectedId === id) studio.selectedId = null;
+    studioRenderItemPanel();
+    studioQueueRender(false);
+}
+window.studioDeleteSelected = function() { if (studio.selectedId) studioDeleteItem(studio.selectedId); };
+window.studioDeselect = function() { studio.selectedId = null; studioRenderItemPanel(); studioQueueRender(false); };
+window.studioDuplicateSelected = function() {
+    const sel = studioSelectedItem();
+    if (!sel) return;
+    const { _w, _h, id, ...rest } = sel;
+    studioAddItem(Object.assign(rest, { x: studioClamp(sel.x + 0.06, 0, 1), y: studioClamp(sel.y + 0.06, 0, 1) }));
+};
+window.studioSetItemProp = function(key, value) {
+    const sel = studioSelectedItem();
+    if (!sel) return;
+    sel[key] = value;
+    studioRenderItemPanel();
+    studioQueueRender(false);
+};
+window.studioSetItemText = function(value) {
+    const sel = studioSelectedItem();
+    if (!sel) return;
+    sel.text = String(value || "").split("\n").slice(0, 4).join("\n").slice(0, 60);
+    studioQueueRender(false);
+};
+window.studioSetStickerSet = function(id) { studioStickerSet = id; studioRenderStickerTray(); };
+
+function studioRenderStickerTray() {
+    const tabs = document.getElementById("studio-sticker-tabs");
+    const grid = document.getElementById("studio-sticker-grid");
+    if (!tabs || !grid) return;
+    tabs.innerHTML = STUDIO_STICKER_SETS.map(s => `<button type="button" class="studio-chip small${s.id === studioStickerSet ? " active" : ""}" onclick="studioSetStickerSet(${jsArg(s.id)})">${escapeHtml(s.name)}</button>`).join("");
+    const set = STUDIO_STICKER_SETS.find(s => s.id === studioStickerSet) || STUDIO_STICKER_SETS[0];
+    if (set.bubbles) {
+        grid.className = "studio-bubble-grid";
+        grid.innerHTML = STUDIO_BUBBLES.map((b, i) => {
+            const label = b.dday ? "D+N ♥" : b.text;
+            const boxed = b.style === "tag" || b.style === "bubble";
+            const fg = boxed ? (studioIsLight(b.color) ? "#3A2230" : "#FFFFFF") : b.color;
+            const style = boxed ? `background:${b.color};color:${fg};` : `color:${fg};`;
+            return `<button type="button" class="studio-bubble-btn is-${b.style}" style="${style}" onclick="studioAddBubble(${i})">${escapeHtml(label)}</button>`;
+        }).join("");
+    } else {
+        grid.className = "studio-sticker-grid";
+        grid.innerHTML = set.items.map(em => `<button type="button" class="studio-sticker-btn" onclick="studioAddSticker(${jsArg(em)})">${em}</button>`).join("");
+    }
+}
+
+function studioRenderItemPanel() {
+    const canvas = document.getElementById("studio-preview");
+    if (canvas) canvas.style.touchAction = studio.items.length ? "none" : "";
+    const panel = document.getElementById("studio-item-panel");
+    if (!panel) return;
+    const sel = studioSelectedItem();
+    if (!sel) { panel.classList.add("hidden"); panel.innerHTML = ""; return; }
+    panel.classList.remove("hidden");
+    const head = `
+        <div class="studio-item-head">
+            <strong>${sel.type === "text" ? "✏️ 글씨" : `${sel.emoji} 스티커`}</strong>
+            <div class="studio-item-actions">
+                <button type="button" class="studio-chip small" onclick="studioDuplicateSelected()">복제</button>
+                <button type="button" class="studio-chip small studio-danger" onclick="studioDeleteSelected()">삭제</button>
+                <button type="button" class="studio-chip small active" onclick="studioDeselect()">완료</button>
+            </div>
+        </div>
+        <div class="studio-item-hint">사진 위에서 끌어서 옮기고, ⤡ 버튼이나 두 손가락으로 크기·회전을 바꿔요</div>`;
+    if (sel.type !== "text") { panel.innerHTML = head; return; }
+    panel.innerHTML = head + `
+        <textarea id="studio-item-text" rows="2" maxlength="60" oninput="studioSetItemText(this.value)">${escapeHtml(sel.text)}</textarea>
+        <div class="studio-chips">${STUDIO_TEXT_FONTS.map(f => `<button type="button" class="studio-chip small${f.id === sel.font ? " active" : ""}" style="font-family:${escapeHtml(f.family)}, sans-serif" onclick="studioSetItemProp('font', ${jsArg(f.id)})">${escapeHtml(f.name)}</button>`).join("")}</div>
+        <div class="studio-swatches studio-swatches-sm">${STUDIO_TEXT_COLORS.map(c => `<button type="button" class="studio-swatch${c === sel.color ? " active" : ""}" style="background:${c}" onclick="studioSetItemProp('color', ${jsArg(c)})" aria-label="글씨 색 ${c}"></button>`).join("")}</div>
+        <div class="studio-chips">${STUDIO_TEXT_STYLES.map(s => `<button type="button" class="studio-chip small${s.id === sel.style ? " active" : ""}" onclick="studioSetItemProp('style', ${jsArg(s.id)})">${escapeHtml(s.name)}</button>`).join("")}</div>`;
+}
 
 // ── Photo picker (photos of every place, newest date first) ──────────────────────────────────────
 let studioPickerSelection = [];
