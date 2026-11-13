@@ -188,6 +188,11 @@ headed `// ── …` comments: layouts/filters/patterns → base render → st
   on first use (about 7MB) with the CPU delegate and runs on-device only. Reshaping works on each
   original photo (`studioSourceImages`) before layout. Jaw pushes must be *averaged*, not summed:
   summing overlapping pushes folded the image into ripples.
+- **배경 바꾸기.** It shares the same MediaPipe library/WASM (`studioLoadVision`) and adds only
+  the ≈250KB `selfie_segmenter` model (pinned `/1/`; the 16MB multiclass model is too heavy for
+  phones). It applies after 얼굴 보정 in `studioSourceImages`, and the result is cached per photo +
+  settings in `studioReshapeCache`. When the segmenter returns two confidence masks, the last one
+  is the person.
 - KakaoTalk publishes no pixel spec for personal profiles. The maker uses 1080² (profile and the
   two couple halves) and 1080×1920 (background). Profile videos stay under KakaoTalk's 6s limit
   and background videos under 15s.

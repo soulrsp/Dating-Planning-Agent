@@ -81,6 +81,7 @@ const studio = {
     art: "none",         // painting effect, see STUDIO_ARTS
     smooth: 0,           // 뽀샤시 strength 0-100
     reshape: { jaw: 0, eye: 0 }, // 얼굴 보정 (베타), 0-100 each
+    bgSwap: { mode: "none", fill: "pink", outline: false }, // 배경 바꾸기
     logo: false,         // "AURA · date" line in the bottom band (on by default for 네컷)
     items: [],           // stickers / text laid over everything — see studioDrawItems
     selectedId: null,
@@ -476,6 +477,7 @@ function studioRenderControls() {
     document.getElementById("studio-logo-chip")?.classList.toggle("active", studio.logo);
     studioRenderStickerTray();
     studioRenderAiThemes();
+    studioRenderBgControls();
     const videoHint = document.getElementById("studio-video-hint");
     if (videoHint) videoHint.textContent = studio.photos.length >= 2
         ? `사진 ${studio.photos.length}장이 차례로 넘어가고 완성된 사진으로 끝나요 (보통 약 ${Math.round(studioVideoSeconds(studio.photos.length))}초 · 카톡 프사용은 6초, 배경용은 15초 이내)`
@@ -530,10 +532,11 @@ window.openPhotoStudio = function(photos = []) {
     Object.assign(studio, {
         photos: photos.slice(0, STUDIO_MAX_PHOTOS), layoutId: "single", filterId: "none",
         adjust: { brightness: 0, contrast: 0, saturation: 0 }, gap: 12, rounded: false,
-        bg: "white", frame: "none", caption: "", logo: false, art: "none", smooth: 0, reshape: { jaw: 0, eye: 0 }, items: [], selectedId: null, busy: false
+        bg: "white", frame: "none", caption: "", logo: false, art: "none", smooth: 0, reshape: { jaw: 0, eye: 0 }, bgSwap: { mode: "none", fill: "pink", outline: false }, items: [], selectedId: null, busy: false
     });
     studioBaseCanvas = null;
     studioAiSetStatus("");
+    studioBgStatus("");
     studioLoadTextFonts();
     studioAttachGestures();
     document.getElementById("modal-photo-studio")?.classList.add("active");
@@ -1952,7 +1955,7 @@ const STUDIO_JAW_POINTS = [
     [361, 0.45], [288, 0.75], [397, 1], [365, 1], [379, 0.85], [378, 0.65], [400, 0.4], [377, 0.2]
 ];
 
-// The MediaPipe library + WASM (downloaded once, shared by the MediaPipe features).
+// The MediaPipe library + WASM, shared by 얼굴 보정 and 배경 바꾸기 (downloaded once).
 let studioVisionPromise = null;
 function studioLoadVision() {
     if (!studioVisionPromise) {
@@ -2099,22 +2102,32 @@ function studioWarpFaces(img, faces, jaw, eye) {
 
 // What the collage/video should draw for each photo: the reshaped copy when 얼굴 보정 is on and the
 // faces are known, otherwise the original image.
-// What the collage/video should draw for each photo: the reshaped copy when 얼굴 보정 is on and the
-// faces are known, otherwise the original image.
+// 얼굴 보정 first, then 배경 바꾸기 on top of the reshaped photo (the mask comes from the original —
+// the warp only nudges the jaw/eyes, well inside the person outline). Both results are cached.
 async function studioSourceImages() {
     const imgs = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
     const { jaw, eye } = studio.reshape;
-    if (!jaw && !eye) return imgs;
-    return imgs.map((img, i) => {
-        const src = studio.photos[i].src;
-        const faces = studioFaceCache.get(src);
-        if (!faces || !faces.length) return img;
-        const key = `${studioPhotoKey(src)}|${jaw}|${eye}`;
+    const bg = studio.bgSwap;
+    const swap = studioBgSwapActive();
+    if (!jaw && !eye && !swap) return imgs;
+    const cached = (key, make) => {
         if (!studioReshapeCache.has(key)) {
-            if (studioReshapeCache.size > 12) studioReshapeCache.clear();
-            studioReshapeCache.set(key, studioWarpFaces(img, faces, jaw, eye));
+            if (studioReshapeCache.size > 24) studioReshapeCache.clear();
+            studioReshapeCache.set(key, make());
         }
         return studioReshapeCache.get(key);
+    };
+    return imgs.map((img, i) => {
+        const src = studio.photos[i].src, pk = studioPhotoKey(src);
+        let out = img;
+        const faces = studioFaceCache.get(src);
+        if ((jaw || eye) && faces && faces.length) out = cached(`${pk}|${jaw}|${eye}`, () => studioWarpFaces(img, faces, jaw, eye));
+        const mask = studioMaskCache.get(src);
+        if (swap && mask && mask.coverage > 0.01) {
+            const base = out;
+            out = cached(`${pk}|${jaw}|${eye}|bg:${bg.mode}:${bg.fill}:${bg.outline ? 1 : 0}`, () => studioSwapBackground(base, mask, bg));
+        }
+        return out;
     });
 }
 
@@ -2138,6 +2151,214 @@ window.studioSetReshape = async function(key, value) {
     }
     studioQueueRender();
 };
+
+// ── 배경 바꾸기: keep the people, change what's behind them ───────────────────────────────────────
+// MediaPipe's selfie segmenter (≈250KB model, on-device, same library/WASM as 얼굴 보정) gives a
+// person-confidence mask per photo. The background is replaced on each ORIGINAL photo (after 얼굴 보정,
+// before layout/filters/painting effects), so everything downstream treats it as a normal photo.
+// Modes: blur (portrait-mode look), mono (colour pop: background grey, people in colour), fill (any
+// studio background colour or pattern). The outline option draws a white sticker-style border around
+// the people. The model is tuned for people near the camera; small far-away figures may be missed.
+const STUDIO_SEG_MODEL = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite";
+const STUDIO_BG_MODES = [
+    { id: "none", name: "원본" },
+    { id: "blur", name: "🌫️ 흐리게" },
+    { id: "mono", name: "🖤 흑백 배경" },
+    { id: "fill", name: "🎨 배경색·무늬" }
+];
+
+let studioSegmenter = null;
+let studioSegLoading = null;
+const studioMaskCache = new Map(); // photo src → { canvas (alpha mask), data, w, h, coverage }
+
+function studioBgStatus(text) {
+    const el = document.getElementById("studio-bg-status");
+    if (el) el.textContent = text || "";
+}
+
+function studioLoadSegmenter() {
+    if (studioSegmenter) return Promise.resolve(studioSegmenter);
+    if (studioSegLoading) return studioSegLoading;
+    studioSegLoading = (async () => {
+        const t0 = performance.now();
+        studioBgStatus(studioVisionPromise ? "배경 인식 모델을 받는 중이에요..." : "배경 인식 모델을 받는 중이에요... (처음 한 번 약 3MB)");
+        const { vision, fileset } = await studioLoadVision();
+        studioSegmenter = await vision.ImageSegmenter.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: STUDIO_SEG_MODEL, delegate: "CPU" },
+            runningMode: "IMAGE",
+            outputCategoryMask: false,
+            outputConfidenceMasks: true
+        });
+        studioBgStatus(`배경 인식 준비 완료 (${((performance.now() - t0) / 1000).toFixed(1)}초)`);
+        return studioSegmenter;
+    })();
+    studioSegLoading.catch(() => { studioSegLoading = null; });
+    return studioSegLoading;
+}
+
+async function studioPersonMask(src) {
+    if (studioMaskCache.has(src)) return studioMaskCache.get(src);
+    const seg = await studioLoadSegmenter();
+    const img = await studioLoadImage(src);
+    const res = seg.segment(img);
+    const masks = (res && res.confidenceMasks) || [];
+    // Two masks = [background, person]; a single one is the person confidence.
+    const m = masks.length > 1 ? masks[masks.length - 1] : masks[0];
+    if (!m) { if (res && res.close) res.close(); throw new Error("배경 인식 결과가 비어 있어요"); }
+    const w = m.width, h = m.height;
+    const data = Float32Array.from(m.getAsFloat32Array());
+    if (res && res.close) res.close();
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    const id = ctx.createImageData(w, h);
+    let on = 0;
+    for (let i = 0; i < data.length; i++) {
+        const v = data[i];
+        if (v > 0.5) on++;
+        // Sharpen the soft confidence edge a little (smoothstep 0.3→0.7) but keep it feathered.
+        const t = studioClamp((v - 0.3) / 0.4, 0, 1);
+        id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = 255;
+        id.data[i * 4 + 3] = Math.round(t * t * (3 - 2 * t) * 255);
+    }
+    ctx.putImageData(id, 0, 0);
+    const mask = { canvas: c, data, w, h, coverage: on / data.length };
+    studioMaskCache.set(src, mask);
+    return mask;
+}
+
+// White border around the people: the mask grown outward (blurred binary mask, low threshold).
+function studioOutlineMask(mask) {
+    const { data, w, h } = mask;
+    const bin = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) bin[i] = data[i] > 0.5 ? 1 : 0;
+    const r = Math.max(2, Math.round(Math.max(w, h) / 70));
+    const grown = studioBoxBlur(studioBoxBlur(bin, w, h, r), w, h, r);
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    const id = ctx.createImageData(w, h);
+    for (let i = 0; i < grown.length; i++) {
+        const t = studioClamp((grown[i] - 0.03) / 0.12, 0, 1);
+        id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = 255;
+        id.data[i * 4 + 3] = Math.round(t * 255);
+    }
+    ctx.putImageData(id, 0, 0);
+    return c;
+}
+
+function studioSwapBackground(img, mask, opt) {
+    const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    const out = document.createElement("canvas");
+    out.width = W; out.height = H;
+    const ctx = out.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // 1. Background layer.
+    if (opt.mode === "blur") {
+        const sw = Math.max(64, Math.round(W / 8)), sh = Math.max(64, Math.round(H / 8));
+        const small = document.createElement("canvas");
+        small.width = sw; small.height = sh;
+        const sctx = small.getContext("2d");
+        sctx.drawImage(img, 0, 0, sw, sh);
+        const id = sctx.getImageData(0, 0, sw, sh);
+        const ch = studioSplit(id);
+        const rr = Math.max(2, Math.round(Math.max(sw, sh) / 45));
+        const b = [ch.R, ch.G, ch.B].map(p => studioBoxBlur(studioBoxBlur(p, sw, sh, rr), sw, sh, rr));
+        for (let i = 0, j = 0; i < ch.R.length; i++, j += 4) { id.data[j] = b[0][i]; id.data[j + 1] = b[1][i]; id.data[j + 2] = b[2][i]; }
+        sctx.putImageData(id, 0, 0);
+        ctx.drawImage(small, 0, 0, W, H);
+    } else if (opt.mode === "mono") {
+        ctx.drawImage(img, 0, 0);
+        const id = ctx.getImageData(0, 0, W, H), d = id.data;
+        for (let j = 0; j < d.length; j += 4) {
+            const y = (0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]) * 0.92;
+            d[j] = d[j + 1] = d[j + 2] = y;
+        }
+        ctx.putImageData(id, 0, 0);
+    } else if (opt.mode === "fill") {
+        const bg = STUDIO_BACKGROUNDS.find(b => b.id === opt.fill) || STUDIO_BACKGROUNDS[1];
+        ctx.fillStyle = bg.color;
+        ctx.fillRect(0, 0, W, H);
+        if (bg.pattern) studioDrawPattern(ctx, bg, W, H);
+    } else {
+        ctx.drawImage(img, 0, 0);
+    }
+
+    // 2. People, cut out with the (feathered) mask.
+    const person = document.createElement("canvas");
+    person.width = W; person.height = H;
+    const pctx = person.getContext("2d");
+    pctx.imageSmoothingEnabled = true;
+    pctx.imageSmoothingQuality = "high";
+    pctx.drawImage(img, 0, 0);
+    pctx.globalCompositeOperation = "destination-in";
+    pctx.drawImage(mask.canvas, 0, 0, W, H);
+
+    // 3. Optional white sticker outline under the people.
+    if (opt.outline) {
+        const ol = document.createElement("canvas");
+        ol.width = W; ol.height = H;
+        const octx = ol.getContext("2d");
+        octx.imageSmoothingEnabled = true;
+        octx.fillStyle = "#FFFFFF";
+        octx.fillRect(0, 0, W, H);
+        octx.globalCompositeOperation = "destination-in";
+        octx.drawImage(studioOutlineMask(mask), 0, 0, W, H);
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.22)";
+        ctx.shadowBlur = Math.max(W, H) * 0.012;
+        ctx.drawImage(ol, 0, 0);
+        ctx.restore();
+    }
+    ctx.drawImage(person, 0, 0);
+    return out;
+}
+
+function studioBgSwapActive() {
+    return studio.bgSwap.mode !== "none" || studio.bgSwap.outline;
+}
+
+window.studioSetBgSwap = async function(key, value) {
+    studio.bgSwap[key] = value;
+    studioRenderControls();
+    if (!studioBgSwapActive()) { studioBgStatus(""); studioQueueRender(); return; }
+    const missing = studio.photos.filter(p => !studioMaskCache.has(p.src));
+    if (missing.length) {
+        try {
+            await studioLoadSegmenter();
+            const t0 = performance.now();
+            studioBgStatus("사람을 찾는 중이에요... 🔍");
+            const masks = [];
+            for (const p of studio.photos) masks.push(await studioPersonMask(p.src));
+            const withPeople = masks.filter(m => m.coverage > 0.01).length;
+            studioBgStatus(withPeople
+                ? `사진 ${withPeople}장에서 사람을 찾았어요 (${((performance.now() - t0) / 1000).toFixed(1)}초) · 사진 밖으로 보내지 않아요`
+                : "사람을 찾지 못했어요. 사람이 크게 나온 사진에서 써보세요 🥲");
+        } catch (e) {
+            console.error("[Studio bg]", e);
+            studioBgStatus("배경 바꾸기를 불러오지 못했어요: " + (e && e.message ? e.message : e));
+        }
+    }
+    studioQueueRender();
+};
+
+function studioRenderBgControls() {
+    const modes = document.getElementById("studio-bg-modes");
+    if (modes) modes.innerHTML = STUDIO_BG_MODES.map(m => `<button type="button" class="studio-chip small${m.id === studio.bgSwap.mode ? " active" : ""}" onclick="studioSetBgSwap('mode', ${jsArg(m.id)})">${escapeHtml(m.name)}</button>`).join("");
+    const fills = document.getElementById("studio-bg-fills");
+    if (fills) {
+        fills.classList.toggle("hidden", studio.bgSwap.mode !== "fill");
+        fills.innerHTML = STUDIO_BACKGROUNDS.map(b => {
+            const img = studioSwatchImage(b);
+            const style = `background-color:${b.color};${img ? `background-image:url(${img});background-size:cover;` : ""}`;
+            return `<button type="button" class="studio-swatch${b.id === studio.bgSwap.fill ? " active" : ""}" style="${style}" onclick="studioSetBgSwap('fill', ${jsArg(b.id)})" title="${b.label}" aria-label="사람 뒤 배경 ${b.label}"></button>`;
+        }).join("");
+    }
+    const ol = document.getElementById("studio-bg-outline");
+    if (ol) ol.checked = !!studio.bgSwap.outline;
+}
 
 // ── Photo picker (photos of every place, newest date first) ──────────────────────────────────────
 let studioPickerSelection = [];
