@@ -8034,6 +8034,7 @@ const studio = {
     caption: "",
     art: "none",         // painting effect, see STUDIO_ARTS
     smooth: 0,           // 뽀샤시 strength 0-100
+    reshape: { jaw: 0, eye: 0 }, // 얼굴 보정 (베타), 0-100 each
     logo: false,         // "AURA · date" line in the bottom band (on by default for 네컷)
     items: [],           // stickers / text laid over everything — see studioDrawItems
     selectedId: null,
@@ -8130,9 +8131,10 @@ function studioRenderCell(img, w, h, p) {
     c.width = Math.max(1, Math.round(w));
     c.height = Math.max(1, Math.round(h));
     const ctx = c.getContext("2d");
-    const scale = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height; // img may be a reshaped canvas
+    const scale = Math.max(c.width / iw, c.height / ih);
     const sw = c.width / scale, sh = c.height / scale;
-    ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+    ctx.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, c.width, c.height);
     if (p.smooth > 0) studioApplySmooth(c, p.smooth);
     if (p.art && p.art !== "none") studioApplyArt(c, p.art);
     studioApplyPixels(ctx, c.width, c.height, p);
@@ -8153,14 +8155,14 @@ const STUDIO_FONT = `"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", san
 // with its long side = longSide px.
 async function studioRenderBase(canvas, longSide) {
     const layout = STUDIO_LAYOUTS.find(l => l.id === studio.layoutId) || STUDIO_LAYOUTS[0];
-    const images = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
+    const images = await studioSourceImages();
     const bg = STUDIO_BACKGROUNDS.find(b => b.id === studio.bg) || STUDIO_BACKGROUNDS[0];
     const caption = studio.caption.trim();
 
     let areaAspect = layout.aspect;
     if (!areaAspect) {
         const im = images[0];
-        areaAspect = Math.max(0.5, Math.min(2, im.naturalWidth / im.naturalHeight));
+        areaAspect = Math.max(0.5, Math.min(2, (im.naturalWidth || im.width) / (im.naturalHeight || im.height)));
     }
     // Frame margins, as fractions of the photo area's width.
     const polaroid = studio.frame === "polaroid";
@@ -8447,6 +8449,7 @@ function studioRenderControls() {
     if (artEl) artEl.innerHTML = STUDIO_ARTS.map(a => `<button type="button" class="studio-chip${a.id === studio.art ? " active" : ""}" onclick="studioSetArt(${jsArg(a.id)})">${escapeHtml(a.name)}</button>`).join("");
     const smoothEl = document.getElementById("studio-smooth");
     if (smoothEl) smoothEl.value = studio.smooth;
+    ["jaw", "eye"].forEach(k => { const el = document.getElementById(`studio-reshape-${k}`); if (el) el.value = studio.reshape[k]; });
     const gapEl = document.getElementById("studio-gap");
     if (gapEl) gapEl.value = studio.gap;
     const roundEl = document.getElementById("studio-rounded");
@@ -8481,7 +8484,7 @@ window.openPhotoStudio = function(photos = []) {
     Object.assign(studio, {
         photos: photos.slice(0, STUDIO_MAX_PHOTOS), layoutId: "single", filterId: "none",
         adjust: { brightness: 0, contrast: 0, saturation: 0 }, gap: 12, rounded: false,
-        bg: "white", frame: "none", caption: "", logo: false, art: "none", smooth: 0, items: [], selectedId: null, busy: false
+        bg: "white", frame: "none", caption: "", logo: false, art: "none", smooth: 0, reshape: { jaw: 0, eye: 0 }, items: [], selectedId: null, busy: false
     });
     studioBaseCanvas = null;
     studioAiSetStatus("");
@@ -8496,6 +8499,7 @@ window.openPhotoStudio = function(photos = []) {
 window.closePhotoStudio = function() {
     document.getElementById("modal-photo-studio")?.classList.remove("active");
     studioImageCache.clear();
+    studioReshapeCache.clear();
 };
 
 // From the gallery lightbox: start with the photo being viewed.
@@ -9299,7 +9303,7 @@ window.studioMakeVideo = async function(mode = "normal") {
         const ctx = canvas.getContext("2d");
         const W = cfg.w, H = cfg.h;
         const p = studioFilterParams();
-        const images = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
+        const images = await studioSourceImages();
         const frames = images.map(img => studioRenderCell(img, W * 1.08, H * 1.08, p));
         const finale = await studioExportCanvas();
         const bg = STUDIO_BACKGROUNDS.find(b => b.id === studio.bg) || STUDIO_BACKGROUNDS[0];
@@ -9879,6 +9883,198 @@ function studioApplySmooth(canvas, strength) {
 
 window.studioSetArt = function(id) { studio.art = id; studioRenderControls(); };
 window.studioSetSmooth = function(v) { studio.smooth = Number(v) || 0; studioQueueRender(); };
+
+// ── 얼굴 보정 (베타): 턱선 갸름하게 · 눈 크게 ─────────────────────────────────────────────────────
+// MediaPipe Face Landmarker finds 478 points per face on the device (nothing is uploaded). It is
+// loaded only when someone first moves one of these sliders: ~3MB of WASM from jsDelivr plus a ~3.7MB
+// model from Google's storage, both cached by the browser afterwards. CPU delegate on purpose — the
+// GPU path is the part least proven on iPhone Safari. The status line shows load and detect times,
+// since this is still a trial on real phones.
+//
+// The reshape works on each ORIGINAL photo (before layout, crop and filters), so landmarks stay
+// valid whatever the collage does with it; the reshaped copy is cached per photo + strengths.
+// Warping is one backward-mapped pass over each face's region: jaw points are pushed toward the
+// face's midline (blended so overlapping pushes never add up) and each eye gets a soft bulge.
+const STUDIO_MP_VERSION = "0.10.35";
+const STUDIO_MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${STUDIO_MP_VERSION}`;
+const STUDIO_FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+// Lower jaw on each side, from the cheek down to near the chin, with how strongly each point moves.
+const STUDIO_JAW_POINTS = [
+    [132, 0.45], [58, 0.75], [172, 1], [136, 1], [150, 0.85], [149, 0.65], [176, 0.4], [148, 0.2],
+    [361, 0.45], [288, 0.75], [397, 1], [365, 1], [379, 0.85], [378, 0.65], [400, 0.4], [377, 0.2]
+];
+
+let studioFaceLandmarker = null;
+let studioFaceLoading = null;
+const studioFaceCache = new Map();     // photo src → [[{x,y} × 478] per face] (normalised 0-1)
+const studioReshapeCache = new Map();  // `${photoKey}|jaw|eye` → canvas
+
+function studioPhotoKey(src) { return `${src.length}:${src.slice(-32)}`; }
+function studioFaceStatus(text) {
+    const el = document.getElementById("studio-face-status");
+    if (el) el.textContent = text || "";
+}
+
+function studioLoadFaceLandmarker() {
+    if (studioFaceLandmarker) return Promise.resolve(studioFaceLandmarker);
+    if (studioFaceLoading) return studioFaceLoading;
+    studioFaceLoading = (async () => {
+        const t0 = performance.now();
+        studioFaceStatus("얼굴 인식 모델을 받는 중이에요... (처음 한 번 약 7MB)");
+        const vision = await import(`${STUDIO_MP_BASE}/vision_bundle.mjs`);
+        const fileset = await vision.FilesetResolver.forVisionTasks(`${STUDIO_MP_BASE}/wasm`);
+        studioFaceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: STUDIO_FACE_MODEL, delegate: "CPU" },
+            runningMode: "IMAGE",
+            numFaces: 6
+        });
+        studioFaceStatus(`얼굴 인식 준비 완료 (${((performance.now() - t0) / 1000).toFixed(1)}초)`);
+        return studioFaceLandmarker;
+    })();
+    studioFaceLoading.catch(() => { studioFaceLoading = null; });
+    return studioFaceLoading;
+}
+
+async function studioDetectFaces(src) {
+    if (studioFaceCache.has(src)) return studioFaceCache.get(src);
+    const lm = await studioLoadFaceLandmarker();
+    const img = await studioLoadImage(src);
+    const res = lm.detect(img);
+    const faces = (res && res.faceLandmarks || []).map(f => f.map(p => ({ x: p.x, y: p.y })));
+    studioFaceCache.set(src, faces);
+    return faces;
+}
+
+// Warps `img` per the landmarks. jaw/eye are 0-100.
+function studioWarpFaces(img, faces, jaw, eye) {
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    for (const face of faces) {
+        const P = i => ({ x: face[i].x * w, y: face[i].y * h });
+        const xs = face.map(p => p.x * w), ys = face.map(p => p.y * h);
+        const fx0 = Math.min(...xs), fx1 = Math.max(...xs), fy0 = Math.min(...ys), fy1 = Math.max(...ys);
+        // Cheek-to-cheek width (234↔454) rather than the bounding box, so a tilted face isn't overrated.
+        const faceW = Math.hypot(P(234).x - P(454).x, P(234).y - P(454).y) || (fx1 - fx0);
+        if (faceW < 24) continue; // too small to reshape sensibly
+        const moves = [], bulges = [];
+        if (jaw > 0) {
+            // Midline from between the eyes (168) to the chin (152); each jaw point moves toward its
+            // nearest point on it, so a tilted head is slimmed along its own axis.
+            const a = P(168), b = P(152);
+            const ab = { x: b.x - a.x, y: b.y - a.y }, abLen2 = ab.x * ab.x + ab.y * ab.y || 1;
+            const mag = jaw / 100 * 0.05 * faceW;
+            for (const [i, wgt] of STUDIO_JAW_POINTS) {
+                if (!face[i]) continue;
+                const p = P(i);
+                const t = studioClamp(((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / abLen2, 0, 1);
+                const q = { x: a.x + ab.x * t, y: a.y + ab.y * t };
+                const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
+                const m = Math.min(mag * wgt, len * 0.4);
+                moves.push({ cx: p.x, cy: p.y, mx: dx / len * m, my: dy / len * m, r: faceW * 0.28 });
+            }
+        }
+        if (eye > 0) {
+            const eyes = face.length >= 478
+                ? [[P(468), P(33), P(133)], [P(473), P(362), P(263)]]
+                : [[{ x: (P(33).x + P(133).x) / 2, y: (P(33).y + P(133).y) / 2 }, P(33), P(133)],
+                   [{ x: (P(362).x + P(263).x) / 2, y: (P(362).y + P(263).y) / 2 }, P(362), P(263)]];
+            for (const [center, c1, c2] of eyes) {
+                bulges.push({ cx: center.x, cy: center.y, r: Math.hypot(c1.x - c2.x, c1.y - c2.y) * 1.05, a: eye / 100 * 0.2 });
+            }
+        }
+        if (!moves.length && !bulges.length) continue;
+        const pad = faceW * 0.3;
+        const x0 = Math.max(0, Math.floor(fx0 - pad)), y0 = Math.max(0, Math.floor(fy0 - pad));
+        const x1 = Math.min(w, Math.ceil(fx1 + pad)), y1 = Math.min(h, Math.ceil(fy1 + pad));
+        const rw = x1 - x0, rh = y1 - y0;
+        if (rw < 2 || rh < 2) continue;
+        const srcData = ctx.getImageData(x0, y0, rw, rh);
+        const out = ctx.createImageData(rw, rh);
+        const S = srcData.data, O = out.data;
+        for (let yy = 0; yy < rh; yy++) {
+            for (let xx = 0; xx < rw; xx++) {
+                const X = xx + x0, Y = yy + y0;
+                let sx = X, sy = Y;
+                // Jaw: a weighted AVERAGE of the nearby pushes (never their sum), so where the jaw
+                // points' circles overlap the shift stays at most one push — summing them made the
+                // image fold over itself into ripples. Smooth (1-d²/r²)² falloff to zero at the rim.
+                let vx = 0, vy = 0, wsum = 0;
+                for (const mv of moves) {
+                    const ddx = X - mv.cx, ddy = Y - mv.cy, d2 = ddx * ddx + ddy * ddy, r2 = mv.r * mv.r;
+                    if (d2 >= r2) continue;
+                    const t = 1 - d2 / r2, wgt = t * t;
+                    vx += wgt * mv.mx; vy += wgt * mv.my; wsum += wgt;
+                }
+                if (wsum > 0) {
+                    const norm = 1 / Math.max(1, wsum);
+                    sx -= vx * norm; sy -= vy * norm;
+                }
+                for (const bg of bulges) {
+                    const ddx = X - bg.cx, ddy = Y - bg.cy, d = Math.sqrt(ddx * ddx + ddy * ddy);
+                    if (d >= bg.r) continue;
+                    const k = bg.a * (1 - (d / bg.r) * (d / bg.r));
+                    sx -= ddx * k; sy -= ddy * k;
+                }
+                // Bilinear sample from the untouched region copy.
+                const lx = studioClamp(sx - x0, 0, rw - 1.001), ly = studioClamp(sy - y0, 0, rh - 1.001);
+                const ix = lx | 0, iy = ly | 0, fx = lx - ix, fy = ly - iy;
+                const i00 = (iy * rw + ix) * 4, i10 = i00 + 4, i01 = i00 + rw * 4, i11 = i01 + 4;
+                const o = (yy * rw + xx) * 4;
+                for (let ch = 0; ch < 3; ch++) {
+                    const top = S[i00 + ch] + (S[i10 + ch] - S[i00 + ch]) * fx;
+                    const bot = S[i01 + ch] + (S[i11 + ch] - S[i01 + ch]) * fx;
+                    O[o + ch] = top + (bot - top) * fy;
+                }
+                O[o + 3] = 255;
+            }
+        }
+        ctx.putImageData(out, x0, y0);
+    }
+    return c;
+}
+
+// What the collage/video should draw for each photo: the reshaped copy when 얼굴 보정 is on and the
+// faces are known, otherwise the original image.
+async function studioSourceImages() {
+    const imgs = await Promise.all(studio.photos.map(ph => studioLoadImage(ph.src)));
+    const { jaw, eye } = studio.reshape;
+    if (!jaw && !eye) return imgs;
+    return imgs.map((img, i) => {
+        const src = studio.photos[i].src;
+        const faces = studioFaceCache.get(src);
+        if (!faces || !faces.length) return img;
+        const key = `${studioPhotoKey(src)}|${jaw}|${eye}`;
+        if (!studioReshapeCache.has(key)) {
+            if (studioReshapeCache.size > 12) studioReshapeCache.clear();
+            studioReshapeCache.set(key, studioWarpFaces(img, faces, jaw, eye));
+        }
+        return studioReshapeCache.get(key);
+    });
+}
+
+window.studioSetReshape = async function(key, value) {
+    studio.reshape[key] = Number(value) || 0;
+    if (!studio.reshape.jaw && !studio.reshape.eye) { studioQueueRender(); return; }
+    const missing = studio.photos.filter(p => !studioFaceCache.has(p.src));
+    if (!missing.length) { studioQueueRender(); return; }
+    try {
+        await studioLoadFaceLandmarker();
+        const t0 = performance.now();
+        studioFaceStatus("얼굴을 찾는 중이에요... 🔍");
+        let found = 0;
+        for (const p of studio.photos) found += (await studioDetectFaces(p.src)).length;
+        studioFaceStatus(found
+            ? `얼굴 ${found}개를 찾았어요 (${((performance.now() - t0) / 1000).toFixed(1)}초) · 사진 밖으로 보내지 않아요`
+            : "얼굴을 찾지 못했어요. 얼굴이 크게 나온 사진에서 써보세요 🥲");
+    } catch (e) {
+        console.error("[Studio face]", e);
+        studioFaceStatus("얼굴 보정을 불러오지 못했어요: " + (e && e.message ? e.message : e));
+    }
+    studioQueueRender();
+};
 
 // ── Photo picker (photos of every place, newest date first) ──────────────────────────────────────
 let studioPickerSelection = [];

@@ -80,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261113_v405">
+    <link rel="stylesheet" href="style.css?v=20261113_v406">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -979,6 +979,10 @@
                     <div class="studio-label">그림 효과 · 보정 <span>(기기 안에서 처리돼요)</span></div>
                     <div id="studio-arts" class="studio-chips"></div>
                     <div class="studio-row"><label for="studio-smooth">뽀샤시</label><input type="range" id="studio-smooth" min="0" max="100" step="5" onchange="studioSetSmooth(this.value)"></div>
+                    <div class="studio-label" style="margin-top:0.3rem">얼굴 보정 <span>(베타 · 처음 한 번 약 7MB를 받아요 · 사진은 밖으로 안 나가요)</span></div>
+                    <div class="studio-row"><label for="studio-reshape-jaw">턱선</label><input type="range" id="studio-reshape-jaw" min="0" max="100" step="5" onchange="studioSetReshape('jaw', this.value)"></div>
+                    <div class="studio-row"><label for="studio-reshape-eye">눈 크게</label><input type="range" id="studio-reshape-eye" min="0" max="100" step="5" onchange="studioSetReshape('eye', this.value)"></div>
+                    <div id="studio-face-status" class="studio-ai-status"></div>
                 </div>
 
                 <div class="studio-section">
@@ -1223,13 +1227,13 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261113_v405"></script>
+    <script src="app.js?v=20261113_v406"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261113_v405').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261113_v406').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
