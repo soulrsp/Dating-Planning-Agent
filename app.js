@@ -154,12 +154,28 @@ function sanitizeRoomId(value) {
     return String(value || "").normalize("NFC").replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 64);
 }
 let syncRoomId = sanitizeRoomId(new URLSearchParams(window.location.search).get("room")) || sanitizeRoomId(localStorage.getItem("aura_sync_room_id")) || "0";
-let customFirebaseUrl = localStorage.getItem("aura_firebase_url") || "";
+// Every request to this URL carries the signed-in user's ID token (patchFetchForAuth), so a custom
+// database URL may only be a Firebase Realtime Database origin — never an arbitrary server that
+// would receive the token. Returns the normalized origin, or "" when the value isn't one.
+function normalizeFirebaseDbUrl(value) {
+    const v = String(value || "").trim();
+    if (!v) return "";
+    try {
+        const u = new URL(v);
+        const okHost = /^[a-z0-9-]+\.firebaseio\.com$/i.test(u.hostname) ||
+                       /^[a-z0-9-]+\.[a-z0-9-]+\.firebasedatabase\.app$/i.test(u.hostname);
+        if (u.protocol !== "https:" || !okHost || u.port || u.username || u.password) return "";
+        return u.origin;
+    } catch (e) {
+        return "";
+    }
+}
+let customFirebaseUrl = normalizeFirebaseDbUrl(localStorage.getItem("aura_firebase_url"));
 
 // Cloud Sync Engine variables
 const DEFAULT_FIREBASE_DB_URL = 'https://dating-planning-agent-default-rtdb.asia-southeast1.firebasedatabase.app';
 function getFirebaseDbUrl() {
-    return customFirebaseUrl ? customFirebaseUrl.replace(/\/$/, "") : DEFAULT_FIREBASE_DB_URL;
+    return customFirebaseUrl || DEFAULT_FIREBASE_DB_URL;
 }
 
 // --- Auth Gate ---------------------------------------------------------------------------------
@@ -366,7 +382,8 @@ function waitForAuthGate() { return authGateReady; }
 (function patchFetchForAuth() {
     const nativeFetch = window.fetch.bind(window);
     window.fetch = function(url, opts) {
-        if (typeof url === "string" && url.startsWith(getFirebaseDbUrl()) && currentIdToken) {
+        // Match "<origin>/" exactly, so a look-alike host such as "<origin>.evil.com" never gets the token.
+        if (typeof url === "string" && url.startsWith(getFirebaseDbUrl() + "/") && currentIdToken) {
             url += (url.includes("?") ? "&" : "?") + "auth=" + encodeURIComponent(currentIdToken);
         }
         return nativeFetch(url, opts);
@@ -492,15 +509,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         syncRoomId = queryRoom;
         document.getElementById("settings-sync-room-id").value = queryRoom;
         localStorage.setItem("aura_sync_room_id", queryRoom);
-    }
-
-    if ((queryRoom === "77" || syncRoomId === "77") && (partnerAName === "초코" || partnerAName === "A")) {
-        partnerAName = "SH";
-        partnerBName = "SA";
-        localStorage.setItem("aura_partner_a_name", "SH");
-        localStorage.setItem("aura_partner_b_name", "SA");
-        document.getElementById("settings-partner-a-name").value = "SH";
-        document.getElementById("settings-partner-b-name").value = "SA";
     }
 
     // Room "77" ships with pinned map keys so anyone opening ?room=77 works immediately without a
@@ -6140,8 +6148,14 @@ async function saveSettings() {
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
     const syncRoomVal = sanitizeRoomId(document.getElementById("settings-sync-room-id").value.trim());
-    const firebaseUrVal = document.getElementById("settings-firebase-url").value.trim();
-    
+    const firebaseUrInput = document.getElementById("settings-firebase-url").value.trim();
+    const firebaseUrVal = normalizeFirebaseDbUrl(firebaseUrInput);
+    if (firebaseUrInput && !firebaseUrVal) {
+        showToast("Firebase Database URL은 https://...firebasedatabase.app 또는 https://...firebaseio.com 주소만 쓸 수 있어요. 비워 두면 기본 DB를 씁니다.", "warning");
+        return;
+    }
+    document.getElementById("settings-firebase-url").value = firebaseUrVal;
+
     localStorage.setItem("aura_gemini_key", apiKeyVal);
     localStorage.setItem("aura_naver_client_id", naverClientIdVal);
     localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
