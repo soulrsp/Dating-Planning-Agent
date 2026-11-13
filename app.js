@@ -3107,7 +3107,7 @@ window.deletePlaceFromEditModal = async function() {
 
     if (!(await showConfirmModal(`'${place.name}' 장소 전체를 삭제하시겠습니까?\n\n이 장소의 모든 사진과 기록이 함께 삭제됩니다.`))) return;
 
-    await db.places.update(placeId, { isDeleted: 1 });
+    await markPlaceDeleted(placeId);
     closeEditPlaceModal();
     showToast(`'${place.name}' 장소가 삭제되었습니다! 🗑️`, "success");
 
@@ -3115,7 +3115,7 @@ window.deletePlaceFromEditModal = async function() {
     await renderGallery();
     await updateDashboardStats();
     await renderCalendar();
-    triggerSyncUpload(placeId);
+    updateMapMarkers();
 };
 
 window.quickEditComment = async function(id, partnerKey) {
@@ -4305,38 +4305,32 @@ async function deletePlace(id, name) {
     if (!(await showConfirmModal(`'${name}' 장소를 영구히 삭제하시겠습니까?`))) return;
     
     try {
-        // Tombstone update (Soft delete flag to guarantee multi-device sync deletion)
-        await db.places.update(id, {
-            isVisited: -1,
-            isDeleted: 1,
-            deletedAt: Date.now()
-        });
-        // Remember this name in session so loadFromCloud won't re-add it if the upload fails
-        try {
-            const _sd = JSON.parse(sessionStorage.getItem('aura_session_deleted') || '[]');
-            _sd.push((name || '').trim().toLowerCase());
-            sessionStorage.setItem('aura_session_deleted', JSON.stringify(_sd));
-        } catch(_) {}
-        
-        // Clean up associated cloud photos from Firebase
-        if (syncRoomId) {
-            try {
-                const nameKey = (name || "").trim().toLowerCase().replace(/[/\\?%*:|"<>. ]/g, "_");
-                const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/photos/${encodeURIComponent(nameKey)}.json`;
-                await fetch(url, { method: 'DELETE' });
-            } catch(e) {
-                console.error("Cloud photo cleanup failed:", e);
-            }
-        }
-
+        await markPlaceDeleted(id);
         showToast("장소가 영구 삭제되었습니다.", "success");
         await updateDashboardStats();
         await renderPlacesList();
         updateMapMarkers();
-        triggerSyncUpload(id);
     } catch(err) {
         showToast("삭제 오류: " + err.message, "danger");
     }
+}
+
+// The one way a place gets deleted (card trash button and the edit screen's delete both use it).
+// It only writes a local tombstone and queues its upload. The cloud photos are removed by
+// savePlaceToCloud() AFTER the tombstone has landed — deleting them first meant a failed tombstone
+// upload left the partner's device showing the place with its photos gone.
+async function markPlaceDeleted(id) {
+    const place = await db.places.get(id);
+    if (!place) return null;
+    await db.places.update(id, { isVisited: -1, isDeleted: 1, deletedAt: Date.now() });
+    // Remember this name in session so loadFromCloud won't re-add it if the upload fails
+    try {
+        const _sd = JSON.parse(sessionStorage.getItem('aura_session_deleted') || '[]');
+        _sd.push((place.name || '').trim().toLowerCase());
+        sessionStorage.setItem('aura_session_deleted', JSON.stringify(_sd));
+    } catch(_) {}
+    triggerSyncUpload(id);
+    return place;
 }
 
 // 11. Dashboard Analytics
@@ -4628,8 +4622,26 @@ async function savePlaceToCloud(placeId, attempt = 1) {
         const nameKey = placeNameKey(copy.name);
         if (!nameKey) return;
 
+        // A place deleted and later added again under the same name leaves two local rows sharing one
+        // cloud node. The live row owns it: writing the old tombstone (e.g. from pushAllLocalPlacesToCloud)
+        // would delete the re-added place — and its photos — on every device.
+        const isTombstone = place.isDeleted === 1 || place.isVisited === -1;
+        if (isTombstone) {
+            const liveTwin = await db.places
+                .filter(p => p.id !== placeId && p.isDeleted !== 1 && p.isVisited !== -1 && placeNameKey(p.name) === nameKey)
+                .first();
+            if (liveTwin) { clearPendingPlaceId(placeId); return; }
+        }
+
         const ts = Date.now();
         const nodeUrl = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/places/${encodeURIComponent(nameKey)}`;
+
+        // Already a tombstone in the cloud (pushAllLocalPlacesToCloud re-sends every old deletion):
+        // nothing to write, and its photos were cleaned up when that tombstone first landed.
+        if (isTombstone) {
+            const cloudDeleted = await fetchJsonWithTimeout(`${nodeUrl}/isDeleted.json?t=${Date.now()}`, 15000);
+            if (cloudDeleted === 1) { clearPendingPlaceId(placeId); return; }
+        }
         const url = `${nodeUrl}.json?print=silent`;
 
         // Writing the WHOLE place over its cloud node means every field this device holds replaces the
@@ -4673,6 +4685,19 @@ async function savePlaceToCloud(placeId, attempt = 1) {
         lastSyncedTimestamp = ts;
         localStorage.removeItem('aura_pending_mutation_ts');
         clearPendingPlaceId(placeId);
+
+        // The tombstone is in the cloud now, so its photos can go: both the list and its version
+        // marker (same pair deleteOrphanedPlaceCloudNode removes on a rename). Best effort — a failure
+        // only leaves unreachable data behind, never a visible problem.
+        if (isTombstone) {
+            const roomBase = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}`;
+            try {
+                await fetch(`${roomBase}/photos/${encodeURIComponent(nameKey)}.json?print=silent`, { method: 'DELETE' });
+                await fetch(`${roomBase}/photoVersions/${encodeURIComponent(nameKey)}.json?print=silent`, { method: 'DELETE' });
+            } catch (e) {
+                console.error('[Place Sync] Cloud photo cleanup after delete failed:', e);
+            }
+        }
     } catch (e) {
         console.error(`[Place Sync] Save failed (attempt ${attempt}/${MAX_ATTEMPTS}) for place ${placeId}:`, e);
         if (attempt < MAX_ATTEMPTS) {

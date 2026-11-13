@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aura-date-planner-v20261112_v396';
+const CACHE_NAME = 'aura-date-planner-v20261113_v397';
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();
@@ -27,14 +27,16 @@ self.addEventListener('fetch', (event) => {
     // requests — they're redirect-heavy navigations that must reach the network untouched.
     if (url.pathname.startsWith('/__/')) return;
 
-    // Only GETs are cacheable; let POST/PUT and non-GET verbs pass straight through.
+    // Let POST/PUT and non-GET verbs pass straight through.
     if (event.request.method !== 'GET') return;
 
+    // No offline cache on purpose: Dexie, Firebase and Leaflet load from CDNs (cross-origin, which this
+    // worker must not touch — see above), so a cached app shell couldn't start without a network anyway.
+    // The activate step only clears caches older builds left behind.
     event.respondWith(
-        fetch(event.request).catch(async () => {
-            const cached = await caches.match(event.request);
+        fetch(event.request).catch(() => {
             // respondWith rejects on undefined, so always hand back a real Response
-            return cached || new Response('Offline', {
+            return new Response('Offline', {
                 status: 503,
                 statusText: 'Offline',
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
