@@ -14,7 +14,7 @@ const { spawnSync } = require("child_process");
 
 const ROOT = __dirname;
 const DIST = path.join(ROOT, ".hosting-dist");
-const FILES = ["index.html", "app.js", "studio.js", "style.css", "sw.js", "manifest.json"];
+const FILES = ["index.html", "app.js", "studio.js", "couple.js", "style.css", "sw.js", "manifest.json"];
 const DIRS = ["images"];
 
 fs.rmSync(DIST, { recursive: true, force: true });

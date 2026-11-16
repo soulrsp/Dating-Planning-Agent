@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Language: always answer the user and ask questions in Korean (한국어)** — progress notes, reports,
+plans and questions included. Code, code comments and commit messages stay in English.
+
 ## What this is
 
 AURA — a Korean couple's date-planner PWA. Static site, no backend, no build step, no bundler.

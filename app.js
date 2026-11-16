@@ -4808,6 +4808,7 @@ function startCloudSyncLoop() {
     loadPhotosFromCloud();
     loadMemoryPhotosFromCloud();
     if (typeof syncCreations === "function") syncCreations(); // studio.js
+    if (typeof coupleStartSync === "function") coupleStartSync(); // couple.js
 }
 
 // Derives the same per-place cloud key used by uploadPhotoToCloud/photoVersions, so a place's
