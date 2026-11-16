@@ -15,6 +15,7 @@
 //   daily/{YYYY-MM-DD}/mood/{A|B}   = { e, t, at }   today's mood
 //   daily/{YYYY-MM-DD}/answer/{A|B} = { t, at }      answer to the day's question
 //   daily/{YYYY-MM-DD}/qi           = number         set only when someone swapped the question
+//   daily/{YYYY-MM-DD}/heart/{A|B}  = ms             first heart sent that day (worth 1 point)
 //   couple/members                  = { A: email, B: email }
 //   couple/pet                      = { name, bornAt }
 //   couple/presence/{A|B}           = ms timestamp, refreshed every minute while the app is open
@@ -35,8 +36,9 @@ const COUPLE_HISTORY_DAYS = 400;
 const COUPLE_DEFAULT_PET_NAME = "명똑똑";
 const COUPLE_CHAR_BASE = "images/character/";
 
-// Points → stage. Earned from the day's question (both +3, one +1), moods (both +1), places visited
-// after the character was born (+2) and 꾸민 사진 saved after it (+1).
+// Points → stage. Earned from the day's question (both +3, one +1), moods (both +1), each person's
+// first heart of the day (+1 each), places visited after the character was born (+2) and 꾸민 사진
+// saved after it (+1). Hearts beyond the first of the day still animate but add nothing.
 const COUPLE_STAGES = [
     { min: 0, name: "알" }, { min: 5, name: "아기" }, { min: 20, name: "어린이" },
     { min: 50, name: "청소년" }, { min: 100, name: "어른" }, { min: 200, name: "전설" }
@@ -360,8 +362,8 @@ async function coupleRefreshExtraPoints() {
 
 function coupleDayStats(day) {
     const n = couple.daily[day] || {};
-    const ans = n.answer || {}, mood = n.mood || {};
-    return { both: !!(ans.A && ans.B), one: !!(ans.A || ans.B), moods: !!(mood.A && mood.B) };
+    const ans = n.answer || {}, mood = n.mood || {}, heart = n.heart || {};
+    return { both: !!(ans.A && ans.B), one: !!(ans.A || ans.B), moods: !!(mood.A && mood.B), hearts: (heart.A ? 1 : 0) + (heart.B ? 1 : 0) };
 }
 
 function couplePoints() {
@@ -370,6 +372,7 @@ function couplePoints() {
         const s = coupleDayStats(day);
         pts += s.both ? 3 : s.one ? 1 : 0;
         if (s.moods) pts += 1;
+        pts += s.hearts;
     }
     return pts;
 }
@@ -515,10 +518,41 @@ window.coupleSendHeart = async function() {
     const value = { n: (mine.n || 0) + 1, at: Date.now() };
     couple.hearts[couple.me] = value;
     coupleAnimate("love");
-    try { await couplePutJson(`couple/hearts/${couple.me}`, value); }
-    catch (e) { showToast("하트를 보내지 못했어요. 인터넷 연결을 확인해 주세요.", "danger"); }
+    const day = coupleYmd();
+    const firstToday = !((couple.daily[day] || {}).heart || {})[couple.me];
+    const before = couplePoints();
+    try {
+        await couplePutJson(`couple/hearts/${couple.me}`, value);
+        if (firstToday) {
+            await couplePutJson(`daily/${day}/heart/${couple.me}`, value.at);
+            couple.daily[day] = couple.daily[day] || {};
+            couple.daily[day].heart = Object.assign({}, couple.daily[day].heart, { [couple.me]: value.at });
+            coupleSaveCache();
+            coupleAfterPoints(before);
+        } else {
+            showToast("하트를 보냈어요 💗 (점수는 하루 첫 하트만 올라가요)", "info");
+        }
+    } catch (e) { showToast("하트를 보내지 못했어요. 인터넷 연결을 확인해 주세요.", "danger"); }
     coupleRenderPresence();
 };
+
+// After something that may have earned points: re-render, float "+N점" by the bar, celebrate a new stage.
+function coupleAfterPoints(before) {
+    const after = couplePoints();
+    const stageBefore = coupleStageFor(before);
+    coupleRender();
+    if (after > before) {
+        const info = document.querySelector(".couple-pet-info");
+        if (info) {
+            const pop = document.createElement("span");
+            pop.className = "couple-pts-pop";
+            pop.textContent = `+${after - before}점`;
+            info.appendChild(pop);
+            setTimeout(() => pop.remove(), 1800);
+        }
+    }
+    coupleCheckLevelUp(stageBefore);
+}
 
 window.coupleRenamePet = async function() {
     const name = prompt("우리 캐릭터 이름을 지어주세요 (12자까지)", couplePetName());
@@ -551,6 +585,12 @@ function coupleQuestionIndex(day) {
     if (!Number.isFinite(days)) return coupleQOrderCache.order[0]; // not a date key
     return coupleQOrderCache.order[((days % COUPLE_QUESTIONS.length) + COUPLE_QUESTIONS.length) % COUPLE_QUESTIONS.length];
 }
+// "바다 vs 산, 같이 간다면?" → ["바다", "산"]; null for an open question.
+function coupleBalanceOptions(q) {
+    const m = String(q || "").match(/^(.+?)\s+vs\s+(.+?)(?:,\s*[^,]*)?\?$/);
+    return m ? [m[1].trim(), m[2].trim()] : null;
+}
+
 function coupleMyAnswer(day = coupleYmd()) {
     const n = couple.daily[day];
     return couple.me && n && n.answer ? n.answer[couple.me] || null : null;
@@ -563,13 +603,19 @@ window.coupleOpenAnswer = function() {
 };
 window.coupleCloseAnswer = function() { couple.answerOpen = false; coupleRender(); };
 
-window.coupleSaveAnswer = async function() {
+window.coupleSaveAnswer = async function(choice) {
     if (!couple.me || couple.saving) return;
-    const text = String(document.getElementById("couple-answer-text")?.value || "").trim().slice(0, 300);
-    if (!text) { showToast("답을 적어주세요", "warning"); return; }
     const day = coupleYmd();
-    const value = { t: text, at: Date.now() };
-    const stageBefore = coupleStageFor(couplePoints());
+    const opts = coupleBalanceOptions(COUPLE_QUESTIONS[coupleQuestionIndex(day)]);
+    let value;
+    if (opts && (choice === 0 || choice === 1)) {
+        value = { t: opts[choice], c: choice, at: Date.now() };
+    } else {
+        const text = String(document.getElementById("couple-answer-text")?.value || "").trim().slice(0, 300);
+        if (!text) { showToast("답을 적어주세요", "warning"); return; }
+        value = { t: text, at: Date.now() };
+    }
+    const before = couplePoints();
     couple.saving = true;
     try {
         await couplePutJson(`daily/${day}/answer/${couple.me}`, value);
@@ -579,9 +625,8 @@ window.coupleSaveAnswer = async function() {
         couple.answerOpen = false;
         const bothNow = coupleDayStats(day).both;
         showToast(bothNow ? "둘 다 답했어요! 서로의 답을 확인해 보세요 💬" : "답을 남겼어요. 상대가 답하면 공개돼요 🔒", "success");
-        coupleRender();
+        coupleAfterPoints(before);
         coupleAnimate(bothNow ? "love" : "squish");
-        coupleCheckLevelUp(stageBefore);
     } catch (e) {
         console.error("[Couple] answer save failed", e);
         showToast("저장하지 못했어요. 인터넷 연결을 확인해 주세요.", "danger");
@@ -613,8 +658,26 @@ function coupleQuestionHtml() {
     const ans = n.answer || {};
     const mine = ans[couple.me], theirs = ans[coupleOther(couple.me)];
     const other = coupleName(coupleOther(couple.me));
+    const opts = coupleBalanceOptions(q);
     let body;
-    if (couple.answerOpen) {
+    if (opts) {
+        // Balance game: one tap answers (tap the other side to change your mind).
+        const pick = mine ? (mine.c ?? opts.indexOf(mine.t)) : -1;
+        const theirPick = theirs ? (theirs.c ?? opts.indexOf(theirs.t)) : -1;
+        const showTheirs = mine && theirs;
+        body = `<div class="couple-bal">${opts.map((o, i) => `
+            <button type="button" class="couple-bal-btn${pick === i ? " is-mine" : ""}${showTheirs && theirPick === i ? " is-theirs" : ""}" onclick="coupleSaveAnswer(${i})">
+                <span class="couple-bal-text">${escapeHtml(o)}</span>
+                <span class="couple-bal-who">${pick === i ? "나" : ""}${showTheirs && theirPick === i ? `${pick === i ? " · " : ""}${escapeHtml(other)}` : ""}</span>
+            </button>`).join("")}</div>`;
+        if (showTheirs) {
+            body += `<div class="couple-bal-result">${pick === theirPick ? "💚 같은 선택이에요! 역시 우리" : "😆 서로 달라요! 오늘은 누구 취향대로?"}</div>`;
+        } else if (theirs) {
+            body += `<div class="couple-ans is-locked"><b>${escapeHtml(other)}</b><span>🔒 골랐어요! 나도 고르면 볼 수 있어요</span></div>`;
+        } else {
+            body += `<div class="couple-ans is-wait"><b>${escapeHtml(other)}</b><span>${mine ? "아직 고르지 않았어요" : "하나를 눌러서 골라주세요"}</span></div>`;
+        }
+    } else if (couple.answerOpen) {
         body = `<textarea id="couple-answer-text" rows="3" maxlength="300" placeholder="나의 답을 적어주세요">${escapeHtml(mine ? mine.t : "")}</textarea>
             <div class="couple-mood-actions">
                 <button type="button" class="btn btn-outline" onclick="coupleCloseAnswer()">취소</button>
@@ -698,7 +761,7 @@ window.coupleSaveMood = async function() {
     const text = String(document.getElementById("couple-mood-text")?.value || "").trim().slice(0, 30);
     const value = { e: couple.draftMood, t: text, at: Date.now() };
     const day = coupleYmd();
-    const stageBefore = coupleStageFor(couplePoints());
+    const before = couplePoints();
     couple.saving = true;
     try {
         await couplePutJson(`daily/${day}/mood/${couple.me}`, value);
@@ -707,14 +770,16 @@ window.coupleSaveMood = async function() {
         coupleSaveCache();
         couple.pickerOpen = false;
         showToast("오늘의 기분을 남겼어요 " + value.e, "success");
-        coupleCheckLevelUp(stageBefore);
+        couple.saving = false;
+        coupleAfterPoints(before);
+        return;
     } catch (e) {
         console.error("[Couple] mood save failed", e);
         showToast("저장하지 못했어요. 인터넷 연결을 확인해 주세요.", "danger");
     } finally {
         couple.saving = false;
-        coupleRender();
     }
+    coupleRender();
 };
 
 // ── Card ─────────────────────────────────────────────────────────────────────────────────────────
