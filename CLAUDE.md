@@ -216,6 +216,16 @@ layout; the rules that matter:
   same value.
 - The day's question index comes from a seeded shuffle of `COUPLE_QUESTIONS` (same on both phones);
   `daily/{date}/qi` overrides it only when someone swapped the question before anyone answered.
+  Every question is answered by tapping a choice (`"질문|보기1|보기2…"`, or `"A vs B?"` for a balance
+  game); answers save `{t, c, q, at}`. **Only append to `COUPLE_QUESTIONS`, never reorder or edit the
+  first 150**: days before `COUPLE_Q_V2_FROM` still index the old 150-day cycle. If the bank grows again,
+  add another cut-over date the same way rather than changing the existing cycles.
+- The card is collapsed by default behind a "명똑똑 키우기" button that `coupleApplyOpen()` draws into
+  `#couple-toggle-slot` inside app.js's D-day card (per-device `aura_couple_open_{room}`); with no
+  anniversary set there is no slot and the card stays open.
+- Badges (`COUPLE_BADGES`) are "stat ≥ goal" over existing data, recomputed on every render; only the
+  first-earned time is stored (`couple/badges/{id}`). `coupleCheckBadges()` runs inside `coupleRender()`,
+  so when testing with faked in-memory answers, stub it first or it writes real badges.
 - Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
   character), cut into transparent WebP sprites in `images/character/` by
   `design/character-src/cut.py` (sources alongside). Only the adult stage has expression variants;

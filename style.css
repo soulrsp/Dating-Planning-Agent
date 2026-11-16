@@ -3559,3 +3559,44 @@ body {
     20% { opacity: 1; transform: translateY(-4px) scale(1.15); }
     100% { opacity: 0; transform: translateY(-26px) scale(1); }
 }
+
+/* ---- 오늘의 질문: 4-choice grid, 직접 쓰기 link; 배지 (v414) ---- */
+.couple-bal.is-multi .couple-bal-btn { min-height: 2.9rem; }
+.couple-bal.is-multi .couple-bal-text { font-size: 0.84rem; }
+.couple-write-link { align-self: center; margin-top: 0.1rem; }
+.couple-badge-sum { text-align: center; font-size: 0.9rem; margin-bottom: 0.8rem; color: var(--color-text-high); }
+.couple-badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 0.55rem; }
+.couple-badge {
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.2rem;
+    padding: 0.7rem 0.45rem; border-radius: 14px; background: #f6f4f5; border: 1.5px dashed rgba(0, 0, 0, 0.1);
+}
+.couple-badge-icon { font-size: 1.9rem; line-height: 1.1; filter: grayscale(1); opacity: 0.45; }
+.couple-badge-name { font-size: 0.8rem; font-weight: 800; color: var(--color-text-med); word-break: keep-all; }
+.couple-badge-desc { font-size: 0.66rem; color: var(--color-text-med); word-break: keep-all; line-height: 1.35; }
+.couple-badge-date { font-size: 0.64rem; font-weight: 700; color: var(--color-text-med); }
+.couple-badge-prog { width: 80%; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.08); overflow: hidden; margin-top: 0.15rem; }
+.couple-badge-prog span { display: block; height: 100%; background: #9BD08F; border-radius: 3px; }
+.couple-badge.is-earned { background: linear-gradient(160deg, #fff6f8, #effaec); border: 1.5px solid rgba(124, 196, 120, 0.55); }
+.couple-badge.is-earned .couple-badge-icon { filter: none; opacity: 1; }
+.couple-badge.is-earned .couple-badge-name { color: var(--color-text-high); }
+.couple-badge.is-earned .couple-badge-date { color: #4E9A55; }
+
+/* ---- "명똑똑 키우기" toggle on the D-day card (v414) ---- */
+.dday-head { align-items: center; }
+.couple-toggle-slot { margin-left: auto; }
+.couple-toggle-slot:empty { display: none; }
+.couple-toggle-btn {
+    position: relative; display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.28rem 0.7rem; border-radius: 999px; cursor: pointer; font: inherit;
+    font-size: 0.76rem; font-weight: 800; white-space: nowrap; color: #3F7F45;
+    background: rgba(255, 255, 255, 0.85); border: 1.5px solid rgba(124, 196, 120, 0.6);
+    transition: transform 0.1s, background 0.2s;
+}
+.couple-toggle-btn:active { transform: scale(0.95); }
+.couple-toggle-btn.is-open { background: rgba(124, 196, 120, 0.16); }
+.couple-toggle-chev { font-size: 0.7rem; opacity: 0.7; }
+.couple-toggle-dot {
+    position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%;
+    background: #FF4D6D; box-shadow: 0 0 0 2px #fff; animation: couple-dot 1.6s ease-in-out infinite;
+}
+@keyframes couple-dot { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }

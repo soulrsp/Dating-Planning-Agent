@@ -4507,14 +4507,21 @@ function coupleEventBadgesHtml(events) {
 function renderDdayCard() {
     const card = document.getElementById("dday-card");
     if (!card) return;
-    if (!coupleDates.anniversary) { card.classList.add("hidden"); return; }
+    if (!coupleDates.anniversary) {
+        card.classList.add("hidden");
+        card.innerHTML = "";
+        if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // no toggle → 오늘의 우리 stays open
+        return;
+    }
     card.classList.remove("hidden");
     const names = `<span class="dday-names">${escapeHtml(partnerAName)} ♥ ${escapeHtml(partnerBName)}</span>`;
     const dayNum = coupleDayNumber(new Date());
     const countHtml = dayNum > 0
         ? `함께한 지 <strong>${dayNum.toLocaleString()}일째</strong>`
         : `<strong>D-${localDayDiff(new Date(), parseYmdLocal(coupleDates.anniversary))}</strong>`;
-    card.innerHTML = `<div class="dday-head">${names}<span class="dday-count">${countHtml}</span></div>`;
+    // The slot holds couple.js's "명똑똑 키우기" button, which opens/closes the 오늘의 우리 card.
+    card.innerHTML = `<div class="dday-head">${names}<span class="dday-count">${countHtml}</span><span id="couple-toggle-slot" class="couple-toggle-slot"></span></div>`;
+    if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // couple.js
 }
 
 function fillCoupleDateSettings() {
