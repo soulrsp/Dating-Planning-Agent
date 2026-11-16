@@ -10,7 +10,9 @@ plans and questions included. Code, code comments and commit messages stay in En
 AURA — a Korean couple's date-planner PWA. Static site, no backend, no build step, no bundler.
 Four files carry almost the entire app: [`app.js`](app.js) (~8000 lines), [`studio.js`](studio.js)
 (~2400 lines, the 사진 꾸미기 photo studio — see its section below), [`index.html`](index.html) (~1250 lines),
-[`style.css`](style.css) (~3300 lines), plus a tiny [`sw.js`](sw.js) service worker.
+[`style.css`](style.css) (~3300 lines), plus a tiny [`sw.js`](sw.js) service worker. Smaller feature files
+load after them as plain scripts: [`couple.js`](couple.js) (오늘의 우리), [`together.js`](together.js)
+(버킷리스트 + 서로 사용 설명서) and [`course.js`](course.js) (the AI 플래너 tab) — see their sections below.
 Served from two places (neither via CI): **Firebase Hosting** at `https://dating-planning-agent.firebaseapp.com/`
 (the primary one — it shares an origin with the Firebase Auth helper, which is what makes Google sign-in
 work on iOS Safari) and GitHub Pages at `https://soulrsp.github.io/Dating-Planning-Agent/` (legacy; sign-in
@@ -39,13 +41,14 @@ python -m http.server 8123
 
 This matches `.claude/launch.json` (`aura-static`, port 8123) so `preview_start` picks it up
 automatically. There is no test suite, linter, or build command — the only mechanical check available
-is `node --check app.js && node --check studio.js && node --check couple.js` for syntax validation before calling a change done.
+is `node --check app.js && node --check studio.js && node --check couple.js && node --check together.js && node --check course.js`
+for syntax validation before calling a change done.
 
 ## Critical workflow rule: cache-busting version bump
 
-`index.html` loads `style.css?v=<version>`, `app.js?v=<version>`, `studio.js?v=<version>`, `couple.js?v=<version>` and registers
-`sw.js?v=<version>`, and `sw.js` has its own `CACHE_NAME` containing the same version string. **All of them
-must be bumped together on every change that touches `app.js`, `studio.js`, `couple.js`, `index.html`, or `style.css`**,
+`index.html` loads `style.css?v=<version>` and every script (`app.js`, `studio.js`, `couple.js`, `together.js`,
+`course.js`) with `?v=<version>`, and registers `sw.js?v=<version>`; `sw.js` has its own `CACHE_NAME` containing the
+same version string. **All of them must be bumped together on every change that touches any of those files**,
 or returning users get a stale cached copy. Simplest is to replace the version string everywhere at once
 (`sed -i "s/<old>/<new>/g" index.html sw.js`) and grep it back (`grep -n "v=[0-9]" index.html`).
 There's no script for this; it's manual.
@@ -145,7 +148,9 @@ has some historical drift/dupes — trust the comment text over the number):
 10. Places render list (wishlist/visited cards)
 11. Dashboard analytics
 12. Real-time couple sync engine (Firebase REST polling — see above)
-13. AI chatbot interface (Gemini-backed date-course planner)
+13. AI 플래너 leftovers: the API-key banner, `cleanAndParseJSON`, and the course map-pin / save-to-wishlist
+    helpers (`aiCoursePlacesStore`, `viewCoursePlaceOnMap`, `openCourseSaveDateModal`) that `course.js` calls.
+    The old free-text chat is gone (v415).
 14. Settings logic
 15. UI helpers, calendar/memory gallery engines, mobile pairing/QR modal
 16. (moved out) Photo Studio, now [`studio.js`](studio.js)
@@ -232,6 +237,34 @@ layout; the rules that matter:
   every stage from baby up has a `-blink` frame used for blinking and sleeping.
 - Testing against room 77: write test answers/moods under a non-date key (e.g. `daily/test-…`) and
   delete them afterwards — real dates are what the partner sees.
+
+## 버킷리스트 · 서로 사용 설명서 (`together.js`)
+
+Two tiles under the dashboard stats open two modals. Loaded after `couple.js` and reads its state (`couple.me`,
+`couple.pet.bornAt`, `couple.versions`); couple.js calls in behind `typeof` guards (`togetherStart` once at
+start-up, `togetherAfterPoll` after each poll, `togetherBucketPoints` inside `couplePoints`, `togetherBadgeStats`
+inside `coupleBadgeStats`). Cloud layout is in its header comment; the rules that matter:
+
+- Bucket items are one node each (`bucket/{id}`) and either partner may edit any of them, so edits PATCH only
+  the changed fields. The "we did it" photo lives apart (`bucketPhotos/{id}`) and is fetched only when opened;
+  the list carries a ~160px `thumb`.
+- `manual/{A|B}` is written only by its owner (whole node, PUT).
+- Every change also writes `couple/versions/{bucket|manual}` = now. couple.js already reads `couple/` whole on
+  every poll, so the other phone sees the change without an extra request and refetches only what moved.
+- A ticked bucket item dated after the character was born is +3 points — derived, like the rest.
+- When testing, stub `togetherFetch` for non-GET calls (and `coupleCheckBadges`, `couplePutJson`): ticking an
+  item adds points (can trigger the level-up/stage key in localStorage) and badges.
+
+## AI 플래너 — 날씨 맞춤 코스 (`course.js`)
+
+A form (date, area, time window, vibes, budget, extra request) replaces the old chat. Flow: area → coordinates
+(Kakao keyword search, then Kakao address search, then Open-Meteo geocoding) → that day's forecast and fine dust
+from **Open-Meteo** (free, no key, CORS-open; forecast reaches ~16 days, air quality ~5) → Gemini with the
+weather, nearby wishlist/visited places from `db.places`, festivals on that day (`festivalItems`) and both
+partners' food notes (`togetherManualFoodNotes()`) → every returned place is looked up in Kakao Places near the
+area; a hit replaces the AI's address/coordinates, a miss is shown as "지도에서 못 찾았어요". The last 3
+courses are kept per device (`aura_course_last_{room}`); form choices in `aura_course_prefs`. The festival
+panel's AI button calls `coursePlanFromFestival(ev)`.
 
 ## Gemini integration notes
 

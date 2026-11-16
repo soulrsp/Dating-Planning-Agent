@@ -22,6 +22,7 @@
 //   couple/presence/{A|B}           = ms timestamp, refreshed every minute while the app is open
 //   couple/hearts/{A|B}             = { n, at }      hearts sent so far (the other side reacts)
 //   couple/badges/{id}              = ms             when a badge was first earned (see COUPLE_BADGES)
+//   couple/versions/{bucket|manual} = ms             change markers for together.js (버킷리스트, 사용 설명서)
 // Each person only ever writes their own leaves, so two phones saving at once can't overwrite each
 // other. Character points, stage and streak are never stored: they are recomputed from the history,
 // so both phones always agree. Dates are the device's local calendar day.
@@ -40,7 +41,8 @@ const COUPLE_CHAR_BASE = "images/character/";
 
 // Points → stage. Earned from the day's question (both +3, one +1), moods (both +1), each person's
 // first heart of the day (+1 each), places visited after the character was born (+2) and 꾸민 사진
-// saved after it (+1). Hearts beyond the first of the day still animate but add nothing.
+// saved after it (+1), and bucket-list items ticked after it (+3, together.js). Hearts beyond the
+// first of the day still animate but add nothing.
 const COUPLE_STAGES = [
     { min: 0, name: "알" }, { min: 5, name: "아기" }, { min: 20, name: "어린이" },
     { min: 50, name: "청소년" }, { min: 100, name: "어른" }, { min: 200, name: "전설" }
@@ -236,6 +238,7 @@ const couple = {
     pet: {},             // { name, bornAt }
     presence: {},        // { A: ms, B: ms }
     hearts: {},          // { A: {n, at}, B: {n, at} }
+    versions: {},        // { bucket: ms, manual: ms } — together.js refetches when these move
     pickerOpen: false,
     answerOpen: false,
     draftMood: null,
@@ -354,6 +357,7 @@ async function coupleLoadMeta() {
     couple.pet = meta.pet || {};
     couple.presence = meta.presence || {};
     couple.hearts = meta.hearts || {};
+    couple.versions = meta.versions || {};
     // Keep badges this phone just earned even if the cloud copy doesn't have them yet.
     couple.badges = Object.assign({}, couple.badges, meta.badges || {});
     couple.metaLoaded = true;
@@ -372,6 +376,7 @@ async function couplePoll() {
         if (n) couple.daily[days[i]] = n; else delete couple.daily[days[i]];
     });
     coupleCheckPartnerPresence();
+    if (typeof togetherAfterPoll === "function") togetherAfterPoll().catch(() => { }); // together.js
     if (JSON.stringify([days.map(d => couple.daily[d] || null), couple.pet, couple.hearts, couple.badges]) !== before) {
         coupleSaveCache();
         coupleNotifyPartnerNews();
@@ -395,7 +400,7 @@ window.coupleStartSync = async function() {
     if (!syncRoomId) return;
     if (couple.loadedRoom !== syncRoomId) {
         couple.loadedRoom = syncRoomId;
-        Object.assign(couple, { me: null, openState: undefined, members: {}, pet: {}, presence: {}, hearts: {}, badges: {}, placeStats: null, metaLoaded: false, historyLoaded: false, partnerWasOnline: false });
+        Object.assign(couple, { me: null, openState: undefined, members: {}, pet: {}, presence: {}, hearts: {}, versions: {}, badges: {}, placeStats: null, metaLoaded: false, historyLoaded: false, partnerWasOnline: false });
         coupleLoadCache();
     }
     coupleRender();
@@ -407,6 +412,7 @@ window.coupleStartSync = async function() {
     } catch (e) {
         console.warn("[Couple] initial load failed (using cache):", e);
     }
+    if (typeof togetherStart === "function") await togetherStart().catch(e => console.warn("[Couple] together start failed", e)); // together.js
     await coupleRefreshExtraPoints();
     // Remember the stage we start at, so only growth that happens from now on gets celebrated.
     try {
@@ -522,6 +528,7 @@ function coupleDayStats(day) {
 
 function couplePoints() {
     let pts = couple.extraPoints;
+    if (typeof togetherBucketPoints === "function") pts += togetherBucketPoints(); // together.js
     for (const day of Object.keys(couple.daily)) {
         const s = coupleDayStats(day);
         pts += s.both ? 3 : s.one ? 1 : 0;
@@ -939,7 +946,12 @@ const COUPLE_BADGES = [
     { id: "photo100", icon: "📸", name: "추억 수집가", desc: "장소 사진 100장 모으기", stat: "photos", goal: 100 },
     { id: "studio10", icon: "🎀", name: "꾸미기 장인", desc: "꾸민 사진 10장 만들기", stat: "creations", goal: 10 },
     { id: "d100", icon: "💯", name: "100일", desc: "사귄 지 100일", stat: "days", goal: 100 },
-    { id: "d365", icon: "💍", name: "1주년", desc: "사귄 지 1년", stat: "days", goal: 365 }
+    { id: "d365", icon: "💍", name: "1주년", desc: "사귄 지 1년", stat: "days", goal: 365 },
+    // v415 (together.js)
+    { id: "bucket1", icon: "🪣", name: "첫 버킷 달성", desc: "버킷리스트 하나 이루기", stat: "bucketDone", goal: 1 },
+    { id: "bucket10", icon: "🌠", name: "버킷 헌터", desc: "버킷리스트 10개 이루기", stat: "bucketDone", goal: 10 },
+    { id: "bucket30", icon: "📜", name: "꿈 부자", desc: "버킷리스트에 30개 담기", stat: "bucketAll", goal: 30 },
+    { id: "manual", icon: "📖", name: "서로 사용법 마스터", desc: "둘 다 사용 설명서 10칸 이상 채우기", stat: "manualBoth", goal: 1 }
 ];
 
 function coupleBadgeStats() {
@@ -959,7 +971,8 @@ function coupleBadgeStats() {
     const hearts = ["A", "B"].reduce((sum, k) => sum + (Number(couple.hearts[k] && couple.hearts[k].n) || 0), 0);
     let dayNum = 0;
     try { dayNum = coupleDayNumber(new Date()); } catch (_) { }
-    return Object.assign({ qBoth, same, streak, moods, hearts, stage: coupleStageFor(couplePoints()), days: dayNum }, couple.placeStats || {});
+    return Object.assign({ qBoth, same, streak, moods, hearts, stage: coupleStageFor(couplePoints()), days: dayNum }, couple.placeStats || {},
+        typeof togetherBadgeStats === "function" ? togetherBadgeStats() : {});
 }
 
 function coupleBadgeSeenKey() { return `aura_couple_badges_seen_${syncRoomId}`; }

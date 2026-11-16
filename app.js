@@ -766,8 +766,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // AI Chatbot planner
-    document.getElementById("chat-input-form").addEventListener("submit", handleChatSubmit);
+    // AI 플래너 (날씨 맞춤 코스) lives in course.js and is drawn by courseInit() from startCloudSyncLoop().
 
     // Settings actions
     document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
@@ -3974,9 +3973,7 @@ window.askAIAboutFestival = function(id) {
     if (body) body.style.display = "none";
     if (chevron) chevron.style.transform = "";
 
-    document.getElementById("chat-user-input").value = `${ev.title}(${ev.addr}) 근처로 데이트 코스 추천해줘. 맛집, 근처 걸을만한 곳, 유적지, 유명 장소 등을 종합적으로 추천해줘`;
-    document.getElementById("chat-input-form").dispatchEvent(new Event("submit"));
-    document.querySelector(".chat-container")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (typeof coursePlanFromFestival === "function") coursePlanFromFestival(ev); // course.js
 };
 
 window.addFestivalToWishlist = async function(id) {
@@ -4816,6 +4813,7 @@ function startCloudSyncLoop() {
     loadMemoryPhotosFromCloud();
     if (typeof syncCreations === "function") syncCreations(); // studio.js
     if (typeof coupleStartSync === "function") coupleStartSync(); // couple.js
+    if (typeof courseInit === "function") courseInit(); // course.js
 }
 
 // Derives the same per-place cloud key used by uploadPhotoToCloud/photoVersions, so a place's
@@ -5989,7 +5987,8 @@ window.forceCloudSync = async function() {
     }
 };
 
-// 13. AI Chatbot Interface
+// 13. AI 플래너 — the planner itself is course.js (날씨 맞춤 코스); what stays here is the API-key
+// banner, the JSON cleaner and the map/wishlist helpers its course cards call.
 function checkApiKeyAlert() {
     const warning = document.getElementById("api-key-warning");
     if (!geminiApiKey) {
@@ -5997,131 +5996,6 @@ function checkApiKeyAlert() {
     } else {
         warning.classList.add("hidden");
     }
-}
-
-async function handleChatSubmit(e) {
-    e.preventDefault();
-    const inputEl = document.getElementById("chat-user-input");
-    const query = inputEl.value.trim();
-    if (!query) return;
-
-    inputEl.value = "";
-    appendChatMessage(query, "user");
-
-    if (!geminiApiKey) {
-        appendChatMessage("죄송해요! Gemini API Key가 등록되어 있지 않아요. [설정] 탭으로 가서 API Key를 저장한 후 다시 말해 주세요 🌸", "bot");
-        return;
-    }
-
-    const thinkingId = appendChatMessage("생각하는 중입니다... 러블리 코스를 짜고 있어요! ✨", "bot", true);
-    
-    try {
-        const responseText = await callGeminiAPI(query);
-        removeChatBubble(thinkingId);
-        
-        try {
-            const courseData = cleanAndParseJSON(responseText);
-            renderAICourseCard(courseData);
-        } catch(parseErr) {
-            appendChatMessage(responseText, "bot");
-        }
-    } catch(err) {
-        removeChatBubble(thinkingId);
-        const errLower = (err.message || "").toLowerCase();
-        if (errLower.includes("quota") || errLower.includes("exceeded") || errLower.includes("429") || errLower.includes("resource_exhausted")) {
-            showToast("Gemini API 무료 사용량 한도가 초과되었습니다. [에이전트 설정] 탭에서 유효한 키를 확인하시거나 잠시 후 다시 시도해 주세요! 🔑", "warning");
-            
-            const fallbackCourse = {
-                itinerary_title: "🌸 AURA 러블리 시그니처 데이트 코스",
-                description: "(Gemini API 일일 사용량 한도 초과로 AURA 시그니처 추천 코스를 안심 제공해 드립니다!) 연남동 경의선 숲길을 손잡고 걷는 낭만적인 데이트 코스입니다.",
-                places: [
-                    {
-                        name: "연남동 경의선 숲길 공원",
-                        category: "Park",
-                        lat: 37.5612,
-                        lng: 126.9248,
-                        address: "서울특별시 마포구 연남동 경의선숲길",
-                        notes: "손잡고 조용히 대화하며 산책하기 좋은 오솔길 🌿",
-                        estimatedCost: 0
-                    },
-                    {
-                        name: "연남동 테일러커피",
-                        category: "Cafe",
-                        lat: 37.5618,
-                        lng: 126.9255,
-                        address: "서울특별시 마포구 연희로1길 인근",
-                        notes: "달콤한 아인슈페너 커피와 시그니처 디저트가 일품인 카페 ☕",
-                        estimatedCost: 18000
-                    },
-                    {
-                        name: "연남동 카쿠시타",
-                        category: "Restaurant",
-                        lat: 37.5624,
-                        lng: 126.9262,
-                        address: "서울특별시 마포구 성미산로 인근",
-                        notes: "분위기 좋은 일식 명란 크림 파스타 & 와인 다이닝 🍝🍷",
-                        estimatedCost: 45000
-                    }
-                ]
-            };
-            renderAICourseCard(fallbackCourse);
-        } else {
-            appendChatMessage("AI 코스 실시간 추천에 문제가 생겼어요: " + err.message, "bot");
-        }
-    }
-}
-
-function appendChatMessage(text, sender, isThinking = false) {
-    const container = document.getElementById("chat-messages-box");
-    const bubbleWrapper = document.createElement("div");
-    const uniqueId = "msg-" + Date.now();
-    
-    bubbleWrapper.className = `message message-${sender}`;
-    bubbleWrapper.id = uniqueId;
-    
-    bubbleWrapper.innerHTML = `
-        <div class="msg-bubble">
-            ${isThinking ? `<div class="thinking-spinner"></div>` : ''}
-            <span>${escapeHtml(text).replace(/\n/g, "<br>")}</span>
-        </div>
-    `;
-    
-    container.appendChild(bubbleWrapper);
-    container.scrollTop = container.scrollHeight;
-    
-    return uniqueId;
-}
-
-function removeChatBubble(id) {
-    const bubble = document.getElementById(id);
-    if (bubble) bubble.remove();
-}
-
-async function callGeminiAPI(userPrompt) {
-    const systemInstruction = `You are a professional local Date Course AI Planner.
-Your task is to plan a lovely and romantic date itinerary of 8 to 10 places inside South Korea based on the user's requested region, vibe, and budget.
-Include a genuine mix of categories across the list — restaurants, cafes, walkable parks/streets, and (when relevant to the request) nearby events/festivals — rather than repeating one category.
-Order the places in a sensible visiting sequence (e.g. a walk, then a meal, then a cafe, then an evening spot).
-Return your output strictly as a structured JSON object. Do not include markdown tags.
-
-JSON Schema format:
-{
-  "itinerary_title": "Course Title (e.g. Yeonnam-dong Rose Path Walk)",
-  "description": "General romantic summary of the date course",
-  "places": [
-    {
-      "name": "Exact place/venue name",
-      "category": "Cafe" | "Restaurant" | "Bar" | "Park" | "Museum" | "Other",
-      "lat": float (estimations inside Korea, e.g., 37.5612),
-      "lng": float (estimations inside Korea, e.g., 126.9248),
-      "address": "Best-estimate real Korean street address of the place only (e.g. 서울특별시 마포구 동교로 123) — no descriptive text",
-      "notes": "Menu suggestion, aesthetic atmosphere details, why it fits",
-      "estimatedCost": integer (KRW cost per couple, e.g. 20000)
-    }
-  ]
-}`;
-
-    return await callGeminiRaw(`User request: ${userPrompt}`, systemInstruction, true);
 }
 
 function cleanAndParseJSON(rawText) {
@@ -6138,75 +6012,10 @@ function cleanAndParseJSON(rawText) {
     return JSON.parse(cleanText.trim());
 }
 
-// Course places keyed by their card's uniqueCourseId — looked up by both the per-place "지도에서
+// Course places keyed by their card's id (course.js fills it) — looked up by both the per-place "지도에서
 // 보기" buttons and the save-to-wishlist flow, instead of round-tripping the whole array through an
 // encodeURIComponent(JSON.stringify(...)) onclick attribute.
 const aiCoursePlacesStore = {};
-
-function renderAICourseCard(course) {
-    const container = document.getElementById("chat-messages-box");
-    const bubbleWrapper = document.createElement("div");
-    bubbleWrapper.className = "message message-bot";
-
-    const uniqueCourseId = "course-" + Date.now();
-    aiCoursePlacesStore[uniqueCourseId] = course.places;
-
-    let placesHtml = "";
-    course.places.forEach((place, index) => {
-        const hasCoords = typeof place.lat === "number" && typeof place.lng === "number";
-        placesHtml += `
-            <div class="itinerary-step">
-                <div class="itinerary-step-header">
-                    <strong>${index + 1}. ${escapeHtml(place.name)}</strong>
-                    <span style="font-size:0.75rem; color:var(--color-primary);">${escapeHtml(place.category)}</span>
-                </div>
-                <div class="itinerary-step-desc">${escapeHtml(place.notes)}</div>
-                <div class="itinerary-transit">
-                    <i data-lucide="coins" style="width:12px; height:12px;"></i>
-                    <span>예상 비용: ${formatCurrency(place.estimatedCost)}</span>
-                </div>
-                <div style="display:flex; gap:0.4rem; margin-top:0.4rem; flex-wrap:wrap;">
-                    ${hasCoords ? `
-                    <button type="button" class="btn btn-outline" style="padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="viewCoursePlaceOnMap('${uniqueCourseId}', ${index})">
-                        <i data-lucide="map-pin" style="width:12px;height:12px;"></i> 지도에서 보기
-                    </button>` : ""}
-                    <button type="button" class="btn btn-outline" style="padding:0.15rem 0.5rem; font-size:0.68rem; height:22px; border-radius:8px;" onclick="openSinglePlaceSaveDateModal('${uniqueCourseId}', ${index})">
-                        <i data-lucide="heart-plus" style="width:12px;height:12px;"></i> 위시리스트 추가
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-
-    bubbleWrapper.innerHTML = `
-        <div class="msg-bubble" style="width: 100%;">
-            <div style="margin-bottom: 0.5rem;">🌸 <strong>AI 플래너가 추천하는 데이트 코스</strong></div>
-            <div>${escapeHtml(course.description)}</div>
-
-            <div class="itinerary-card" id="${uniqueCourseId}">
-                <div class="itinerary-card-title">
-                    <i data-lucide="heart"></i>
-                    <span>${escapeHtml(course.itinerary_title)}</span>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:0.5rem; margin:0.75rem 0;">
-                    ${placesHtml}
-                </div>
-                <div class="itinerary-meta">
-                    <span>추천 데이트 코스 장소: ${course.places.length}곳</span>
-                </div>
-                <div style="margin-top:0.5rem;">
-                    <button class="btn btn-primary" style="width:100%; justify-content:center; padding:0.5rem;" onclick="openCourseSaveDateModal('${uniqueCourseId}')">
-                        <i data-lucide="folder-heart"></i> 이 코스 전체 보관함에 저장
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.appendChild(bubbleWrapper);
-    container.scrollTop = container.scrollHeight;
-    lucide.createIcons();
-}
 
 // Separate from naverMarkers[]/leafletMarkersGroup and from festivalTempMarker so a course-place pin
 // isn't wiped by updateMapMarkers() and doesn't fight the festival panel's own temp marker.
@@ -6277,8 +6086,8 @@ window.viewCoursePlaceOnMap = function(courseId, idx) {
     }, 300);
 };
 
-// "뒤로가기" — returns to the AI 플래너 tab without losing the chat history, since switchTab()
-// only toggles a CSS class and never tears down #chat-messages-box's DOM.
+// "뒤로가기" — returns to the AI 플래너 tab; switchTab() only toggles a CSS class, so the course
+// cards are still there.
 window.backToAIPlannerFromMap = function() {
     const backBtn = document.getElementById("btn-back-to-ai-planner");
     if (backBtn) backBtn.classList.add("hidden");

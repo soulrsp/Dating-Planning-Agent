@@ -80,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261116_v414">
+    <link rel="stylesheet" href="style.css?v=20261116_v415">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -222,6 +222,16 @@
                             <span style="font-size:0.72rem; font-weight:700; color:var(--color-secondary); display:inline-flex; align-items:center; gap:4px;">📸 함께 다녀온 장소</span>
                             <span id="stat-visited-count" style="font-size:0.85rem; font-weight:800; color:var(--color-secondary);">0</span>
                         </div>
+                    </div>
+
+                    <!-- 버킷리스트 / 서로 사용 설명서 (together.js) -->
+                    <div class="stats-row together-row">
+                        <button type="button" class="together-tile is-bucket" onclick="togetherOpenBucket()">
+                            <span>🪣 버킷리스트</span><b id="tile-bucket-count">담기 ›</b>
+                        </button>
+                        <button type="button" class="together-tile is-manual" onclick="togetherOpenManual()">
+                            <span>📖 사용 설명서</span><b id="tile-manual-note">보기 ›</b>
+                        </button>
                     </div>
 
                     <!-- 오늘의 우리 (couple.js) -->
@@ -438,33 +448,9 @@
                         </div>
                     </div>
 
-                    <div class="chat-container">
-                        <div class="chat-header">
-                            <div class="bot-info">
-                                <div class="bot-avatar"><i data-lucide="sparkles"></i></div>
-                                <div>
-                                    <div class="bot-name">AURA 러블리 AI 플래너</div>
-                                    <div class="bot-status">가고 싶은 동네나 원하는 테마를 쏙쏙 추천해 드려요!</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Chat Message Area -->
-                        <div class="chat-messages" id="chat-messages-box">
-                            <div class="message message-bot">
-                                <div class="msg-bubble">
-                                    안녕하세요, 공주님 왕자님! 💖 오늘 데이트는 어디로 떠나고 싶으신가요?<br>
-                                    예: "홍대 예쁜 카페랑 아기자기한 밥집 코스 짜줘", "익선동 한옥 뷰 추천해줘" 등 마음껏 말씀하세요!
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Message Input Form -->
-                        <form class="chat-input-area" id="chat-input-form">
-                            <input type="text" placeholder="메시지를 입력하세요 (예: 삼청동 조용하고 분위기 넘치는 산책 코스)" id="chat-user-input" required>
-                            <button type="submit" class="btn-send"><i data-lucide="send"></i></button>
-                        </form>
-                    </div>
+                    <!-- 날씨 맞춤 AI 데이트 코스 (course.js) -->
+                    <div class="card course-builder" id="course-builder"></div>
+                    <div id="course-results" class="course-results"></div>
                 </div>
             </section>
 
@@ -1036,6 +1022,28 @@
         </div>
     </div>
 
+    <!-- 🪣 우리의 버킷리스트 (together.js) -->
+    <div class="modal-overlay" id="modal-together-bucket">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>🪣 우리의 버킷리스트</h3>
+                <button class="modal-close" onclick="togetherCloseBucket()"><i data-lucide="x"></i></button>
+            </div>
+            <div id="together-bucket-body" class="modal-body studio-body"></div>
+        </div>
+    </div>
+
+    <!-- 📖 서로 사용 설명서 (together.js) -->
+    <div class="modal-overlay" id="modal-together-manual">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>📖 서로 사용 설명서</h3>
+                <button class="modal-close" onclick="togetherCloseManual()"><i data-lucide="x"></i></button>
+            </div>
+            <div id="together-manual-body" class="modal-body studio-body"></div>
+        </div>
+    </div>
+
     <!-- Modal: 카톡 프사 maker (profile 1:1 / couple 반반 / background 9:16) -->
     <div class="modal-overlay" id="modal-kakao">
         <div class="modal-card studio-card">
@@ -1259,17 +1267,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261116_v414"></script>
+    <script src="app.js?v=20261116_v415"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261116_v414"></script>
+    <script src="studio.js?v=20261116_v415"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261116_v414"></script>
+    <script src="couple.js?v=20261116_v415"></script>
+    <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
+    <script src="together.js?v=20261116_v415"></script>
+    <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
+    <script src="course.js?v=20261116_v415"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261116_v414').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261116_v415').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
