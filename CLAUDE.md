@@ -39,13 +39,13 @@ python -m http.server 8123
 
 This matches `.claude/launch.json` (`aura-static`, port 8123) so `preview_start` picks it up
 automatically. There is no test suite, linter, or build command — the only mechanical check available
-is `node --check app.js && node --check studio.js` for syntax validation before calling a change done.
+is `node --check app.js && node --check studio.js && node --check couple.js` for syntax validation before calling a change done.
 
 ## Critical workflow rule: cache-busting version bump
 
-`index.html` loads `style.css?v=<version>`, `app.js?v=<version>`, `studio.js?v=<version>` and registers
+`index.html` loads `style.css?v=<version>`, `app.js?v=<version>`, `studio.js?v=<version>`, `couple.js?v=<version>` and registers
 `sw.js?v=<version>`, and `sw.js` has its own `CACHE_NAME` containing the same version string. **All of them
-must be bumped together on every change that touches `app.js`, `studio.js`, `index.html`, or `style.css`**,
+must be bumped together on every change that touches `app.js`, `studio.js`, `couple.js`, `index.html`, or `style.css`**,
 or returning users get a stale cached copy. Simplest is to replace the version string everywhere at once
 (`sed -i "s/<old>/<new>/g" index.html sw.js`) and grep it back (`grep -n "v=[0-9]" index.html`).
 There's no script for this; it's manual.
@@ -200,6 +200,28 @@ headed `// ── …` comments: layouts/filters/patterns → base render → st
   two couple halves) and 1080×1920 (background). Profile videos stay under KakaoTalk's 6s limit
   and background videos under 15s.
 
+
+## 오늘의 우리 (`couple.js`)
+
+The dashboard card under the D-day card: today's mood, the daily question, the shared character
+(default name 명똑똑, renamable in-app) and presence/hearts. Same loading model as `studio.js`
+(started from `startCloudSyncLoop()` behind a `typeof` guard). Its header comment documents the cloud
+layout; the rules that matter:
+
+- **Each partner writes only their own leaves** (`daily/{date}/mood|answer/{A|B}`,
+  `couple/presence/{A|B}`, `couple/hearts/{A|B}`), so the two phones never overwrite each other. Which
+  partner a device is comes from `couple/members` (Google email → A/B), cached in `aura_me_{room}`.
+- **Points, stage and streak are derived, never stored**, from the `daily` history plus visits and
+  꾸민 사진 dated after `couple/pet.bornAt`. Don't add a stored counter: both phones must compute the
+  same value.
+- The day's question index comes from a seeded shuffle of `COUPLE_QUESTIONS` (same on both phones);
+  `daily/{date}/qi` overrides it only when someone swapped the question before anyone answered.
+- Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
+  character), cut into transparent WebP sprites in `images/character/` by
+  `design/character-src/cut.py` (sources alongside). Only the adult stage has expression variants;
+  every stage from baby up has a `-blink` frame used for blinking and sleeping.
+- Testing against room 77: write test answers/moods under a non-date key (e.g. `daily/test-…`) and
+  delete them afterwards — real dates are what the partner sees.
 
 ## Gemini integration notes
 

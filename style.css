@@ -3394,3 +3394,142 @@ body {
 .couple-week-cell.is-day { font-size: 0.6rem; color: var(--color-text-med); }
 .couple-foot { display: flex; justify-content: flex-end; }
 .couple-link { background: none; border: none; padding: 0; font-size: 0.65rem; color: var(--color-text-med); text-decoration: underline; cursor: pointer; }
+
+/* ---- 오늘의 우리: character, daily question, archive (couple.js, v412) ---- */
+.couple-pet-row { display: flex; align-items: center; gap: 0.6rem; }
+.couple-pet {
+    position: relative; flex-shrink: 0; width: 118px; height: 118px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+}
+.couple-pet img {
+    width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none;
+    transform-origin: 50% 92%;
+}
+/* base states */
+.couple-pet.pet-idle img, .couple-pet.pet-happy img, .couple-pet.pet-bloom img { animation: pet-float 2.8s ease-in-out infinite; }
+.couple-pet.pet-happy img { animation-duration: 1.6s; }
+.couple-pet.pet-sleepy img { animation: pet-nod 3.2s ease-in-out infinite; }
+.couple-pet.pet-egg img { animation: pet-wobble 2.4s ease-in-out infinite; }
+@keyframes pet-float {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    50% { transform: translateY(-5px) scale(0.98, 1.02); }
+}
+@keyframes pet-nod {
+    0%, 60%, 100% { transform: rotate(0deg) translateY(0); }
+    70% { transform: rotate(-4deg) translateY(2px); }
+    80% { transform: rotate(3deg) translateY(4px); }
+    90% { transform: rotate(-2deg) translateY(1px); }
+}
+@keyframes pet-wobble {
+    0%, 70%, 100% { transform: rotate(0deg); }
+    76% { transform: rotate(-7deg); }
+    82% { transform: rotate(6deg); }
+    88% { transform: rotate(-4deg); }
+    94% { transform: rotate(2deg); }
+}
+/* one-shot reactions (override the loop while they run) */
+.couple-pet.pet-jump img { animation: pet-jump 0.9s cubic-bezier(.3,.7,.4,1) 2 !important; }
+@keyframes pet-jump {
+    0% { transform: translateY(0) scale(1.1, 0.9); }
+    35% { transform: translateY(-26px) scale(0.92, 1.1); }
+    65% { transform: translateY(0) scale(1.08, 0.94); }
+    100% { transform: translateY(0) scale(1, 1); }
+}
+.couple-pet.pet-love img { animation: pet-love 0.5s ease-in-out 3 !important; }
+@keyframes pet-love {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    30% { transform: scale(1.08) rotate(-4deg); }
+    60% { transform: scale(1.04) rotate(4deg); }
+}
+.couple-pet.pet-squish img { animation: pet-squish 0.55s ease-out 1 !important; }
+@keyframes pet-squish {
+    0% { transform: scale(1, 1); }
+    30% { transform: scale(1.18, 0.8); }
+    60% { transform: scale(0.92, 1.1); }
+    100% { transform: scale(1, 1); }
+}
+.couple-pet.pet-bloom-burst img { animation: pet-bloom 1.4s ease-out 1 !important; filter: drop-shadow(0 0 10px rgba(255, 210, 80, 0.9)); }
+@keyframes pet-bloom {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.12); }
+    60% { transform: scale(0.97); }
+    100% { transform: scale(1); }
+}
+.couple-pet.pet-bloom::before {
+    content: ""; position: absolute; inset: 8% 8% 4%; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 220, 120, 0.45), rgba(255, 220, 120, 0) 70%);
+    animation: pet-glow 2.2s ease-in-out infinite;
+}
+@keyframes pet-glow { 0%, 100% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } }
+/* floating effects */
+.couple-pet-fx { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
+.couple-fx { position: absolute; bottom: 45%; line-height: 1; opacity: 0; }
+.couple-fx.fx-float { animation: fx-float 2.2s ease-out forwards; }
+.couple-fx.fx-pop { animation: fx-pop 1.2s ease-out forwards; }
+.couple-fx.fx-sparkle { animation: fx-sparkle 1.8s ease-out forwards; }
+@keyframes fx-float {
+    0% { opacity: 0; transform: translateY(0) scale(0.6); }
+    15% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-70px) scale(1.1); }
+}
+@keyframes fx-pop {
+    0% { opacity: 0; transform: translateY(0) scale(0.4); }
+    30% { opacity: 1; transform: translateY(-30px) scale(1.1); }
+    100% { opacity: 0; transform: translateY(-45px) scale(0.8); }
+}
+@keyframes fx-sparkle {
+    0% { opacity: 0; transform: translate(0, 10px) scale(0.3) rotate(0deg); }
+    30% { opacity: 1; transform: translate(0, -35px) scale(1.2) rotate(90deg); }
+    100% { opacity: 0; transform: translate(0, -60px) scale(0.6) rotate(180deg); }
+}
+.couple-zz { position: absolute; top: 8%; right: 6%; z-index: 2; pointer-events: none; color: #8F7FC7; font-weight: 800; }
+.couple-zz span { position: absolute; opacity: 0; animation: zz 2.4s ease-in-out infinite; font-size: 0.9rem; }
+.couple-zz span:nth-child(2) { animation-delay: 0.8s; font-size: 1.05rem; }
+.couple-zz span:nth-child(3) { animation-delay: 1.6s; font-size: 1.2rem; }
+@keyframes zz {
+    0% { opacity: 0; transform: translate(0, 10px); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: translate(14px, -22px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .couple-pet img, .couple-fx, .couple-zz span { animation: none !important; }
+}
+.couple-pet-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.couple-pet-name {
+    align-self: flex-start; background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+    font-size: 1rem; font-weight: 800; color: var(--color-text-high);
+}
+.couple-pet-name span { font-size: 0.7rem; opacity: 0.6; }
+.couple-pet-stage { font-size: 0.72rem; color: var(--color-text-med); }
+.couple-pet-bar { height: 7px; border-radius: 4px; background: rgba(124, 196, 120, 0.18); overflow: hidden; }
+.couple-pet-bar span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #A8DD8C, #6FC27A); transition: width 0.4s; }
+.couple-pet-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.7rem; font-weight: 700; color: var(--color-text-med); min-height: 1em; }
+.couple-heart-btn {
+    align-self: flex-start; border: 1px solid rgba(255, 101, 132, 0.35); background: rgba(255, 101, 132, 0.08);
+    color: var(--color-primary); border-radius: 999px; padding: 0.25rem 0.7rem; font: inherit; font-size: 0.75rem; font-weight: 800; cursor: pointer;
+}
+.couple-heart-btn:active { transform: scale(0.94); }
+.couple-q {
+    display: flex; flex-direction: column; gap: 0.45rem; padding: 0.6rem 0.7rem; border-radius: 12px;
+    background: linear-gradient(135deg, rgba(124, 196, 120, 0.1), rgba(255, 101, 132, 0.06));
+    border: 1px solid rgba(124, 196, 120, 0.3);
+}
+.couple-q-head { display: flex; justify-content: space-between; align-items: center; }
+.couple-q-label { font-size: 0.72rem; font-weight: 800; color: #4E9A55; }
+.couple-q-text { font-size: 0.95rem; font-weight: 800; color: var(--color-text-high); word-break: keep-all; line-height: 1.4; }
+.couple-answer-btn { justify-content: center; }
+#couple-answer-text { width: 100%; box-sizing: border-box; font-size: 16px; resize: vertical; }
+.couple-ans { display: flex; gap: 0.45rem; align-items: baseline; font-size: 0.82rem; line-height: 1.45; }
+.couple-ans b { flex-shrink: 0; font-size: 0.72rem; color: var(--color-primary); min-width: 1.6rem; }
+.couple-ans span { flex: 1; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--color-text-high); }
+.couple-ans.is-locked span, .couple-ans.is-wait span { color: var(--color-text-med); }
+.couple-ans .couple-link { flex-shrink: 0; }
+.couple-foot { justify-content: space-between; }
+.couple-arch-item { padding: 0.7rem 0; border-bottom: 1px solid rgba(255, 101, 132, 0.15); display: flex; flex-direction: column; gap: 0.35rem; }
+.couple-arch-date { font-size: 0.7rem; color: var(--color-text-med); font-weight: 700; }
+/* Early stages are drawn small on the shared sprite scale (that's the growth); lift them a bit so
+   they still read well in the card, while each stage still looks bigger than the one before. */
+.couple-pet[data-stage="0"] { transform: scale(1.45); transform-origin: 50% 92%; }
+.couple-pet[data-stage="1"] { transform: scale(1.4); transform-origin: 50% 92%; }
+.couple-pet[data-stage="2"] { transform: scale(1.2); transform-origin: 50% 92%; }
+.couple-pet[data-stage="3"] { transform: scale(1.08); transform-origin: 50% 92%; }

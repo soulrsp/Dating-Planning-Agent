@@ -80,7 +80,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261116_v411">
+    <link rel="stylesheet" href="style.css?v=20261116_v412">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -1014,6 +1014,17 @@
         </div>
     </div>
 
+    <!-- Modal: 지난 질문 모아보기 (couple.js) -->
+    <div class="modal-overlay" id="modal-couple-archive">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>📖 지난 질문 모아보기</h3>
+                <button class="modal-close" onclick="coupleCloseArchive()"><i data-lucide="x"></i></button>
+            </div>
+            <div id="couple-archive-body" class="modal-body studio-body"></div>
+        </div>
+    </div>
+
     <!-- Modal: 카톡 프사 maker (profile 1:1 / couple 반반 / background 9:16) -->
     <div class="modal-overlay" id="modal-kakao">
         <div class="modal-card studio-card">
@@ -1237,17 +1248,17 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261116_v411"></script>
+    <script src="app.js?v=20261116_v412"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261116_v411"></script>
+    <script src="studio.js?v=20261116_v412"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261116_v411"></script>
+    <script src="couple.js?v=20261116_v412"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261116_v411').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261116_v412').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
