@@ -3785,3 +3785,7 @@ body {
 .couple-foot-btn.is-badge { background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(239, 250, 236, 0.9)); border-color: rgba(124, 196, 120, 0.45); }
 .couple-foot-btn.is-badge b { color: #4E9A55; }
 .couple-foot-btn.is-me { color: var(--color-text-med); }
+
+/* drawn dance poses flip on a gentle bob (v417) */
+.couple-pet.dance-frames img { animation: dance-bob 0.46s ease-in-out 7 !important; }
+@keyframes dance-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }

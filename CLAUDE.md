@@ -235,6 +235,10 @@ layout; the rules that matter:
   squish, dance). Dancing (v416) has no extra art: `coupleScheduleDance()` runs one timer (3–5 min, 2–3 on a
   happy day or with the partner online) that renders never reset, skips while sleepy or the card is closed,
   plus a once-a-day party dance on a happy day (`aura_couple_dance_{room}`) and three quick taps.
+  From baby up the dance flips through drawn poses (v417): `images/character/dance-<stage>-0..3.webp`
+  (lean left, crouch, lean right, jump), cut from the ChatGPT sheets `design/character-src/dance-<stage>.webp`
+  by `cut_dance.py`, which scales them to the stage sprite, keeps the jump's lift, pulls the paler greens to
+  the stage colour and repaints stray mint scarf (young stages) / a beige foot. The egg keeps the CSS moves.
 - Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
   character), cut into transparent WebP sprites in `images/character/` by
   `design/character-src/cut.py` (sources alongside). Only the adult stage has expression variants;

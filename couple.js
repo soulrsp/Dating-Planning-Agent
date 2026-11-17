@@ -636,8 +636,23 @@ function coupleSpawn(fx, chars, count, cls) {
 // One-shot reactions on top of the base state: jump (partner arrived), love (heart received / tap),
 // bloom (anniversary / level-up), squish (tap).
 const COUPLE_ONESHOT_CLASSES = ["pet-jump", "pet-love", "pet-bloom-burst", "pet-squish",
-    "pet-dance", "dance-sway", "dance-bounce", "dance-spin", "dance-wiggle", "dance-party"];
+    "pet-dance", "dance-sway", "dance-bounce", "dance-spin", "dance-wiggle", "dance-party", "dance-frames"];
 let coupleOneShotTimer = null;
+
+// Dance poses drawn for each stage from baby up (images/character/dance-<stage>-0..3.webp, cut by
+// design/character-src/cut_dance.py): 0 lean left, 1 crouch, 2 lean right, 3 jump. Played in this order.
+const COUPLE_DANCE_STAGES = [1, 2, 3, 4, 5];
+const COUPLE_DANCE_SEQ = [0, 1, 2, 1, 0, 1, 2, 3];
+const COUPLE_DANCE_FRAME_MS = 230;
+let coupleDanceFrameTimer = null;
+const coupleDanceWarm = new Set();
+function coupleDanceFrame(stage, i) { return `${COUPLE_CHAR_BASE}dance-${stage}-${i}.webp`; }
+// Load the current stage's poses ahead of the first dance so the swaps never flash.
+function coupleWarmDance(stage) {
+    if (!COUPLE_DANCE_STAGES.includes(stage) || coupleDanceWarm.has(stage)) return;
+    coupleDanceWarm.add(stage);
+    for (let i = 0; i < 4; i++) { const im = new Image(); im.src = coupleDanceFrame(stage, i); }
+}
 
 function coupleAnimate(kind, opts = {}) {
     const { wrap, img, fx } = couplePetEls();
@@ -646,6 +661,7 @@ function coupleAnimate(kind, opts = {}) {
     wrap.classList.remove(...COUPLE_ONESHOT_CLASSES);
     void wrap.offsetWidth; // restart the CSS animation
     clearTimeout(coupleOneShotTimer);
+    clearInterval(coupleDanceFrameTimer);
     let ms = 1600;
     if (kind === "jump") {
         wrap.classList.add("pet-jump");
@@ -663,11 +679,22 @@ function coupleAnimate(kind, opts = {}) {
     } else if (kind === "dance") {
         // The egg can only hop; from baby up pick one of the moves. "party" (a happy day / both online)
         // is the bigger version with more notes.
-        const moves = ["dance-sway", "dance-bounce", "dance-spin", "dance-wiggle"];
-        const move = stage === 0 ? "dance-bounce" : moves[Math.floor(Math.random() * moves.length)];
-        wrap.classList.add("pet-dance", move);
+        if (COUPLE_DANCE_STAGES.includes(stage)) {
+            // Drawn poses: flip through them on a gentle bob.
+            wrap.classList.add("pet-dance", "dance-frames");
+            let k = 0;
+            const step = () => {
+                if (!img.isConnected) { clearInterval(coupleDanceFrameTimer); return; }
+                img.src = coupleDanceFrame(stage, COUPLE_DANCE_SEQ[k++ % COUPLE_DANCE_SEQ.length]);
+            };
+            step();
+            coupleDanceFrameTimer = setInterval(step, COUPLE_DANCE_FRAME_MS);
+        } else {
+            // The egg (no drawn poses): one of the CSS-only moves.
+            const moves = ["dance-sway", "dance-bounce", "dance-spin", "dance-wiggle"];
+            wrap.classList.add("pet-dance", stage === 0 ? "dance-bounce" : moves[Math.floor(Math.random() * moves.length)]);
+        }
         if (opts.party) wrap.classList.add("dance-party");
-        if (stage === 4) img.src = coupleSprite(4, "happy");
         ms = 3200;
         const notes = opts.party ? ["🎵", "🎶", "✨", "💚"] : ["🎵", "🎶"];
         coupleSpawn(fx, notes, opts.party ? 4 : 3, "fx-note");
@@ -675,6 +702,7 @@ function coupleAnimate(kind, opts = {}) {
     }
     coupleOneShotUntil = Date.now() + ms;
     coupleOneShotTimer = setTimeout(() => {
+        clearInterval(coupleDanceFrameTimer);
         wrap.classList.remove(...COUPLE_ONESHOT_CLASSES);
         if (img.isConnected) img.src = coupleSprite(stage, wrap.dataset.state, false);
     }, ms);
@@ -1320,6 +1348,7 @@ function coupleRender() {
         </div>`;
     coupleScheduleBlink();
     coupleScheduleDance();
+    coupleWarmDance(coupleStageFor(couplePoints()));
     coupleMaybeHappyDance();
     const state = couplePetState();
     const key = `aura_couple_bloom_${syncRoomId}`;
