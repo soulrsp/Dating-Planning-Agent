@@ -635,13 +635,18 @@ function coupleSpawn(fx, chars, count, cls) {
 
 // One-shot reactions on top of the base state: jump (partner arrived), love (heart received / tap),
 // bloom (anniversary / level-up), squish (tap).
-function coupleAnimate(kind) {
+const COUPLE_ONESHOT_CLASSES = ["pet-jump", "pet-love", "pet-bloom-burst", "pet-squish",
+    "pet-dance", "dance-sway", "dance-bounce", "dance-spin", "dance-wiggle", "dance-party"];
+let coupleOneShotTimer = null;
+
+function coupleAnimate(kind, opts = {}) {
     const { wrap, img, fx } = couplePetEls();
     if (!wrap || !img) return;
     const stage = Number(wrap.dataset.stage);
-    wrap.classList.remove("pet-jump", "pet-love", "pet-bloom-burst", "pet-squish");
+    wrap.classList.remove(...COUPLE_ONESHOT_CLASSES);
     void wrap.offsetWidth; // restart the CSS animation
-    coupleOneShotUntil = Date.now() + 1600;
+    clearTimeout(coupleOneShotTimer);
+    let ms = 1600;
     if (kind === "jump") {
         wrap.classList.add("pet-jump");
         coupleSpawn(fx, ["✨", "💚"], 4, "fx-pop");
@@ -655,17 +660,76 @@ function coupleAnimate(kind) {
     } else if (kind === "squish") {
         wrap.classList.add("pet-squish");
         coupleSpawn(fx, ["💚"], 1, "fx-float");
+    } else if (kind === "dance") {
+        // The egg can only hop; from baby up pick one of the moves. "party" (a happy day / both online)
+        // is the bigger version with more notes.
+        const moves = ["dance-sway", "dance-bounce", "dance-spin", "dance-wiggle"];
+        const move = stage === 0 ? "dance-bounce" : moves[Math.floor(Math.random() * moves.length)];
+        wrap.classList.add("pet-dance", move);
+        if (opts.party) wrap.classList.add("dance-party");
+        if (stage === 4) img.src = coupleSprite(4, "happy");
+        ms = 3200;
+        const notes = opts.party ? ["🎵", "🎶", "✨", "💚"] : ["🎵", "🎶"];
+        coupleSpawn(fx, notes, opts.party ? 4 : 3, "fx-note");
+        setTimeout(() => { if (wrap.isConnected) coupleSpawn(fx, notes, opts.party ? 4 : 2, "fx-note"); }, 1300);
     }
-    setTimeout(() => {
-        wrap.classList.remove("pet-jump", "pet-love", "pet-bloom-burst", "pet-squish");
+    coupleOneShotUntil = Date.now() + ms;
+    coupleOneShotTimer = setTimeout(() => {
+        wrap.classList.remove(...COUPLE_ONESHOT_CLASSES);
         if (img.isConnected) img.src = coupleSprite(stage, wrap.dataset.state, false);
-    }, 1600);
+    }, ms);
 }
 
+// ── Dancing now and then ─────────────────────────────────────────────────────────────────────────
+// Every 3–5 minutes while the card is on screen (2–3 when the partner is online too, or on a happy day,
+// both answered). Never while sleepy. Once per day per device it does a party dance the first time the
+// card shows a happy day. Three quick taps make it dance too.
+let coupleDanceTimer = null;
+function coupleCanDance() {
+    const { wrap } = couplePetEls();
+    const card = document.getElementById("couple-card");
+    return !!wrap && wrap.isConnected && card && !card.classList.contains("hidden")
+        && document.visibilityState === "visible" && wrap.dataset.state !== "sleepy"
+        && Date.now() > coupleOneShotUntil;
+}
+function coupleDanceIsParty() {
+    const { wrap } = couplePetEls();
+    const other = couple.me ? coupleOther(couple.me) : null;
+    return (wrap && wrap.dataset.state === "happy") || coupleIsOnline(other);
+}
+function coupleScheduleDance() {
+    if (coupleDanceTimer) return; // one timer; renders don't reset it
+    const party = coupleDanceIsParty();
+    const wait = party ? 120000 + Math.random() * 60000 : 180000 + Math.random() * 120000;
+    coupleDanceTimer = setTimeout(() => {
+        coupleDanceTimer = null;
+        if (coupleCanDance()) coupleAnimate("dance", { party: coupleDanceIsParty() });
+        coupleScheduleDance();
+    }, wait);
+}
+function coupleMaybeHappyDance() {
+    const { wrap } = couplePetEls();
+    if (!wrap || wrap.dataset.state !== "happy") return;
+    const key = `aura_couple_dance_${syncRoomId}`;
+    try { if (localStorage.getItem(key) === coupleYmd()) return; } catch (_) { }
+    const card = document.getElementById("couple-card");
+    if (!card || card.classList.contains("hidden")) return; // wait until someone actually sees it
+    try { localStorage.setItem(key, coupleYmd()); } catch (_) { }
+    setTimeout(() => { if (coupleCanDance()) coupleAnimate("dance", { party: true }); }, 900);
+}
+
+let coupleTapTimes = [];
 window.couplePetTap = function() {
     const { wrap, img } = couplePetEls();
     if (!wrap) return;
     const stage = Number(wrap.dataset.stage);
+    const now = Date.now();
+    coupleTapTimes = coupleTapTimes.filter(t => now - t < 1200).concat(now);
+    if (coupleTapTimes.length >= 3) {
+        coupleTapTimes = [];
+        coupleAnimate("dance", { party: true });
+        return;
+    }
     if (stage === 4 && img) {
         // The adult reacts with one of its sticker poses.
         img.src = `${COUPLE_CHAR_BASE}sticker-${Math.floor(Math.random() * 8)}.webp`;
@@ -1195,6 +1259,7 @@ window.coupleToggleCard = function() {
     coupleApplyOpen();
     if (couple.openState) {
         setTimeout(() => document.getElementById("couple-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+        coupleMaybeHappyDance();
     }
 };
 
@@ -1249,11 +1314,13 @@ function coupleRender() {
         ${picker}
         ${coupleWeekStrip()}
         <div class="couple-foot">
-            <button type="button" class="couple-link" onclick="coupleOpenArchive()">📖 지난 질문</button>
-            <button type="button" class="couple-link" onclick="coupleOpenBadges()">🏅 배지 ${badgeCount}/${COUPLE_BADGES.length}</button>
-            <button type="button" class="couple-link" onclick="coupleForgetMe()">이 폰: ${escapeHtml(coupleName(couple.me))} · 바꾸기</button>
+            <button type="button" class="couple-foot-btn" onclick="coupleOpenArchive()"><span class="cf-icon">📖</span><span class="cf-label">지난 질문</span></button>
+            <button type="button" class="couple-foot-btn is-badge" onclick="coupleOpenBadges()"><span class="cf-icon">🏅</span><span class="cf-label">배지 <b>${badgeCount}</b>/${COUPLE_BADGES.length}</span></button>
+            <button type="button" class="couple-foot-btn is-me" onclick="coupleForgetMe()" title="이 폰을 쓰는 사람 바꾸기"><span class="cf-icon">📱</span><span class="cf-label">이 폰: <b>${escapeHtml(coupleName(couple.me))}</b></span></button>
         </div>`;
     coupleScheduleBlink();
+    coupleScheduleDance();
+    coupleMaybeHappyDance();
     const state = couplePetState();
     const key = `aura_couple_bloom_${syncRoomId}`;
     if (state === "bloom" && (() => { try { return localStorage.getItem(key) !== coupleYmd(); } catch (_) { return true; } })()) {

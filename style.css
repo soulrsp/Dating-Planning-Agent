@@ -3731,3 +3731,57 @@ body {
 .course-refine { display: flex; gap: 0.4rem; }
 .course-refine .course-input { flex: 1; min-width: 0; font-size: 0.78rem; }
 .course-refine .btn { flex-shrink: 0; font-size: 0.78rem; padding: 0.4rem 0.75rem; }
+
+/* ---- 명똑똑 dances (couple.js, v416) ---- */
+.couple-pet.dance-sway img { animation: dance-sway 0.53s ease-in-out 6 !important; }
+.couple-pet.dance-bounce img { animation: dance-bounce 0.4s cubic-bezier(.3,.7,.4,1) 8 !important; }
+.couple-pet.dance-spin img { animation: dance-spin 1.05s ease-in-out 3 !important; }
+.couple-pet.dance-wiggle img { animation: dance-wiggle 0.32s ease-in-out 10 !important; }
+.couple-pet.dance-party img { filter: drop-shadow(0 0 8px rgba(124, 196, 120, 0.7)); }
+@keyframes dance-sway {
+    0%, 100% { transform: rotate(0deg) translateY(0); }
+    25% { transform: rotate(-9deg) translateY(-6px); }
+    50% { transform: rotate(0deg) translateY(0); }
+    75% { transform: rotate(9deg) translateY(-6px); }
+}
+@keyframes dance-bounce {
+    0%, 100% { transform: translateY(0) scale(1.08, 0.92); }
+    45% { transform: translateY(-16px) scale(0.94, 1.07); }
+}
+@keyframes dance-spin {
+    0% { transform: rotateY(0deg) translateY(0); }
+    40% { transform: rotateY(180deg) translateY(-12px); }
+    80%, 100% { transform: rotateY(360deg) translateY(0); }
+}
+@keyframes dance-wiggle {
+    0%, 100% { transform: translateX(0) skewX(0deg); }
+    25% { transform: translateX(-4px) skewX(8deg); }
+    75% { transform: translateX(4px) skewX(-8deg); }
+}
+.couple-fx.fx-note { animation: fx-note 2s ease-out forwards; }
+@keyframes fx-note {
+    0% { opacity: 0; transform: translate(0, 0) rotate(-10deg) scale(0.6); }
+    15% { opacity: 1; }
+    50% { transform: translate(14px, -38px) rotate(10deg) scale(1); }
+    100% { opacity: 0; transform: translate(-8px, -78px) rotate(-8deg) scale(1.05); }
+}
+
+/* ---- 오늘의 우리 footer: pill buttons (v416) ---- */
+.couple-foot { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.couple-foot-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; min-width: 0;
+    padding: 0.45rem 0.4rem; border-radius: 999px; cursor: pointer; font: inherit;
+    font-size: 0.72rem; font-weight: 700; color: var(--color-text-high);
+    background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(255, 101, 132, 0.22);
+    box-shadow: 0 2px 8px rgba(255, 101, 132, 0.08);
+    transition: transform 0.1s, background 0.2s, border-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+.couple-foot-btn:hover { border-color: rgba(255, 101, 132, 0.45); background: #fff; }
+.couple-foot-btn:active { transform: scale(0.95); }
+.couple-foot-btn .cf-icon { font-size: 0.85rem; line-height: 1; flex-shrink: 0; }
+.couple-foot-btn .cf-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.couple-foot-btn b { color: var(--color-primary); font-weight: 800; }
+.couple-foot-btn.is-badge { background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(239, 250, 236, 0.9)); border-color: rgba(124, 196, 120, 0.45); }
+.couple-foot-btn.is-badge b { color: #4E9A55; }
+.couple-foot-btn.is-me { color: var(--color-text-med); }

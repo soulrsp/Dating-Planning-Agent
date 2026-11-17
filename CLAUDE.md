@@ -231,6 +231,10 @@ layout; the rules that matter:
 - Badges (`COUPLE_BADGES`) are "stat ≥ goal" over existing data, recomputed on every render; only the
   first-earned time is stored (`couple/badges/{id}`). `coupleCheckBadges()` runs inside `coupleRender()`,
   so when testing with faked in-memory answers, stub it first or it writes real badges.
+- Motions are CSS animations on the existing sprites, fired by `coupleAnimate(kind)` (jump, love, bloom,
+  squish, dance). Dancing (v416) has no extra art: `coupleScheduleDance()` runs one timer (3–5 min, 2–3 on a
+  happy day or with the partner online) that renders never reset, skips while sleepy or the card is closed,
+  plus a once-a-day party dance on a happy day (`aura_couple_dance_{room}`) and three quick taps.
 - Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
   character), cut into transparent WebP sprites in `images/character/` by
   `design/character-src/cut.py` (sources alongside). Only the adult stage has expression variants;
