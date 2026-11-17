@@ -570,8 +570,10 @@ function courseResultHtml(r) {
             </div>
         </li>`;
     }).join("");
+    const from = r.sharedFrom ? `<div class="course-from">💌 ${escapeHtml(r.sharedFrom)}가 보낸 코스예요</div>` : "";
     return `<div class="card course-result" id="${r.id}">
         <button type="button" class="course-remove" title="지우기" onclick="courseRemoveResult('${r.id}')">✕</button>
+        ${from}
         ${courseWeatherHtml(r)}
         <div class="course-title">💗 ${escapeHtml(c.title)}</div>
         ${c.summary ? `<div class="course-summary">${escapeHtml(c.summary)}</div>` : ""}
@@ -579,6 +581,7 @@ function courseResultHtml(r) {
         <ol class="course-steps">${steps}</ol>
         <div class="course-total">예상 비용 (둘이) <b>${formatCurrency(c.totalCost)}</b></div>
         <button type="button" class="btn btn-primary course-save-all" onclick="courseSavePlaces('${r.id}')">💖 코스 전체 위시리스트에 담기</button>
+        <button type="button" class="course-kakao-btn" onclick="courseShare('${r.id}')"><span class="course-kakao-icon">💬</span> 카카오톡으로 보내기</button>
         <div class="course-refine">
             <input type="text" id="course-refine-${r.id}" class="course-input" maxlength="100" placeholder="바꾸고 싶은 점 (예: 카페 빼고 보드게임 카페 넣어줘)" onkeydown="if(event.key==='Enter'){event.preventDefault();courseGenerate('${r.id}')}">
             <button type="button" class="btn btn-outline" onclick="courseGenerate('${r.id}')" ${coursePlan.busy ? "disabled" : ""}>다시 짜기</button>
@@ -592,6 +595,118 @@ function courseRenderResults() {
     box.innerHTML = coursePlan.results.length
         ? coursePlan.results.map(courseResultHtml).join("")
         : `<div class="course-empty">위에서 날짜와 동네를 고르고 <b>✨ 날씨 보고 코스 짜기</b>를 눌러 보세요.<br>비 오는 날엔 실내 위주로, 맑은 날엔 산책과 야경까지 챙겨 드려요 🌦️</div>`;
+    if (coursePlan.results.length) courseLoadKakaoShare(); // ready before the first tap
+}
+
+// ── Share to KakaoTalk ───────────────────────────────────────────────────────────────────────────
+// A course lives only on the phone that planned it, so sharing first puts a copy in the room
+// (aura-rooms/{room}/courses/{shareId}) and sends a KakaoTalk card linking to ?room=…&course=<shareId>.
+// Opening that link adds the course to the partner's AI 플래너 (see courseOpenShared). The Kakao
+// JavaScript SDK (global `Kakao`, not the maps SDK's `kakao`) uses the same JS key as the map search;
+// the site domain must be registered for the key in Kakao Developers, which it already is for maps.
+// KakaoTalk opens only from a fresh tap, so the share call runs straight from the button while the
+// upload goes out in parallel. Without the SDK it falls back to the phone's share sheet, then the clipboard.
+const COURSE_KAKAO_SDK = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js";
+let courseKakaoShareLoading = null;
+
+function courseLoadKakaoShare() {
+    if (courseKakaoShareLoading) return courseKakaoShareLoading;
+    courseKakaoShareLoading = new Promise((resolve) => {
+        const init = () => {
+            try {
+                if (window.Kakao && !window.Kakao.isInitialized() && typeof kakaoApiKey !== "undefined" && kakaoApiKey) window.Kakao.init(kakaoApiKey);
+                resolve(!!(window.Kakao && window.Kakao.isInitialized() && window.Kakao.Share));
+            } catch (e) { console.warn("[Course] Kakao init failed", e); resolve(false); }
+        };
+        if (window.Kakao) { init(); return; }
+        const s = document.createElement("script");
+        s.src = COURSE_KAKAO_SDK;
+        s.crossOrigin = "anonymous";
+        s.onload = init;
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+    });
+    return courseKakaoShareLoading;
+}
+
+function courseAppBase() { return location.origin + location.pathname.replace(/[^/]*$/, ""); }
+function courseCut(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+window.courseShare = async function(id) {
+    const r = coursePlan.results.find(x => x.id === id);
+    if (!r) return;
+    if (!r.shareId) {
+        r.shareId = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        courseStoreResults();
+    }
+    const me = typeof couple !== "undefined" && couple.me && typeof coupleName === "function" ? coupleName(couple.me) : "";
+    const payload = { from: me, at: Date.now(), date: r.date, prefs: r.prefs, center: r.center, weather: r.weather, course: r.course };
+    const url = `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/courses/${r.shareId}.json?print=silent`;
+    const upload = fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); })
+        .catch(e => { console.warn("[Course] share upload failed", e); showToast("코스를 공유 저장소에 올리지 못했어요. 상대가 링크를 열면 코스가 안 보일 수 있어요", "warning"); });
+
+    const link = `${courseAppBase()}?room=${encodeURIComponent(syncRoomId)}&course=${r.shareId}`;
+    const w = r.weather && !r.weather.none ? r.weather : null;
+    const wText = w ? `${courseWeatherLabel(w.code).join(" ")} ${w.tmin}°/${w.tmax}°` : "";
+    const title = `💗 ${r.course.title}`;
+    const desc = [`${courseDateLabel(r.date)} · ${r.prefs.region}`, wText].filter(Boolean).join(" · ");
+
+    // Kakao SDK already loaded when the card rendered; calling it synchronously keeps the tap "fresh".
+    if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized() && window.Kakao.Share) {
+        try {
+            window.Kakao.Share.sendDefault({
+                objectType: "feed",
+                content: {
+                    title: courseCut(title, 40), description: desc,
+                    imageUrl: `${courseAppBase()}images/icon-512.png`, imageWidth: 512, imageHeight: 512,
+                    link: { mobileWebUrl: link, webUrl: link }
+                },
+                itemContent: {
+                    profileText: me ? `${me}의 데이트 코스` : "AURA 데이트 코스",
+                    items: r.course.places.slice(0, 5).map(p => ({ item: courseCut(p.time || "", 6), itemOp: courseCut(p.name, 14) })),
+                    sum: "예상 비용", sumOp: formatCurrency(r.course.totalCost)
+                },
+                buttons: [{ title: "코스 보기", link: { mobileWebUrl: link, webUrl: link } }]
+            });
+            return;
+        } catch (e) { console.warn("[Course] Kakao share failed, falling back", e); }
+    }
+    const text = `${title}\n${desc}\n\n${r.course.places.map(p => `${p.time} ${p.name}`).join("\n")}\n\n예상 비용 ${formatCurrency(r.course.totalCost)}`;
+    if (navigator.share) {
+        try { await navigator.share({ title, text, url: link }); return; }
+        catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    try { await navigator.clipboard.writeText(`${text}\n${link}`); showToast("코스와 링크를 복사했어요. 카톡에 붙여넣어 보내 주세요 📋", "success"); }
+    catch (_) { showToast("공유하지 못했어요", "danger"); }
+    await upload;
+};
+
+// Opening a shared link (?course=<shareId>): fetch the course from the room and add it to this phone.
+async function courseOpenShared() {
+    const params = new URLSearchParams(location.search);
+    const shareId = params.get("course");
+    if (!shareId || !/^[a-z0-9]{4,40}$/i.test(shareId)) return;
+    params.delete("course");
+    const rest = params.toString();
+    history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : "") + location.hash);
+    let data = null;
+    try {
+        const res = await fetch(`${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/courses/${shareId}.json`);
+        if (res.ok) data = await res.json();
+    } catch (e) { console.warn("[Course] shared course fetch failed", e); }
+    if (!data || !data.course || !Array.isArray(data.course.places)) { showToast("공유받은 코스를 찾지 못했어요", "warning"); return; }
+    let r = coursePlan.results.find(x => x.shareId === shareId);
+    if (!r) {
+        r = { id: `course-${Date.now()}`, shareId, date: data.date, center: data.center, weather: data.weather || { none: true },
+              prefs: data.prefs || { region: "", time: "day" }, course: data.course, sharedFrom: data.from || "" };
+        coursePlan.results = [r].concat(coursePlan.results).slice(0, COURSE_KEEP_RESULTS);
+        courseStoreResults();
+    }
+    courseRenderResults();
+    if (typeof switchTab === "function") switchTab("ai-planner");
+    setTimeout(() => document.getElementById(r.id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    showToast(r.sharedFrom ? `💌 ${r.sharedFrom}가 보낸 데이트 코스예요` : "💌 공유받은 데이트 코스예요", "success");
 }
 
 // Save to the wishlist through app.js's date modal, defaulting the date to the course's date.
@@ -622,4 +737,5 @@ window.courseInit = function() {
     courseLoadResults();
     courseRenderForm();
     courseRenderResults();
+    courseOpenShared();
 };

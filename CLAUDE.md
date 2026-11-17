@@ -274,6 +274,12 @@ area; a hit replaces the AI's address/coordinates, a miss is shown as "지도에
 courses are kept per device (`aura_course_last_{room}`); form choices in `aura_course_prefs`. The festival
 panel's AI button calls `coursePlanFromFestival(ev)`.
 
+"카카오톡으로 보내기" (v418) copies the course to `aura-rooms/{room}/courses/{shareId}` and sends a Kakao feed card
+linking to `?room=…&course=<shareId>`; `courseOpenShared()` (run from `courseInit`) fetches it into the partner's
+planner and strips the param. It loads the Kakao **JavaScript SDK** (global `Kakao`, capital K — a different
+global from the maps SDK's `kakao`) with the same JS key, and calls `Kakao.Share.sendDefault` synchronously from
+the tap (upload runs in parallel); fallbacks are `navigator.share`, then the clipboard.
+
 ## Gemini integration notes
 
 `callGeminiRaw()` does **not** hardcode a single model name — Google periodically retires model

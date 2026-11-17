@@ -3789,3 +3789,18 @@ body {
 /* drawn dance poses flip on a gentle bob (v417) */
 .couple-pet.dance-frames img { animation: dance-bob 0.46s ease-in-out 7 !important; }
 @keyframes dance-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* ---- AI 코스 → KakaoTalk share (course.js, v418) ---- */
+.course-kakao-btn {
+    width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    padding: 0.62rem 1rem; border: none; border-radius: 999px; cursor: pointer; font: inherit;
+    font-size: 0.88rem; font-weight: 800; color: #191919; background: #FEE500;
+    box-shadow: 0 4px 14px rgba(254, 229, 0, 0.35); transition: transform 0.1s, filter 0.2s;
+}
+.course-kakao-btn:hover { filter: brightness(0.97); }
+.course-kakao-btn:active { transform: scale(0.97); }
+.course-kakao-icon { font-size: 0.95rem; line-height: 1; }
+.course-from {
+    align-self: flex-start; font-size: 0.74rem; font-weight: 700; color: var(--color-secondary);
+    background: rgba(181, 23, 158, 0.08); border-radius: 999px; padding: 0.2rem 0.7rem; margin-right: 1.6rem;
+}
