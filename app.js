@@ -895,10 +895,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Visit logging modal logic
-    document.getElementById("btn-close-visit-modal").addEventListener("click", closeVisitModal);
-    document.getElementById("btn-cancel-visit-modal").addEventListener("click", closeVisitModal);
-    document.getElementById("form-visit-log").addEventListener("submit", handleVisitLogSubmit);
-    document.getElementById("visit-photo").addEventListener("change", handlePhotoUploadPreview);
+    document.getElementById("btn-close-visit-modal")?.addEventListener("click", closeVisitModal);
+    document.getElementById("btn-cancel-visit-modal")?.addEventListener("click", closeVisitModal);
+    document.getElementById("form-visit-log")?.addEventListener("submit", handleVisitLogSubmit);
+    document.getElementById("visit-photo")?.addEventListener("change", handlePhotoUploadPreview);
 
     // In-app Map Direct Search logic
     const btnMapSearch = document.getElementById("btn-map-search");

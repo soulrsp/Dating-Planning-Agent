@@ -4063,7 +4063,7 @@ body {
 
 /* visited photo cards (v438) */
 .vs-card.card { padding: 0 !important; overflow: hidden; border-radius: 18px !important; cursor: pointer; margin-bottom: 0.6rem; }
-.vs-photo { position: relative; height: 96px; background: #F6EEF1; }
+.vs-photo { position: relative; height: 96px; background: #F6EEF1; overflow: hidden; }
 .vs-card.is-big .vs-photo { height: 170px; }
 .vs-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .vs-noimg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2rem; }
@@ -4211,6 +4211,6 @@ textarea.add-input { resize: none; }
 .add-hit-note { font-size: 0.74rem; font-weight: 700; color: var(--color-text-low); padding: 0.2rem 0.2rem; }
 
 /* v446: visited cards are all full width, two photos side by side, comments in full */
-.vs-photo.is-two { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
-.vs-photo.is-two img { min-width: 0; }
+.vs-photo.is-two { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 2px; overflow: hidden; }
+.vs-photo.is-two img { min-width: 0; min-height: 0; height: 100%; }
 .vs-bub { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }

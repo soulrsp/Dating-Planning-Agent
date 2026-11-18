@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261118_v446">
+    <link rel="stylesheet" href="style.css?v=20261118_v447">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -646,6 +646,49 @@
         </div>
     </div>
 
+    <!-- Modal: Visit Log & Review (Wishlist -> Visited) -->
+    <div class="modal-overlay" id="modal-visit-log">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>🎀 방문 완료 기록 작성</h3>
+                <button class="modal-close" id="btn-close-visit-modal"><i data-lucide="x"></i></button>
+            </div>
+            <form class="modal-body" id="form-visit-log">
+                <input type="hidden" id="visit-place-id">
+                
+                <div class="form-group">
+                    <label>방문한 장소</label>
+                    <div class="read-only-val" id="visit-place-name">장소명</div>
+                </div>
+
+
+                <div class="form-group-row" style="margin-top:0.4rem;">
+                    <div class="form-group">
+                        <label for="visit-comment-a">💬 <span id="visit-lbl-comment-a">초코</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-a" placeholder="예: 맛있는 음식 먹어서 너무 행복했어! 💕">
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-comment-b">💬 <span id="visit-lbl-comment-b">딸기</span> 코멘트 작성하기</label>
+                        <input type="text" id="visit-comment-b" placeholder="예: 다음에 꼭 또 오고 싶어! ✨">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visit-photo">커플 추억 사진 (선택, 여러 장 가능)</label>
+                    <input type="file" id="visit-photo" accept="image/*" multiple style="display: none;">
+                    <div class="photo-preview-box" id="visit-photo-preview">
+                        <span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="btn-cancel-visit-modal">취소</button>
+                    <button type="submit" class="btn btn-primary">기록 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal: Edit Place Details (Visited & Wishlist) -->
     <div class="modal-overlay" id="modal-edit-place">
         <div class="modal-card">
@@ -1084,21 +1127,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261118_v446"></script>
+    <script src="app.js?v=20261118_v447"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261118_v446"></script>
+    <script src="studio.js?v=20261118_v447"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261118_v446"></script>
+    <script src="couple.js?v=20261118_v447"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261118_v446"></script>
+    <script src="together.js?v=20261118_v447"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261118_v446"></script>
+    <script src="course.js?v=20261118_v447"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261118_v446').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261118_v447').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>
