@@ -3826,3 +3826,6 @@ body {
 .settings-advanced summary::after { content: "▾"; float: right; transition: transform .2s; }
 .settings-advanced[open] summary::after { transform: rotate(180deg); }
 .settings-guide-btn { padding: 0.15rem 0.55rem !important; font-size: 0.7rem !important; height: 24px; border-color: var(--color-primary) !important; color: var(--color-primary) !important; background: rgba(255, 101, 132, 0.06) !important; }
+.settings-advanced .form-group > .help-text[id$="-status"] { display: block; margin-top: 0.35rem; }
+.settings-advanced .form-group { margin-bottom: 1.1rem; }
+.dday-set-link { color: var(--color-primary); font-weight: 700; font-size: 0.85rem; text-decoration: none; }

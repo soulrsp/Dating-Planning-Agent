@@ -138,6 +138,16 @@ if (localStorage.getItem("aura_naver_search_secret") !== null) {
 }
 
 let kakaoApiKey = localStorage.getItem("aura_kakao_key") || "132caa45ef567c45aca49b350fc0178f";
+
+// Rooms whose public map keys are fixed in code. For these the keys are ALWAYS these values: never
+// taken from this phone's storage, never written to or read from the room cloud. Before v426 every
+// phone pushed its own naverClientId into the room on start-up and the others adopted it, so one
+// phone holding a different id (the iPhone home-screen app that first opened the empty room 0 with the
+// default id) switched the map for both phones to an id not registered for this domain —
+// "네이버 지도 Open API 인증이 실패했습니다".
+const PINNED_MAP_KEYS = {
+    "77": { naverClientId: "stouz9nm0e", kakaoApiKey: "132caa45ef567c45aca49b350fc0178f" }
+};
 let isKakaoPlacesActive = false;
 
 // TourAPI key is a personal, quota-limited data.go.kr credential (unlike naverClientId/kakaoApiKey
@@ -670,19 +680,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // trip to 설정. Checked against raw localStorage (not the in-memory var, which already carries
     // its own global fallback) so this only fills in when nothing was explicitly configured — it
     // won't clobber a deliberately customized key, and self-heals if the stored key was ever blanked.
-    const ROOM_DEFAULT_KEYS = {
-        "77": { naverClientId: "stouz9nm0e", kakaoApiKey: "132caa45ef567c45aca49b350fc0178f" }
-    };
-    const roomDefaultKeys = ROOM_DEFAULT_KEYS[syncRoomId];
+    const roomDefaultKeys = PINNED_MAP_KEYS[syncRoomId];
     if (roomDefaultKeys) {
-        if (!localStorage.getItem("aura_naver_client_id")) {
-            naverClientId = roomDefaultKeys.naverClientId;
-            localStorage.setItem("aura_naver_client_id", naverClientId);
-        }
-        if (!localStorage.getItem("aura_kakao_key")) {
-            kakaoApiKey = roomDefaultKeys.kakaoApiKey;
-            localStorage.setItem("aura_kakao_key", kakaoApiKey);
-        }
+        naverClientId = roomDefaultKeys.naverClientId;
+        kakaoApiKey = roomDefaultKeys.kakaoApiKey;
+        localStorage.setItem("aura_naver_client_id", naverClientId);
+        localStorage.setItem("aura_kakao_key", kakaoApiKey);
     }
 
     updatePartnerNamesUI();
@@ -986,10 +989,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // cloud pull above so it migrates the freshest copy of each place, not a stale local one.
     await migrateRenamedCategory("석한이네", "칼립소의 섬");
 
-    // Trigger cloud sync upload on startup to push local API keys/settings to cloud if room is connected
-    if (syncRoomId && (naverClientId || geminiApiKey)) {
-        setTimeout(() => triggerSyncUpload(), 300);
-    }
+    // (Removed in v426: a settings push on every start-up. It made whichever phone started last
+    // overwrite the room's names/dates/map keys with its own possibly stale copy. Settings now go up
+    // only when someone saves them; a failed save retries via aura_pending_settings.)
 
     // Redraw with whatever the cloud pull brought in.
     window.auraDbg("클라우드 동기화 끝, 화면 다시 그리는 중");
@@ -4644,18 +4646,17 @@ function coupleEventBadgesHtml(events) {
 function renderDdayCard() {
     const card = document.getElementById("dday-card");
     if (!card) return;
-    if (!coupleDates.anniversary) {
-        card.classList.add("hidden");
-        card.innerHTML = "";
-        if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // no toggle → 오늘의 우리 stays open
-        return;
-    }
     card.classList.remove("hidden");
     const names = `<span class="dday-names">${escapeHtml(partnerAName)} ♥ ${escapeHtml(partnerBName)}</span>`;
-    const dayNum = coupleDayNumber(new Date());
-    const countHtml = dayNum > 0
-        ? `함께한 지 <strong>${dayNum.toLocaleString()}일째</strong>`
-        : `<strong>D-${localDayDiff(new Date(), parseYmdLocal(coupleDates.anniversary))}</strong>`;
+    // Without an anniversary the card still shows (with a nudge to set one), because it also holds the
+    // 명똑똑 키우기 toggle — with no card there was no toggle and 오늘의 우리 was stuck open.
+    let countHtml = `<a href="#" class="dday-set-link" onclick="switchTab('settings'); return false;">사귄 날 설정하기 ›</a>`;
+    if (coupleDates.anniversary) {
+        const dayNum = coupleDayNumber(new Date());
+        countHtml = dayNum > 0
+            ? `함께한 지 <strong>${dayNum.toLocaleString()}일째</strong>`
+            : `<strong>D-${localDayDiff(new Date(), parseYmdLocal(coupleDates.anniversary))}</strong>`;
+    }
     // The slot holds couple.js's "명똑똑 키우기" button, which opens/closes the 오늘의 우리 card.
     card.innerHTML = `<div class="dday-head">${names}<span class="dday-count">${countHtml}</span><span id="couple-toggle-slot" class="couple-toggle-slot"></span></div>`;
     if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // couple.js
@@ -5251,8 +5252,9 @@ async function saveSettingsToCloud(attempt = 1) {
         const payload = {
             partnerAName: partnerAName,
             partnerBName: partnerBName,
-            naverClientId: naverClientId,
-            kakaoApiKey: kakaoApiKey,
+            // Pinned rooms (PINNED_MAP_KEYS) don't keep map keys in the cloud at all; null deletes an old copy.
+            naverClientId: PINNED_MAP_KEYS[syncRoomId] ? null : naverClientId,
+            kakaoApiKey: PINNED_MAP_KEYS[syncRoomId] ? null : kakaoApiKey,
             dates: coupleDates,
             naverSearchId: null,
             naverSearchSecret: null,
@@ -5355,7 +5357,15 @@ async function loadFromCloud() {
 
             // Anniversary/birthdays: the room's copy wins, like the partner names above. A room that
             // never had them (undefined) leaves this device's copy alone.
-            if (resData.dates && typeof resData.dates === 'object') {
+            // An all-blank cloud copy never wipes dates this phone still has: that is how a phone that
+            // first opened an empty room erased the couple's dates (v426). Instead this phone puts its
+            // copy back.
+            const datesBlank = d => !d.anniversary && !d.birthdayA.md && !d.birthdayB.md;
+            if (resData.dates && typeof resData.dates === 'object'
+                && datesBlank(normalizeCoupleDates(resData.dates)) && !datesBlank(coupleDates)) {
+                console.warn("[Settings Sync] room has blank dates but this phone has them — restoring the room's copy");
+                triggerSyncUpload();
+            } else if (resData.dates && typeof resData.dates === 'object') {
                 const cloudDates = normalizeCoupleDates(resData.dates);
                 if (JSON.stringify(cloudDates) !== JSON.stringify(coupleDates)) {
                     storeCoupleDates(cloudDates);
@@ -5367,7 +5377,7 @@ async function loadFromCloud() {
                 renderDdayCard();
             }
 
-            if (resData.naverClientId && resData.naverClientId !== naverClientId) {
+            if (!PINNED_MAP_KEYS[syncRoomId] && resData.naverClientId && resData.naverClientId !== naverClientId) {
                 naverClientId = resData.naverClientId;
                 localStorage.setItem("aura_naver_client_id", naverClientId);
                 const el = document.getElementById("settings-naver-client-id");
@@ -5381,7 +5391,7 @@ async function loadFromCloud() {
             // saveSettingsToCloud payload. Secrets pulled from an unauthenticated path would re-plant
             // themselves in localStorage on every device that opens the room.
 
-            if (resData.kakaoApiKey && resData.kakaoApiKey !== kakaoApiKey) {
+            if (!PINNED_MAP_KEYS[syncRoomId] && resData.kakaoApiKey && resData.kakaoApiKey !== kakaoApiKey) {
                 kakaoApiKey = resData.kakaoApiKey;
                 localStorage.setItem("aura_kakao_key", kakaoApiKey);
                 const el = document.getElementById("settings-kakao-api-key");
