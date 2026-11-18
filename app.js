@@ -7290,6 +7290,8 @@ function scheduleMemoryWidgetRefresh() {
 }
 
 let lastRenderedMemoryPhotos = null;
+const MEMORY_WIDGET_COUNT = 18;
+let memoryWidgetPick = null;
 async function renderLovelyMemoryGallery() {
     const grid = document.getElementById("dashboard-memory-grid");
     if (!grid) return;
@@ -7319,7 +7321,26 @@ async function renderLovelyMemoryGallery() {
     if (Array.isArray(customMemoryPhotos)) customMemoryPhotos.forEach(addUnique);
     placePhotos.forEach(addUnique);
 
-    const displayPhotos = combinedPhotos.length > 0 ? combinedPhotos : DEFAULT_MEMORY_PHOTOS;
+    const allPhotos = combinedPhotos.length > 0 ? combinedPhotos : DEFAULT_MEMORY_PHOTOS;
+
+    // The widget shows a random MEMORY_WIDGET_COUNT of them (3×6), picked once per app start and kept
+    // through later refreshes (sync, uploads) so the grid doesn't reshuffle under the person's finger.
+    // A picked photo that disappears is replaced by another random one. Besides the variety, this keeps
+    // the dashboard from decoding hundreds of full-size photos as it's scrolled.
+    const available = new Set(allPhotos);
+    const picked = (memoryWidgetPick || []).filter(s => available.has(s));
+    const want = Math.min(MEMORY_WIDGET_COUNT, allPhotos.length);
+    if (picked.length < want) {
+        const chosen = new Set(picked);
+        const rest = allPhotos.filter(s => !chosen.has(s));
+        for (let i = rest.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rest[i], rest[j]] = [rest[j], rest[i]];
+        }
+        picked.push(...rest.slice(0, want - picked.length));
+    }
+    memoryWidgetPick = picked;
+    const displayPhotos = picked;
     activeMemoryPhotosList = displayPhotos;
 
     // Same photos in the same order as what's already on screen: nothing to rebuild.
