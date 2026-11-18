@@ -2150,8 +2150,8 @@ body {
     /* Compact dot mode: emoji/label text nodes are removed from layout entirely (not just visually
        hidden) so nothing can overflow the circle — the old text-indent/overflow trick left the
        leading emoji glyph unclipped in some cascade orderings, showing on top of the dot. */
-    .cal-btn-visited .badge-emoji,
-    .cal-btn-wishlist .badge-emoji,
+    /* Phone width: each badge is just its icon (🌸 다녀온 곳, 💌 위시), with a small count bubble when
+       there are several (v427 — these used to be plain blue/pink dots). */
     .cal-btn-visited .badge-text,
     .cal-btn-wishlist .badge-text {
         display: none !important;
@@ -2159,25 +2159,44 @@ body {
 
     .cal-btn-visited,
     .cal-btn-wishlist {
-        display: block !important;
+        position: relative;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
         padding: 0 !important;
-        width: 12px !important;
-        height: 12px !important;
-        min-width: 12px !important;
-        min-height: 12px !important;
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px !important;
+        min-height: 20px !important;
         border-radius: 50% !important;
         border: none !important;
         cursor: pointer;
-        margin: 2px auto 0;
+        margin: 1px auto 0;
+        background: transparent !important;
     }
-
-    .cal-btn-visited {
-        background: #74B9FF !important;
+    .cal-btn-visited .badge-emoji,
+    .cal-btn-wishlist .badge-emoji {
+        font-size: 14px;
+        line-height: 1;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
     }
-
-    .cal-btn-wishlist {
-        background: #FF6584 !important;
+    .cal-btn-visited .badge-count,
+    .cal-btn-wishlist .badge-count {
+        display: block !important;
+        position: absolute;
+        top: -3px;
+        right: -5px;
+        min-width: 12px;
+        height: 12px;
+        padding: 0 2px;
+        border-radius: 6px;
+        font-size: 8px;
+        font-weight: 800;
+        line-height: 12px;
+        color: #fff;
     }
+    .cal-btn-visited .badge-count { background: #e86a9a; }
+    .cal-btn-wishlist .badge-count { background: #FF6584; }
 
     .gallery-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
@@ -3829,3 +3848,8 @@ body {
 .settings-advanced .form-group > .help-text[id$="-status"] { display: block; margin-top: 0.35rem; }
 .settings-advanced .form-group { margin-bottom: 1.1rem; }
 .dday-set-link { color: var(--color-primary); font-weight: 700; font-size: 0.85rem; text-decoration: none; }
+/* Travel time between course stops (course.js courseLegText, v427) */
+.course-leg { font-weight: 700; color: var(--color-primary); font-size: 0.8rem; }
+
+/* Count bubble is a phone-only extra (see the 768px block); desktop badges already say the number. */
+.badge-count { display: none; }

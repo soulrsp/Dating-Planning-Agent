@@ -420,6 +420,31 @@ async function courseVerifyPlaces(places, center) {
     }));
 }
 
+// Travel between consecutive stops (v427). Walking is estimated from the straight-line distance (no API:
+// ×1.3 for streets, 4.2 km/h). Driving time would need Naver Directions 5, which needs a secret and
+// blocks browsers, i.e. a relay server; not built (yet). leg.carMin / carKm are shown if ever filled.
+const COURSE_WALK_KMH = 4.2, COURSE_WALK_DETOUR = 1.3;
+async function courseAddLegs(places) {
+    const out = places.map(p => Object.assign({}, p, { leg: null }));
+    const num = v => typeof v === "number" && Number.isFinite(v);
+    out.slice(0, -1).forEach((a, i) => {
+        const b = out[i + 1];
+        if (![a.lat, a.lng, b.lat, b.lng].every(num)) return;
+        const km = courseDistKm(a, b);
+        const leg = { km: Math.round(km * 10) / 10, walkMin: Math.max(1, Math.round(km * COURSE_WALK_DETOUR / COURSE_WALK_KMH * 60)) };
+        out[i].leg = leg;
+    });
+    return out;
+}
+function courseLegText(leg) {
+    if (!leg) return "";
+    const parts = [];
+    if (leg.km <= 3) parts.push(`🚶 도보 ${leg.walkMin}분`);
+    if (leg.carMin) parts.push(`🚗 차 ${leg.carMin}분`);
+    parts.push(`${leg.carKm || leg.km}km`);
+    return parts.join(" · ");
+}
+
 function courseNormalize(raw) {
     const c = raw && typeof raw === "object" ? raw : {};
     const places = (Array.isArray(c.places) ? c.places : []).filter(p => p && p.name).map(p => ({
@@ -491,6 +516,8 @@ window.courseGenerate = async function(refineId) {
         let course = courseNormalize(cleanAndParseJSON(text));
         courseProgress("🔎 장소 확인하는 중…");
         course.places = await courseVerifyPlaces(course.places, center);
+        courseProgress("🚶 이동 시간 계산하는 중…");
+        course.places = await courseAddLegs(course.places);
         const result = { id: `course-${Date.now()}`, date, center, weather, prefs, course, refinedFrom: base ? base.id : null };
         coursePlan.results = [result].concat(coursePlan.results).slice(0, COURSE_KEEP_RESULTS);
         courseStoreResults();
@@ -566,7 +593,7 @@ function courseResultHtml(r) {
                     <button type="button" class="couple-link" onclick="courseSavePlaces('${r.id}', ${i})">💖 위시리스트</button>
                     ${kakao ? `<a class="couple-link" href="${escapeHtml(kakao)}" target="_blank" rel="noopener">카카오맵 ↗</a>` : ""}
                 </div>
-                ${p.move && i < c.places.length - 1 ? `<div class="course-move">↓ ${escapeHtml(p.move)}</div>` : ""}
+                ${(p.move || p.leg) && i < c.places.length - 1 ? `<div class="course-move">↓ ${p.leg ? `<b class="course-leg">${escapeHtml(courseLegText(p.leg))}</b>` : ""}${p.leg && p.move ? "<br>" : ""}${escapeHtml(p.move)}</div>` : ""}
             </div>
         </li>`;
     }).join("");
