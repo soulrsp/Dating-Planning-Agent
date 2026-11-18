@@ -4688,25 +4688,93 @@ function coupleEventBadgesHtml(events) {
         </span>`).join("")}</div>`;
 }
 
-// Dashboard: just the days-together count. Upcoming anniversaries/birthdays live on the calendar.
+// Dashboard hero (v430): days together, the next milestones as chips, and 명똑똑 waving in the corner.
+// The 오늘의 우리 toggle no longer lives here; it's in couple.js's 명똑똑 row (coupleRenderMini).
+function nextBirthdayDday(b, today) {
+    if (!b || !b.md) return null;
+    const y = today.getFullYear();
+    const dates = birthdayDatesInYear(b, y).concat(birthdayDatesInYear(b, y + 1))
+        .filter(d => localDayDiff(today, d) >= 0).sort((p, q) => p - q);
+    return dates.length ? localDayDiff(today, dates[0]) : null;
+}
+function ddayChipText(label, n) { return `${label} ${n === 0 ? "오늘!" : `D-${n}`}`; }
 function renderDdayCard() {
     const card = document.getElementById("dday-card");
     if (!card) return;
     card.classList.remove("hidden");
-    const names = `<span class="dday-names">${escapeHtml(partnerAName)} ♥ ${escapeHtml(partnerBName)}</span>`;
-    // Without an anniversary the card still shows (with a nudge to set one), because it also holds the
-    // 명똑똑 키우기 toggle — with no card there was no toggle and 오늘의 우리 was stuck open.
-    let countHtml = `<a href="#" class="dday-set-link" onclick="switchTab('settings'); return false;">사귄 날 설정하기 ›</a>`;
-    if (coupleDates.anniversary) {
-        const dayNum = coupleDayNumber(new Date());
-        countHtml = dayNum > 0
-            ? `함께한 지 <strong>${dayNum.toLocaleString()}일째</strong>`
-            : `<strong>D-${localDayDiff(new Date(), parseYmdLocal(coupleDates.anniversary))}</strong>`;
+    const today = startOfLocalDay(new Date());
+    let stage = 4;
+    try { stage = typeof couplePoints === "function" && typeof coupleStageFor === "function" && couple.pollId ? coupleStageFor(couplePoints()) : (parseInt(localStorage.getItem(`aura_couple_stage_${syncRoomId}`), 10) || 0); } catch (_) {}
+    const petSrc = stage > 0 ? `images/character/wave-${stage}-1.webp` : "images/character/stage-0.webp";
+    const pet = `<img id="dday-pet" class="dh-pet" src="${petSrc}" alt="" onclick="if (typeof coupleToggleCard === 'function') coupleToggleCard()">`;
+
+    if (!coupleDates.anniversary) {
+        card.innerHTML = `<div class="dh-main"><span class="dh-names">${escapeHtml(partnerAName)}<i>♥</i>${escapeHtml(partnerBName)}</span></div>
+            <a href="#" class="dh-set" onclick="switchTab('settings'); return false;">사귄 날을 넣으면 D-day가 보여요 ›</a>${pet}`;
+        if (typeof coupleApplyOpen === "function") coupleApplyOpen();
+        return;
     }
-    // The slot holds couple.js's "명똑똑 키우기" button, which opens/closes the 오늘의 우리 card.
-    card.innerHTML = `<div class="dday-head">${names}<span class="dday-count">${countHtml}</span><span id="couple-toggle-slot" class="couple-toggle-slot"></span></div>`;
+    const dayNum = coupleDayNumber(today);
+    const chips = [];
+    if (dayNum > 0) {
+        const next100 = Math.ceil((dayNum + 1) / 100) * 100;
+        const d100 = next100 - dayNum;
+        // the next yearly anniversary, if it comes before the next 100-day mark
+        const start = parseYmdLocal(coupleDates.anniversary);
+        let years = Math.max(1, today.getFullYear() - start.getFullYear());
+        let ann = new Date(start.getFullYear() + years, start.getMonth(), start.getDate());
+        if (localDayDiff(today, ann) < 0) { years++; ann = new Date(start.getFullYear() + years, start.getMonth(), start.getDate()); }
+        const dAnn = localDayDiff(today, ann);
+        chips.push(dAnn < d100 ? ddayChipText(`💞 ${years}주년`, dAnn) : ddayChipText(`💯 ${next100}일`, d100));
+    }
+    [["birthdayA", partnerAName], ["birthdayB", partnerBName]].forEach(([k, name]) => {
+        const n = nextBirthdayDday(coupleDates[k], today);
+        if (n != null) chips.push(ddayChipText(`🎂 ${name}`, n));
+    });
+    const names = `<span class="dh-names">${escapeHtml(partnerAName)}<i>♥</i>${escapeHtml(partnerBName)}</span>`;
+    const main = names + (dayNum > 0
+        ? `<span class="dh-num">${dayNum.toLocaleString()}</span><span class="dh-unit">일째 함께</span>`
+        : `<span class="dh-num">D-${localDayDiff(today, parseYmdLocal(coupleDates.anniversary))}</span><span class="dh-unit">사귀는 날까지</span>`);
+    card.innerHTML = `<div class="dh-main">${main}</div>
+        <div class="dh-chips">${chips.map(c => `<span class="dh-chip">${escapeHtml(c)}</span>`).join("")}</div>${pet}`;
     if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // couple.js
+    auraFitMap();
 }
+
+// Phone dashboard: size the love map so that everything from the D-day card down to the bottom of the
+// map card fits the first screen above the bottom nav (min AURA_MAP_MIN_H). The 오늘의 우리 card, when
+// open, is left out of the sum: opening it pushes the map down instead of squashing it.
+const AURA_MAP_MIN_H = 220;
+let auraFitMapTimer = null;
+function auraFitMap() {
+    clearTimeout(auraFitMapTimer);
+    auraFitMapTimer = setTimeout(() => {
+        const wrap = document.querySelector("#tab-dashboard .map-container-wrapper");
+        const pane = document.getElementById("tab-dashboard");
+        if (!wrap || !pane || !pane.classList.contains("active")) return;
+        if (window.innerWidth > 768) { document.documentElement.style.removeProperty("--map-fit-h"); return; }
+        const scroller = document.querySelector(".main-content");
+        const scrollTop = (scroller ? scroller.scrollTop : 0) + (window.scrollY || 0);
+        const coupleCard = document.getElementById("couple-card");
+        const coupleH = coupleCard && !coupleCard.classList.contains("hidden") ? coupleCard.getBoundingClientRect().height + 8 : 0;
+        const top = wrap.getBoundingClientRect().top + scrollTop - coupleH;
+        const card = wrap.closest(".map-card");
+        const below = card ? card.getBoundingClientRect().bottom - wrap.getBoundingClientRect().bottom : 0;
+        const nav = document.querySelector(".mobile-bottom-nav");
+        const navH = nav && getComputedStyle(nav).display !== "none" ? nav.getBoundingClientRect().height : 0;
+        // end 4px above the nav: the next card's top margin (8px) then starts under the nav, so the calendar
+        // doesn't peek into the first screen
+        const h = Math.max(AURA_MAP_MIN_H, Math.floor(window.innerHeight - navH - 4 - top - below));
+        if (Math.abs((parseInt(getComputedStyle(wrap).height, 10) || 0) - h) < 2) return;
+        document.documentElement.style.setProperty("--map-fit-h", `${h}px`);
+        try {
+            if (isNaverMapActive && map && window.naver) map.setSize(new naver.maps.Size(wrap.clientWidth, h));
+            else if (map && map.invalidateSize) map.invalidateSize();
+        } catch (_) {}
+    }, 60);
+}
+window.addEventListener("resize", auraFitMap);
+window.addEventListener("load", auraFitMap);
 
 function fillCoupleDateSettings() {
     const ann = document.getElementById("settings-anniversary");

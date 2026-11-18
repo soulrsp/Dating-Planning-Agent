@@ -210,13 +210,13 @@ function togetherRenderTiles() {
     const items = Object.values(together.bucket).filter(Boolean);
     const done = items.filter(it => it.done).length;
     const b = document.getElementById("tile-bucket-count");
-    if (b) b.textContent = items.length ? `${done}/${items.length}` : "담기 ›";
+    if (b) b.textContent = items.length ? `${done}/${items.length}` : "담기";
     const m = document.getElementById("tile-manual-note");
     if (!m) return;
     const next = togetherUpcoming(14)[0];
     if (next) m.textContent = `${next.icon} ${next.dday === 0 ? "오늘!" : `D-${next.dday}`}`;
     else if (couple.me && !togetherFilledCount(couple.me)) m.textContent = "✍️ 쓰기";
-    else m.textContent = "보기 ›";
+    else m.textContent = "보기";
 }
 
 // ── Bucket list ──────────────────────────────────────────────────────────────────────────────────

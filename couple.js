@@ -429,6 +429,8 @@ window.coupleStartSync = async function() {
         couplePoll().catch(e => console.warn("[Couple] poll failed:", e));
     }, COUPLE_POLL_MS);
     couple.presenceId = setInterval(couplePresenceBeat, COUPLE_PRESENCE_MS);
+    coupleApplyOpen(); // the dashboard's 명똑똑 row can show real points now
+    if (typeof renderDdayCard === "function") renderDdayCard();
 };
 
 document.addEventListener("visibilitychange", () => {
@@ -1307,7 +1309,40 @@ function coupleNeedsLook() {
     return [n.answer && n.answer[other], n.mood && n.mood[other], couple.hearts[other]].some(x => x && (x.at || 0) > looked);
 }
 // Called by coupleRender() and by app.js's renderDdayCard() (which may run before or after it).
+// 명똑똑 row on the dashboard (v430): sprite, stage + points, progress to the next stage, today's question
+// status, and the 키우기/접기 toggle for the 오늘의 우리 card (#couple-toggle-slot lives in here now).
+// Before the first sync it shows just the sprite and name, so it never flashes a wrong stage.
+function coupleRenderMini() {
+    const box = document.getElementById("couple-mini");
+    if (!box) return;
+    if (!syncRoomId) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    let line = "오늘의 우리를 불러오는 중…", stageTxt = "", pct = 0, stage = 0;
+    if (couple.pollId) {
+        const pts = couplePoints();
+        stage = coupleStageFor(pts);
+        const cur = COUPLE_STAGES[stage], next = COUPLE_STAGES[stage + 1];
+        stageTxt = `${cur.name} · ${pts}점`;
+        pct = next ? Math.round((pts - cur.min) / (next.min - cur.min) * 100) : 100;
+        const q = !couple.me ? "누가 쓰는 폰인지 골라 주세요" : coupleMyAnswer() ? "오늘의 질문 완료 ✓" : "오늘의 질문 💬";
+        line = `${next ? `${next.name}까지 ${next.min - pts}점` : "최고 단계 🌟"} · ${q}`;
+        const pet = document.getElementById("dday-pet");
+        const src = stage > 0 ? `images/character/wave-${stage}-1.webp` : "images/character/stage-0.webp";
+        if (pet && !pet.src.endsWith(src)) pet.src = src;
+    } else {
+        try { stage = parseInt(localStorage.getItem(`aura_couple_stage_${syncRoomId}`), 10) || 0; } catch (_) { }
+    }
+    box.innerHTML = `<img class="cm-pet" src="${coupleSprite(stage, "idle", false)}" alt="" onclick="coupleToggleCard()">
+        <div class="cm-body" onclick="coupleToggleCard()">
+            <div class="cm-title"><b>${escapeHtml(couplePetName())}</b>${stageTxt ? `<small>${escapeHtml(stageTxt)}</small>` : ""}</div>
+            <div class="cm-bar"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div>
+            <div class="cm-line">${escapeHtml(line)}</div>
+        </div>
+        <span id="couple-toggle-slot" class="couple-toggle-slot"></span>`;
+}
+
 window.coupleApplyOpen = function() {
+    coupleRenderMini();
     const card = document.getElementById("couple-card");
     const slot = document.getElementById("couple-toggle-slot");
     const open = coupleIsOpen();
@@ -1315,8 +1350,9 @@ window.coupleApplyOpen = function() {
     if (open && slot) { try { localStorage.setItem(coupleLookedKey(), String(Date.now())); } catch (_) { } }
     if (slot && syncRoomId) {
         const dot = !open && coupleNeedsLook();
-        slot.innerHTML = `<button type="button" class="couple-toggle-btn${open ? " is-open" : ""}" onclick="coupleToggleCard()" aria-expanded="${open}">🌱 ${escapeHtml(couplePetName())} 키우기${dot ? `<i class="couple-toggle-dot" aria-label="새 소식"></i>` : ""}<span class="couple-toggle-chev">${open ? "▴" : "▾"}</span></button>`;
+        slot.innerHTML = `<button type="button" class="couple-toggle-btn${open ? " is-open" : ""}" onclick="coupleToggleCard()" aria-expanded="${open}">${open ? "접기" : "키우기"}${dot ? `<i class="couple-toggle-dot" aria-label="새 소식"></i>` : ""}<span class="couple-toggle-chev">${open ? "▴" : "▾"}</span></button>`;
     } else if (slot) slot.innerHTML = "";
+    if (typeof auraFitMap === "function") auraFitMap();
 };
 window.coupleToggleCard = function() {
     couple.openState = !coupleIsOpen();

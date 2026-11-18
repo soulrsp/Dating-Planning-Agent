@@ -238,9 +238,11 @@ layout; the rules that matter:
   game); answers save `{t, c, q, at}`. **Only append to `COUPLE_QUESTIONS`, never reorder or edit the
   first 150**: days before `COUPLE_Q_V2_FROM` still index the old 150-day cycle. If the bank grows again,
   add another cut-over date the same way rather than changing the existing cycles.
-- The card is collapsed by default behind a "명똑똑 키우기" button that `coupleApplyOpen()` draws into
-  `#couple-toggle-slot` inside app.js's D-day card (per-device `aura_couple_open_{room}`). The D-day card
-  always renders (a "사귄 날 설정하기" link when no anniversary is set), so the toggle is always there.
+- The card is collapsed by default behind the "키우기" button that `coupleApplyOpen()` draws into
+  `#couple-toggle-slot`, which since v430 sits in the dashboard's 명똑똑 row (`coupleRenderMini`: sprite, stage, points,
+  progress, today's question). Open state is per device (`aura_couple_open_{room}`). The dashboard top is the D-day hero
+  (`renderDdayCard`) → 4 quick tiles → 명똑똑 row → love map; on phones `auraFitMap()` sizes the map so all of that fits
+  the first screen above the bottom nav (min 220px).
 - Badges (`COUPLE_BADGES`) are "stat ≥ goal" over existing data, recomputed on every render; only the
   first-earned time is stored (`couple/badges/{id}`). `coupleCheckBadges()` runs inside `coupleRender()`,
   so when testing with faked in-memory answers, stub it first or it writes real badges.
