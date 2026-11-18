@@ -3884,3 +3884,6 @@ body {
 .settings-advanced[open] > summary { margin-bottom: 0.9rem; }
 .settings-advanced[open] > summary::after { transform: rotate(180deg); }
 .settings-guide-btn { padding: 0.15rem 0.55rem !important; font-size: 0.7rem !important; height: 24px; border-color: var(--color-primary) !important; color: var(--color-primary) !important; background: rgba(255, 101, 132, 0.06) !important; }
+/* Heart / check SVG badges on the calendar (app.js auraHeartSvg / auraCheckSvg, v429) */
+.badge-emoji svg { display: inline-block; vertical-align: -2px; }
+.custom-map-marker { background: none; border: none; }

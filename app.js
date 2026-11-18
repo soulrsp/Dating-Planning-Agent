@@ -1403,6 +1403,26 @@ window.fitAllMapMarkers = function() {
     showToast("전체 장소 마커 보기로 지도 구도가 맞춰졌습니다 🗺️", "info");
 };
 
+// Wishlist = pink heart, visited = sky-blue check (v429). Drawn as inline SVG rather than emoji so they
+// look the same on every phone (emoji are each vendor's own art) and match the map pins below.
+const AURA_WISH_COLOR = "#ED93B1", AURA_WISH_STROKE = "#D4537E";
+const AURA_VISIT_COLOR = "#85B7EB", AURA_VISIT_STROKE = "#378ADD";
+function auraHeartSvg(size) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.3-9.2C1.4 8.4 3.6 5 7 5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.4 0 5.6 3.4 4.3 6.8C19.5 16.4 12 21 12 21z" fill="${AURA_WISH_COLOR}"/></svg>`;
+}
+function auraCheckSvg(size) {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="${AURA_VISIT_COLOR}"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+// Map pin: a drop with a heart (wishlist) or check (visited). The tip (13, 35) is the place itself.
+const AURA_PIN_W = 26, AURA_PIN_H = 36, AURA_PIN_TIP_X = 13, AURA_PIN_TIP_Y = 35;
+function auraPinSvg(isVisited) {
+    const fill = isVisited ? AURA_VISIT_COLOR : AURA_WISH_COLOR, stroke = isVisited ? AURA_VISIT_STROKE : AURA_WISH_STROKE;
+    const mark = isVisited
+        ? `<path d="M10.2 15.2l3.2 3.2 6.4-6.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`
+        : `<path d="M15 21s-5-3-5.8-6c-.6-2.2 1-4.2 3-4.2 1.3 0 2.1.7 2.8 1.7.7-1 1.5-1.7 2.8-1.7 2 0 3.6 2 3 4.2C20 18 15 21 15 21z" fill="#fff"/>`;
+    return `<svg width="${AURA_PIN_W}" height="${AURA_PIN_H}" viewBox="0 0 30 42" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.22));"><path d="M15 41 C15 41 3 25 3 15 A12 12 0 0 1 27 15 C27 25 15 41 15 41 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>${mark}</svg>`;
+}
+
 async function updateMapMarkers() {
     if (!map) return;
     const places = await getPlaces();
@@ -1446,20 +1466,13 @@ async function updateMapMarkers() {
         
         validPlaces.forEach(place => {
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
-            const markerColor = isVisited ? "#74B9FF" : "#FF6584";
-            const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
-            
-            // Custom CSS Bubble style marker HTML for Naver Map
-            const contentHtml = `
-                <div class="custom-naver-marker" style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 8px ${shadowColor}; transform:translate(-8px, -8px);"></div>
-            `;
-            
             const marker = new naver.maps.Marker({
                 position: new naver.maps.LatLng(place.lat, place.lng),
                 map: map,
                 icon: {
-                    content: contentHtml,
-                    anchor: new naver.maps.Point(8, 8)
+                    content: `<div class="custom-naver-marker">${auraPinSvg(isVisited)}</div>`,
+                    size: new naver.maps.Size(AURA_PIN_W, AURA_PIN_H),
+                    anchor: new naver.maps.Point(AURA_PIN_TIP_X, AURA_PIN_TIP_Y)
                 }
             });
             
@@ -1473,7 +1486,7 @@ async function updateMapMarkers() {
                 `,
                 borderWidth: 0,
                 backgroundColor: "transparent",
-                pixelOffset: new naver.maps.Point(0, -8)
+                pixelOffset: new naver.maps.Point(0, -4) // opens above the marker icon (a tall pin since v429)
             });
             
             naver.maps.Event.addListener(marker, "click", () => {
@@ -1519,14 +1532,12 @@ async function updateMapMarkers() {
         places.forEach(place => {
             if (!place.lat || !place.lng) return;
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
-            const markerColor = isVisited ? "#74B9FF" : "#FF6584";
-            const shadowColor = isVisited ? "rgba(116,185,255,0.45)" : "rgba(255,101,132,0.45)";
-            
             const customIcon = L.divIcon({
                 className: 'custom-map-marker',
-                html: `<div style="background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px ${shadowColor};"></div>`,
-                iconSize: [14, 14],
-                iconAnchor: [7, 7]
+                html: auraPinSvg(isVisited),
+                iconSize: [AURA_PIN_W, AURA_PIN_H],
+                iconAnchor: [AURA_PIN_TIP_X, AURA_PIN_TIP_Y],
+                popupAnchor: [0, -AURA_PIN_TIP_Y + 4]
             });
             
             const popupCategoryText = applyCategoryOverride(place.name, place.notes, place.category);
@@ -6962,14 +6973,14 @@ async function renderCalendar() {
             if (visitedPlaces.length > 0) {
                 badgesHtml += `
                     <button type="button" class="cal-btn-visited" title="다녀온 곳 ${visitedPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'visited')" style="background:rgba(116,185,255,0.18); color:#74B9FF; border:1px solid rgba(116,185,255,0.35); border-radius:6px; font-size:0.75rem; padding:4px 6px; min-height:24px; font-weight:700; cursor:pointer; width:100%; text-align:center;">
-                        <span class="badge-emoji">🌸</span> <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>${visitedPlaces.length > 1 ? `<span class="badge-count">${visitedPlaces.length}</span>` : ""}
+                        <span class="badge-emoji">${auraCheckSvg(14)}</span> <span class="badge-text">다녀옴 (${visitedPlaces.length})</span>${visitedPlaces.length > 1 ? `<span class="badge-count">${visitedPlaces.length}</span>` : ""}
                     </button>
                 `;
             }
             if (wishlistPlaces.length > 0) {
                 badgesHtml += `
                     <button type="button" class="cal-btn-wishlist" title="위시리스트 ${wishlistPlaces.length}개" onclick="event.stopPropagation(); selectCalendarDateAndRender('${fullDateStr}', 'wishlist')" style="background:rgba(255,101,132,0.18); color:var(--color-primary); border:1px solid rgba(255,101,132,0.35); border-radius:6px; font-size:0.75rem; padding:4px 6px; min-height:24px; font-weight:700; cursor:pointer; width:100%; text-align:center;">
-                        <span class="badge-emoji">💌</span> <span class="badge-text">위시 (${wishlistPlaces.length})</span>${wishlistPlaces.length > 1 ? `<span class="badge-count">${wishlistPlaces.length}</span>` : ""}
+                        <span class="badge-emoji">${auraHeartSvg(14)}</span> <span class="badge-text">위시 (${wishlistPlaces.length})</span>${wishlistPlaces.length > 1 ? `<span class="badge-count">${wishlistPlaces.length}</span>` : ""}
                     </button>
                 `;
             }
