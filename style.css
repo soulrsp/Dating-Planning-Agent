@@ -3789,6 +3789,9 @@ body {
 /* drawn dance poses flip on a gentle bob (v417) */
 .couple-pet.dance-frames img { animation: dance-bob 0.46s ease-in-out 7 !important; }
 @keyframes dance-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+/* Drawn wave hello (couple.js COUPLE_MOTIONS.wave): a small sway under the frames */
+.couple-pet.pet-wave img { animation: wave-sway 0.52s ease-in-out 4 !important; transform-origin: 50% 100%; }
+@keyframes wave-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-3deg) translateY(-2px); } }
 
 /* ---- AI 코스 → KakaoTalk share (course.js, v418) ---- */
 .course-kakao-btn {

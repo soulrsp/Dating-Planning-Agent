@@ -423,7 +423,7 @@ window.coupleStartSync = async function() {
     couple.partnerWasOnline = coupleIsOnline(couple.me ? coupleOther(couple.me) : null);
     couplePresenceBeat();
     coupleRender();
-    if (couple.partnerWasOnline) coupleAnimate("jump");
+    if (couple.partnerWasOnline) coupleAnimate("wave");
     couple.pollId = setInterval(() => {
         if (document.visibilityState !== "visible") return;
         couplePoll().catch(e => console.warn("[Couple] poll failed:", e));
@@ -468,7 +468,7 @@ function coupleCheckPartnerPresence() {
     const online = coupleIsOnline(other);
     if (online && !couple.partnerWasOnline) {
         showToast(`${coupleName(other)}가 들어왔어요 👋`, "info");
-        coupleAnimate("jump");
+        coupleAnimate("wave");
     }
     couple.partnerWasOnline = online;
 }
@@ -636,22 +636,44 @@ function coupleSpawn(fx, chars, count, cls) {
 // One-shot reactions on top of the base state: jump (partner arrived), love (heart received / tap),
 // bloom (anniversary / level-up), squish (tap).
 const COUPLE_ONESHOT_CLASSES = ["pet-jump", "pet-love", "pet-bloom-burst", "pet-squish",
-    "pet-dance", "dance-sway", "dance-bounce", "dance-spin", "dance-wiggle", "dance-party", "dance-frames"];
+    "pet-dance", "dance-sway", "dance-bounce", "dance-spin", "dance-wiggle", "dance-party", "dance-frames", "pet-wave"];
 let coupleOneShotTimer = null;
 
-// Dance poses drawn for each stage from baby up (images/character/dance-<stage>-0..3.webp, cut by
-// design/character-src/cut_dance.py): 0 lean left, 1 crouch, 2 lean right, 3 jump. Played in this order.
-const COUPLE_DANCE_STAGES = [1, 2, 3, 4, 5];
-const COUPLE_DANCE_SEQ = [0, 1, 2, 1, 0, 1, 2, 3];
-const COUPLE_DANCE_FRAME_MS = 230;
+// Drawn motions: images/character/<motion>-<stage>-<i>.webp, played as a flip-book in `seq` order.
+// dance came from ChatGPT sheets (cut_dance.py); the rest are Qwen-Image-Edit poses made by
+// E:\AI\work\gen_poses.py and cut by design/character-src/cut_pose.py. `stages` lists the stages that
+// have art; any other stage falls back to the CSS-only move named in `fallback`. Adding a motion =
+// its sprites + one entry here.
+//   dance: 0 lean left, 1 crouch, 2 lean right, 3 jump
+const COUPLE_MOTIONS = {
+    dance: { stages: [1, 2, 3, 4, 5], frames: 4, seq: [0, 1, 2, 1, 0, 1, 2, 3], ms: 230 },
+};
 let coupleDanceFrameTimer = null;
-const coupleDanceWarm = new Set();
-function coupleDanceFrame(stage, i) { return `${COUPLE_CHAR_BASE}dance-${stage}-${i}.webp`; }
-// Load the current stage's poses ahead of the first dance so the swaps never flash.
-function coupleWarmDance(stage) {
-    if (!COUPLE_DANCE_STAGES.includes(stage) || coupleDanceWarm.has(stage)) return;
-    coupleDanceWarm.add(stage);
-    for (let i = 0; i < 4; i++) { const im = new Image(); im.src = coupleDanceFrame(stage, i); }
+const coupleMotionWarm = new Set();
+function coupleMotionFrame(motion, stage, i) { return `${COUPLE_CHAR_BASE}${motion}-${stage}-${i}.webp`; }
+function coupleHasMotion(motion, stage) { const m = COUPLE_MOTIONS[motion]; return !!m && m.stages.includes(stage); }
+// Load the current stage's poses ahead of the first use so the swaps never flash.
+function coupleWarmMotions(stage) {
+    for (const [motion, m] of Object.entries(COUPLE_MOTIONS)) {
+        const key = `${motion}-${stage}`;
+        if (!m.stages.includes(stage) || coupleMotionWarm.has(key)) continue;
+        coupleMotionWarm.add(key);
+        for (let i = 0; i < m.frames; i++) { const im = new Image(); im.src = coupleMotionFrame(motion, stage, i); }
+    }
+}
+// Flip through a motion's frames on the pet image; returns how long one pass takes.
+function couplePlayFrames(img, motion, stage, loops = 1) {
+    const m = COUPLE_MOTIONS[motion];
+    clearInterval(coupleDanceFrameTimer);
+    let k = 0;
+    const total = m.seq.length * loops;
+    const step = () => {
+        if (!img.isConnected || k >= total) { clearInterval(coupleDanceFrameTimer); return; }
+        img.src = coupleMotionFrame(motion, stage, m.seq[k++ % m.seq.length]);
+    };
+    step();
+    coupleDanceFrameTimer = setInterval(step, m.ms);
+    return total * m.ms;
 }
 
 function coupleAnimate(kind, opts = {}) {
@@ -663,9 +685,14 @@ function coupleAnimate(kind, opts = {}) {
     clearTimeout(coupleOneShotTimer);
     clearInterval(coupleDanceFrameTimer);
     let ms = 1600;
+    if (kind === "wave" && !coupleHasMotion("wave", stage)) kind = "jump"; // the egg / stages without art
     if (kind === "jump") {
         wrap.classList.add("pet-jump");
         coupleSpawn(fx, ["✨", "💚"], 4, "fx-pop");
+    } else if (kind === "wave") {
+        wrap.classList.add("pet-wave");
+        ms = couplePlayFrames(img, "wave", stage) + 200;
+        coupleSpawn(fx, ["👋", "✨", "💚"], 3, "fx-pop");
     } else if (kind === "love") {
         wrap.classList.add("pet-love");
         if (stage === 4) img.src = coupleSprite(4, "love");
@@ -679,16 +706,10 @@ function coupleAnimate(kind, opts = {}) {
     } else if (kind === "dance") {
         // The egg can only hop; from baby up pick one of the moves. "party" (a happy day / both online)
         // is the bigger version with more notes.
-        if (COUPLE_DANCE_STAGES.includes(stage)) {
+        if (coupleHasMotion("dance", stage)) {
             // Drawn poses: flip through them on a gentle bob.
             wrap.classList.add("pet-dance", "dance-frames");
-            let k = 0;
-            const step = () => {
-                if (!img.isConnected) { clearInterval(coupleDanceFrameTimer); return; }
-                img.src = coupleDanceFrame(stage, COUPLE_DANCE_SEQ[k++ % COUPLE_DANCE_SEQ.length]);
-            };
-            step();
-            coupleDanceFrameTimer = setInterval(step, COUPLE_DANCE_FRAME_MS);
+            couplePlayFrames(img, "dance", stage, 2);
         } else {
             // The egg (no drawn poses): one of the CSS-only moves.
             const moves = ["dance-sway", "dance-bounce", "dance-spin", "dance-wiggle"];
@@ -744,6 +765,20 @@ function coupleMaybeHappyDance() {
     if (!card || card.classList.contains("hidden")) return; // wait until someone actually sees it
     try { localStorage.setItem(key, coupleYmd()); } catch (_) { }
     setTimeout(() => { if (coupleCanDance()) coupleAnimate("dance", { party: true }); }, 900);
+}
+
+// The first time each day this device shows the open card, the character waves hello. Marked done only
+// once it actually played (a happy-day dance or sleep may get there first; a later render retries).
+function coupleMaybeGreet() {
+    const { wrap } = couplePetEls();
+    if (!wrap || !coupleHasMotion("wave", Number(wrap.dataset.stage))) return;
+    const key = `aura_couple_wave_${syncRoomId}`;
+    try { if (localStorage.getItem(key) === coupleYmd()) return; } catch (_) { }
+    setTimeout(() => {
+        if (!coupleCanDance()) return;
+        try { if (localStorage.getItem(key) === coupleYmd()) return; localStorage.setItem(key, coupleYmd()); } catch (_) { }
+        coupleAnimate("wave");
+    }, 1200);
 }
 
 let coupleTapTimes = [];
@@ -1288,6 +1323,7 @@ window.coupleToggleCard = function() {
     if (couple.openState) {
         setTimeout(() => document.getElementById("couple-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
         coupleMaybeHappyDance();
+        coupleMaybeGreet();
     }
 };
 
@@ -1348,8 +1384,9 @@ function coupleRender() {
         </div>`;
     coupleScheduleBlink();
     coupleScheduleDance();
-    coupleWarmDance(coupleStageFor(couplePoints()));
+    coupleWarmMotions(coupleStageFor(couplePoints()));
     coupleMaybeHappyDance();
+    coupleMaybeGreet();
     const state = couplePetState();
     const key = `aura_couple_bloom_${syncRoomId}`;
     if (state === "bloom" && (() => { try { return localStorage.getItem(key) !== coupleYmd(); } catch (_) { return true; } })()) {

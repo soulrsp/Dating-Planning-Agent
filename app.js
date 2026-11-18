@@ -247,16 +247,76 @@ function waitForAuthGate() { return authGateReady; }
     // browser (Safari/Chrome) via the in-app browser's own "다른 브라우저로 열기" menu.
     const isInAppBrowser = /NAVER\(inapp|KAKAOTALK|Instagram|FBAN|FBAV|Line\//i.test(navigator.userAgent);
 
+    // Email + password sign-in (same Firebase account: the password is linked to the Google account in
+    // Settings, see auraSetPassword). It's the way in where Google sign-in can't run — app webviews and
+    // the iOS home-screen icon — so there the form opens straight away instead of behind a link.
+    const emailBox = document.getElementById("auth-email-box");
+    const emailForm = document.getElementById("auth-email-form");
+    const emailToggle = document.getElementById("btn-email-toggle");
+    const emailInput = document.getElementById("auth-email");
+    const passwordInput = document.getElementById("auth-password");
+    function openEmailForm() {
+        if (emailForm) emailForm.style.display = "flex";
+        if (emailToggle) emailToggle.style.display = "none";
+    }
+    if (emailToggle) emailToggle.addEventListener("click", openEmailForm);
+    try { if (emailInput) emailInput.value = localStorage.getItem("aura_last_email") || ""; } catch (_) {}
+
     if (isInAppBrowser && signInBtn) {
         signInBtn.style.display = "none";
+        openEmailForm();
         if (messageEl) {
-            messageEl.textContent = "네이버, 카카오톡 등 앱 내장 브라우저에서는 구글 로그인이 차단돼요. 오른쪽 위 메뉴에서 '다른 브라우저로 열기'(사파리 또는 크롬)를 선택해 다시 열어주세요.";
+            messageEl.textContent = "네이버, 카카오톡 앱 안에서는 구글 로그인이 막혀 있어요. 설정 탭에서 만든 비밀번호로 아래에서 로그인하거나, 오른쪽 메뉴의 '다른 브라우저로 열기'(사파리·크롬)로 열어주세요.";
         }
     } else if (isStandalone && isIOS && signInBtn) {
         signInBtn.style.display = "none";
+        openEmailForm();
         if (messageEl) {
-            messageEl.textContent = "iOS 홈 화면 앱에서는 구글 로그인이 끝까지 진행되지 않아요. 사파리 앱을 열어서 이 주소로 한 번 접속해 로그인해주세요 — 그 다음부터는 이 아이콘으로도 자동으로 로그인됩니다.";
+            messageEl.textContent = "iOS 홈 화면 앱에서는 구글 로그인이 끝까지 진행되지 않아요. 설정 탭에서 만든 비밀번호로 아래에서 로그인하거나, 사파리에서 이 주소로 한 번 구글 로그인해주세요 — 그 다음부터는 이 아이콘으로도 자동으로 로그인됩니다.";
         }
+    }
+
+    function emailAuthErrorText(e) {
+        const c = (e && e.code) || "";
+        if (c === "auth/invalid-credential" || c === "auth/wrong-password" || c === "auth/user-not-found" || c === "auth/invalid-login-credentials")
+            return "메일 주소나 비밀번호가 맞지 않아요. 비밀번호를 아직 안 만들었다면, 사파리·크롬에서 구글로 로그인한 뒤 설정 탭에서 먼저 만들어주세요.";
+        if (c === "auth/invalid-email") return "메일 주소 형식이 맞지 않아요.";
+        if (c === "auth/too-many-requests") return "시도가 너무 많았어요. 잠시 후 다시 해주세요.";
+        if (c === "auth/network-request-failed") return "인터넷 연결을 확인해주세요.";
+        if (c === "auth/operation-not-allowed") return "이메일 로그인이 아직 켜져 있지 않아요 (Firebase 콘솔 설정).";
+        return "로그인에 실패했습니다: " + ((e && e.message) || c);
+    }
+    if (emailForm) {
+        emailForm.addEventListener("submit", async (ev) => {
+            ev.preventDefault();
+            if (errorEl) errorEl.style.display = "none";
+            const email = (emailInput.value || "").trim();
+            const btn = document.getElementById("btn-email-signin");
+            if (btn) btn.disabled = true;
+            try {
+                await firebase.auth().signInWithEmailAndPassword(email, passwordInput.value);
+                try { localStorage.setItem("aura_last_email", email); } catch (_) {}
+                passwordInput.value = "";
+            } catch (e) {
+                console.warn("[Auth] email sign-in failed:", e.code);
+                showGateError(emailAuthErrorText(e));
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        });
+    }
+    const resetBtn = document.getElementById("btn-email-reset");
+    if (resetBtn) {
+        resetBtn.addEventListener("click", async () => {
+            const email = (emailInput.value || "").trim();
+            if (!email) { showGateError("메일 주소를 먼저 적어주세요."); return; }
+            try {
+                await firebase.auth().sendPasswordResetEmail(email);
+                showGateError(`${email}로 비밀번호 재설정 메일을 보냈어요 (스팸함도 확인해주세요). 메일의 링크에서 새 비밀번호를 정한 뒤 여기서 로그인하면 돼요.`);
+            } catch (e) {
+                showGateError(emailAuthErrorText(e));
+            }
+        });
     }
 
     // A normal iOS Safari tab (not the home-screen icon, not an in-app browser). Redirect sign-in
@@ -326,6 +386,7 @@ function waitForAuthGate() { return authGateReady; }
     let authAnswered = false;
     let checkingTimer = null;
     function setGateChecking(on, lateNotice) {
+        if (emailBox) emailBox.style.visibility = on ? "hidden" : "";
         if (!signInBtn || signInBtn.style.display === "none") return;   // the in-app/iOS-home-screen cases hide it for good
         signInBtn.style.visibility = on ? "hidden" : "";
         if (messageEl) messageEl.textContent = on ? "로그인 상태를 확인하는 중이에요…" : (lateNotice || originalGateMessage);
@@ -377,11 +438,58 @@ function waitForAuthGate() { return authGateReady; }
         // a given ?room=xxx is decided by that room's own database rule, not here (see comment above).
         currentIdToken = await user.getIdToken();
         if (emailLabel) emailLabel.textContent = user.email;
+        auraRenderPasswordStatus(user);
         if (gateEl) gateEl.style.display = "none";
         if (appEl) appEl.style.display = RECOVER_MODE ? "none" : "";
         if (resolveAuthGate) { resolveAuthGate(); resolveAuthGate = null; }
     });
 })();
+
+// Settings → "네이버·카톡 앱에서 열기용 비밀번호". Links an email/password credential to the account that
+// is signed in now (normally the Google one), so signing in later with that email + password lands in
+// the SAME Firebase user — same email in the ID token, so the room's database rule still lets it in.
+// If a password is already linked, this changes it.
+function auraHasPassword(user) {
+    return !!user && (user.providerData || []).some(p => p && p.providerId === "password");
+}
+function auraRenderPasswordStatus(user) {
+    const el = document.getElementById("auth-password-status");
+    const btn = document.getElementById("btn-set-password");
+    if (!el || !user) return;
+    if (auraHasPassword(user)) {
+        el.textContent = `✅ 비밀번호가 만들어져 있어요. 네이버·카카오톡 앱 안에서는 로그인 화면의 '이메일·비밀번호로 로그인'에 ${user.email} 과 이 비밀번호를 넣으면 돼요. 바꾸려면 아래에 새로 적어주세요.`;
+        if (btn) btn.textContent = "비밀번호 바꾸기";
+    }
+}
+window.auraSetPassword = async function() {
+    const user = firebase.auth().currentUser;
+    const p1 = document.getElementById("auth-new-password");
+    const p2 = document.getElementById("auth-new-password2");
+    if (!user || !p1 || !p2) return;
+    if (!user.email) { showToast("이 계정에는 메일 주소가 없어서 비밀번호를 만들 수 없어요.", "danger"); return; }
+    if (p1.value.length < 6) { showToast("비밀번호는 6자 이상이어야 해요.", "warning"); return; }
+    if (p1.value !== p2.value) { showToast("두 비밀번호가 서로 달라요.", "warning"); return; }
+    try {
+        if (auraHasPassword(user)) {
+            await user.updatePassword(p1.value);
+        } else {
+            await user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, p1.value));
+        }
+        await user.reload();
+        p1.value = ""; p2.value = "";
+        auraRenderPasswordStatus(firebase.auth().currentUser);
+        try { localStorage.setItem("aura_last_email", user.email); } catch (_) {}
+        showToast("비밀번호를 저장했어요. 이제 네이버·카톡 앱 안에서도 로그인할 수 있어요 🔑", "success");
+    } catch (e) {
+        console.warn("[Auth] set password failed:", e.code, e.message);
+        if (e.code === "auth/requires-recent-login") showToast("보안을 위해 로그아웃 후 다시 로그인한 다음 저장해주세요.", "warning");
+        else if (e.code === "auth/weak-password") showToast("비밀번호가 너무 쉬워요. 더 길게 만들어주세요.", "warning");
+        else if (e.code === "auth/operation-not-allowed") showToast("Firebase 콘솔에서 이메일/비밀번호 로그인이 꺼져 있어요.", "danger");
+        else if (e.code === "auth/provider-already-linked" || e.code === "auth/credential-already-in-use" || e.code === "auth/email-already-in-use")
+            showToast("이 메일 주소에는 이미 비밀번호 계정이 있어요. 로그인 화면의 '비밀번호를 잊었어요'로 다시 정해주세요.", "warning");
+        else showToast("비밀번호 저장 실패: " + (e.message || e.code), "danger");
+    }
+};
 
 // Every Firebase Realtime Database REST call in this file must carry the signed-in user's ID token
 // so the database security rules (auth.token.email in the allowlist) authorize it. Patching fetch()

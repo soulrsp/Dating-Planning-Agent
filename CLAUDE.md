@@ -61,6 +61,10 @@ There's no script for this; it's manual.
   server-side against `auth.token.email`), not by any check in the JS. Don't try to add
   client-side email allowlisting; the rules are the source of truth and live in the Firebase console,
   not in this repo.
+- Email + password sign-in exists for where Google sign-in can't run (Naver/KakaoTalk webviews block
+  Google OAuth; the iOS home-screen icon hangs on redirect). There is no sign-up: a person signed in with
+  Google sets a password in Settings (`auraSetPassword`), which `linkWithCredential`s it to the same
+  Firebase user, so the token's email — and the room rule — stay the same.
 - Multiple couples share one deployment via a `?room=<id>` query param (`syncRoomId`, default `"0"`).
   All cloud data is namespaced under `aura-rooms/{roomId}/...` (`places`, `photos`, `timestamp`), and
   all `localStorage` cache keys that must not bleed between rooms are suffixed with the room id (see
