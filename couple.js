@@ -644,9 +644,11 @@ let coupleOneShotTimer = null;
 // E:\AI\work\gen_poses.py and cut by design/character-src/cut_pose.py. `stages` lists the stages that
 // have art; any other stage falls back to the CSS-only move named in `fallback`. Adding a motion =
 // its sprites + one entry here.
-//   dance: 0 lean left, 1 crouch, 2 lean right, 3 jump
+//   dance: 0 lean left, 1 crouch, 2 lean right, 3 jump (stages 3 and 5 redrawn with Qwen in v423)
+//   wave:  0 / 1 arm waving (two hand positions), 2 both arms up, 3 happy closed-eye wave
 const COUPLE_MOTIONS = {
     dance: { stages: [1, 2, 3, 4, 5], frames: 4, seq: [0, 1, 2, 1, 0, 1, 2, 3], ms: 230 },
+    wave: { stages: [1, 2, 3, 4, 5], frames: 4, seq: [0, 1, 0, 1, 0, 1, 2, 2, 3, 3], ms: 240 },
 };
 let coupleDanceFrameTimer = null;
 const coupleMotionWarm = new Set();

@@ -243,6 +243,10 @@ layout; the rules that matter:
   (lean left, crouch, lean right, jump), cut from the ChatGPT sheets `design/character-src/dance-<stage>.webp`
   by `cut_dance.py`, which scales them to the stage sprite, keeps the jump's lift, pulls the paler greens to
   the stage colour and repaints stray mint scarf (young stages) / a beige foot. The egg keeps the CSS moves.
+  Since v422 drawn motions share one player: `COUPLE_MOTIONS` (frames, `seq`, ms, which stages have art) +
+  `couplePlayFrames`. New poses come from the local Qwen-Image-Edit pipeline (`E:\AI\work\gen_poses.py`, off-repo)
+  and are cut by `design/character-src/cut_pose.py` (sources kept in `design/character-src/poses/`). The
+  wave hello (v423) plays when the partner comes online and once a day when the card opens (`coupleMaybeGreet`).
 - Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
   character), cut into transparent WebP sprites in `images/character/` by
   `design/character-src/cut.py` (sources alongside). Only the adult stage has expression variants;
