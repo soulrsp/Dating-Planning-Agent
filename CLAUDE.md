@@ -74,6 +74,10 @@ There's no script for this; it's manual.
   empties it when a different room is opened (startup and the Settings room switch), so one room's
   places/photos never show up in, or get pushed to, another. Anything new that reads `db.places` can
   rely on that; don't add a second per-room mechanism alongside it.
+- **Room settings go up only on [설정 저장]** (`saveSettingsToCloud`). Until v426 every start-up pushed this
+  phone's names/dates/map keys, so a phone that had opened an empty room wiped the couple's dates and
+  swapped the map key for both. Room 77's map keys are pinned in code (`PINNED_MAP_KEYS`), and a blank
+  cloud `dates` never overwrites a phone that still has them (it re-uploads its copy instead).
 - **Place text is written field by field.** `triggerSyncUpload(id, fields)` takes the keys an edit actually
   changed and `savePlaceToCloud` PATCHes just those (when the node already exists); `triggerSyncUpload(id)`
   with no list writes the whole record (new place, rename, delete). The pending field list survives in
@@ -235,8 +239,8 @@ layout; the rules that matter:
   first 150**: days before `COUPLE_Q_V2_FROM` still index the old 150-day cycle. If the bank grows again,
   add another cut-over date the same way rather than changing the existing cycles.
 - The card is collapsed by default behind a "명똑똑 키우기" button that `coupleApplyOpen()` draws into
-  `#couple-toggle-slot` inside app.js's D-day card (per-device `aura_couple_open_{room}`); with no
-  anniversary set there is no slot and the card stays open.
+  `#couple-toggle-slot` inside app.js's D-day card (per-device `aura_couple_open_{room}`). The D-day card
+  always renders (a "사귄 날 설정하기" link when no anniversary is set), so the toggle is always there.
 - Badges (`COUPLE_BADGES`) are "stat ≥ goal" over existing data, recomputed on every render; only the
   first-earned time is stored (`couple/badges/{id}`). `coupleCheckBadges()` runs inside `coupleRender()`,
   so when testing with faked in-memory answers, stub it first or it writes real badges.
