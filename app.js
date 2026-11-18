@@ -2959,6 +2959,7 @@ document.addEventListener("click", e => {
     if (c) {
         const sel = document.getElementById("add-place-category");
         sel.value = c.dataset.v;
+        addHits.catTouched = true;
         toggleCustomCategoryInput("add");
         addSheetSync();
         return;
@@ -2973,21 +2974,58 @@ document.addEventListener("click", e => {
     }
 });
 
-// v446: the name is looked up in Kakao Places as it is typed and the matches are listed under the field,
-// so a name with many branches ("스타벅스", "런던베이글뮤지엄") never lands silently on the wrong one.
-// The first match is picked by default; "목록에 없어요" saves the place without a location.
-const addHits = { q: "", hits: [], pick: 0, timer: null, seq: 0 };
+// v446: the name is looked up as it is typed and the matches are listed under the field, so a name
+// with many branches ("스타벅스", "런던베이글뮤지엄") never lands silently on the wrong one. The first
+// match is picked by default; "목록에 없어요" saves the place without a location.
+// v448: uses the love map's engines (Kakao Places nationwide + within 20km of the phone, Kakao address
+// geocoder, Naver geocoder as a fallback) and sorts by distance from the phone like the map does, so a
+// name shared by many businesses ("민테크") lists the nearby one first.
+const addHits = { q: "", hits: [], pick: 0, timer: null, seq: 0, more: false, catTouched: false };
 async function addHitsSearch(q) {
     if (addHits.q === q) return addHits.hits;
     const seq = ++addHits.seq;
     let hits = [];
     try {
-        if (typeof courseKakaoReady === "function" && await courseKakaoReady()) hits = await courseKakaoKeyword(q, { size: 5 });
-    } catch (err) { console.warn("[Add place] Kakao lookup failed", err); }
+        const loc = await getUserCurrentLocation();
+        const lat = loc ? loc.lat : null, lng = loc ? loc.lng : null;
+        const [kp, kg] = await Promise.all([
+            searchKakaoPlaces(q, lat, lng).catch(() => null),
+            searchKakaoGeocoder(q).catch(() => null)
+        ]);
+        hits = [...(kp || []), ...(kg || [])];
+        if (!hits.length && isNaverMapActive && typeof searchNaverGeocoder === "function") {
+            hits = (await searchNaverGeocoder(q, lat, lng).catch(() => null)) || [];
+        }
+        const seen = new Set();
+        hits = hits.filter(h => {
+            if (!h || !isFinite(h.lat) || !isFinite(h.lng)) return false;
+            const k = `${(h.name || "").trim()}_${(+h.lat).toFixed(3)}_${(+h.lng).toFixed(3)}`;
+            if (seen.has(k)) return false;
+            seen.add(k); return true;
+        });
+        if (loc) {
+            hits.forEach(h => { h.km = calculateDistanceKm(lat, lng, h.lat, h.lng); });
+            hits.sort((x, y) => x.km - y.km);
+        }
+    } catch (err) { console.warn("[Add place] lookup failed", err); }
     if (seq !== addHits.seq) return hits;   // a newer search started meanwhile
-    addHits.q = q; addHits.hits = (hits || []).slice(0, 5); addHits.pick = addHits.hits.length ? 0 : -1; addHits.more = false;
+    addHits.q = q; addHits.hits = hits.slice(0, 8); addHits.pick = addHits.hits.length ? 0 : -1; addHits.more = false;
+    addHitsApplyCategory();
     addHitsRender();
     return addHits.hits;
+}
+// The picked spot's Kakao category fills the 종류 chip, unless the person already chose one.
+function addHitsApplyCategory() {
+    const h = addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
+    const sel = document.getElementById("add-place-category");
+    if (!h || !h.category || addHits.catTouched || !sel) return;
+    sel.value = h.category;
+    toggleCustomCategoryInput("add");
+    addSheetSync();
+}
+function addHitsKm(km) {
+    if (!isFinite(km)) return "";
+    return km < 1 ? `${Math.round(km * 1000)}m` : `${km < 10 ? km.toFixed(1) : Math.round(km)}km`;
 }
 function addHitsRender(state) {
     const box = document.getElementById("add-hits");
@@ -2997,18 +3035,15 @@ function addHitsRender(state) {
     if (!addHits.hits.length) { box.innerHTML = `<div class="add-hit-note">📍 지도에서 못 찾았어요 · 위치 없이 저장돼요</div>`; return; }
     const showAll = addHits.more || addHits.pick >= 3;
     const rows = showAll ? addHits.hits : addHits.hits.slice(0, 3);
-    box.innerHTML = rows.map((h, i) => {
-        const addr = h.road_address_name || h.address_name || "";
-        const kind = (h.category_name || "").split(">").pop().trim();
-        return `<button type="button" class="add-hit${i === addHits.pick ? " is-on" : ""}" data-i="${i}">
-            <b>${escapeHtml(h.place_name)}</b><small>${escapeHtml([addr, kind].filter(Boolean).join(" · "))}</small></button>`;
-    }).join("") + `<div class="add-hit-foot">
+    box.innerHTML = rows.map((h, i) => `<button type="button" class="add-hit${i === addHits.pick ? " is-on" : ""}" data-i="${i}">
+            <b>${escapeHtml(h.name || "")}</b><small>${escapeHtml([addHitsKm(h.km), h.address].filter(Boolean).join(" · "))}</small></button>`).join("")
+        + `<div class="add-hit-foot">
         ${rows.length < addHits.hits.length ? `<button type="button" class="add-hit-more">다른 곳 ${addHits.hits.length - rows.length}개 더 보기</button>` : ""}
         <button type="button" class="add-hit add-hit-none${addHits.pick === -1 ? " is-on" : ""}" data-i="-1">목록에 없어요</button></div>`;
 }
 function addHitsReset() {
     clearTimeout(addHits.timer); addHits.seq++;
-    addHits.q = ""; addHits.hits = []; addHits.pick = 0;
+    addHits.q = ""; addHits.hits = []; addHits.pick = 0; addHits.more = false;
     addHitsRender();
 }
 document.addEventListener("input", e => {
@@ -3024,12 +3059,15 @@ document.addEventListener("click", e => {
     const b = e.target.closest && e.target.closest("#add-hits .add-hit");
     if (!b) return;
     addHits.pick = Number(b.dataset.i);
+    addHitsApplyCategory();
     addHitsRender();
 });
 
 function openAddPlaceModal() {
     document.getElementById("modal-place-add").classList.add("active");
     addHitsReset();
+    addHits.catTouched = false;
+    getUserCurrentLocation();   // warm the location fix so the first search can sort by distance
     // 기본값: 날짜 미정 (v445) — "날짜 정하기"를 누르면 오늘부터 채워져요
     applyDateFieldState("add", null);
     const sel = document.getElementById("add-place-category");
@@ -3088,8 +3126,8 @@ async function handleAddPlaceSubmit(e) {
         }
         const hit = addHits.q === name && addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
         if (hit) {
-            lat = parseFloat(hit.y); lng = parseFloat(hit.x);
-            address = hit.road_address_name || hit.address_name || "";
+            lat = parseFloat(hit.lat); lng = parseFloat(hit.lng);
+            address = hit.address && hit.address !== "카카오 장소 검색" ? hit.address : "";
         }
     }
     if (isNaN(lat) || isNaN(lng)) { lat = null; lng = null; }
@@ -7555,16 +7593,41 @@ window.selectGallerySliderImage = function(idx) {
     }
 };
 
-// Sets the currently viewed photo as this place's cover — the one shown on its 추억 갤러리 card.
-// Stored as an index into `photos`, not the image itself, so it stays a tiny field on the place's
-// own cloud node instead of duplicating photo bytes there (see savePlaceToCloud's photo-stripping).
+// Sets the currently viewed photo as this place's cover (v448): the photo moves to the front of the
+// list and the previous cover becomes second, so every view (다녀온 곳 cards, 갤러리, the sheet) shows
+// them first in that order. Reordering rewrites the place's photo list, so it follows the same
+// whole-list rules as adding/removing a photo (photoBaselineProblem first, then uploadPhotoToCloud).
+// coverPhotoIndex goes back to 0; it is still honoured for lists set by older versions.
 window.setCoverPhoto = async function() {
     if (!activePlaceInfo || !activePlaceInfo.id) return;
-    await db.places.update(activePlaceInfo.id, { coverPhotoIndex: activePhotoIndex });
-    activePlaceInfo.coverPhotoIndex = activePhotoIndex;
+    const place = await db.places.get(activePlaceInfo.id);
+    if (!place) return;
+    const list = [...(place.photos || (place.photo ? [place.photo] : []))];
+    const pick = activePhotoIndex;
+    if (pick < 0 || pick >= list.length) return;
+    const oldCover = visitedCoverIndex(place, list);
+    if (pick === 0 && oldCover === 0) { showToast("이미 대표 사진이에요 ⭐", "success"); return; }
+
+    const photoProblem = await photoBaselineProblem(place);
+    if (photoProblem) {
+        showToast(photoProblem, "danger");
+        kickPhotoResync();
+        return;
+    }
+
+    const order = [pick, ...(oldCover !== pick ? [oldCover] : []), ...list.map((_, i) => i).filter(i => i !== pick && i !== oldCover)];
+    const updated = order.map(i => list[i]);
+    await db.places.update(place.id, { photos: updated, photo: updated[0], coverPhotoIndex: 0 });
+    if (syncRoomId) await uploadPhotoToCloud(place.id, updated);
+    triggerSyncUpload(place.id, ["coverPhotoIndex"]);
+
+    activeGalleryPhotos = updated;
+    activePhotoIndex = 0;
+    activePlaceInfo.coverPhotoIndex = 0;
+    activePlaceInfo.place = { ...place, photos: updated, photo: updated[0], coverPhotoIndex: 0 };
     updateGallerySliderUI();
-    triggerSyncUpload(activePlaceInfo.id);
-    showToast("대표 사진으로 설정했습니다! ⭐", "success");
+    showToast("대표 사진으로 설정했어요! 맨 앞에 보여요 ⭐", "success");
+    await renderPlacesList();
     await renderGallery();
 };
 
