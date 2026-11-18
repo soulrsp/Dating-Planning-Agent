@@ -4159,3 +4159,13 @@ body {
 .dh-talk::after { content: ""; position: absolute; right: -6px; bottom: 6px; border: 7px solid transparent; border-left-color: #fff; border-right: 0; }
 .dh-talk.is-out { opacity: 0; transform: translateY(4px) scale(0.96); transition: opacity 0.35s, transform 0.35s; }
 @keyframes dh-talk-in { from { opacity: 0; transform: translateY(8px) scale(0.9); } to { opacity: 1; transform: none; } }
+/* v442: bubble sits in the empty top-right corner (above "일째 함께", beside 명똑똑's head), so it
+   covers neither the number nor the chips; the card gets a little more top room for it */
+.dday-hero { padding-top: 2.05rem; }
+.dh-talk { top: 6px; bottom: auto; right: 84px; max-width: 58%; font-size: 0.72rem; padding: 0.28rem 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-radius: 14px 14px 4px 14px; }
+.dh-talk::after { bottom: 4px; }
+/* v443: bubble reaches toward 명똑똑, with a 💬-style pointed tail down-right at its face */
+.dh-talk { right: 56px; border-radius: 14px; overflow: visible; }
+.dh-talk::after { right: 8px; bottom: -9px; width: 16px; height: 12px; border: none; background: #fff;
+    clip-path: polygon(0 0, 100% 0, 100% 100%); }

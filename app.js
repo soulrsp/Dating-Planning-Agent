@@ -7305,9 +7305,8 @@ async function renderGallery() {
         const coverIdx = (typeof p.coverPhotoIndex === 'number' && p.coverPhotoIndex >= 0 && p.coverPhotoIndex < photos.length) ? p.coverPhotoIndex : 0;
         const order = [coverIdx, ...photos.map((_, i) => i).filter(i => i !== coverIdx)];
         const shown = order.slice(0, 6);
-        const t = parseAnyDate(p.createdAt || p.date);
-        const month = t ? `${new Date(t).getMonth() + 1}월 · ` : "";
-        return `<div class="wl-sec ga-sec" onclick="openGallerySliderModal(${p.id}, ${coverIdx})"><span>${month}${escapeHtml(p.name)}</span><b>${photos.length}장 ›</b></div>
+        const when = shortPlaceDate(p.createdAt || p.date, p.endDate); // "11.15 토" or "11.28 ~ 11.29"
+        return `<div class="wl-sec ga-sec" onclick="openGallerySliderModal(${p.id}, ${coverIdx})"><span>${when ? `${escapeHtml(when)} · ` : ""}${escapeHtml(p.name)}</span><b>${photos.length}장 ›</b></div>
             <div class="ga-grid">${shown.map((pIdx, k) => `<button type="button" class="ga-tile" onclick="openGallerySliderModal(${p.id}, ${pIdx})">
                 <img src="${LAZY_PIXEL}" data-ga-id="${p.id}" data-pidx="${pIdx}" alt="">
                 ${k === 5 && photos.length > 6 ? `<span class="ga-more">+${photos.length - 6}</span>` : ""}</button>`).join("")}</div>`;

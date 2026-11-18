@@ -1323,17 +1323,17 @@ function coupleTalkLines() {
     const me = couple.me, other = me ? coupleOther(me) : null;
     const otherName = other ? coupleName(other) : "";
     const lines = [];
-    if (h < 6) lines.push("이 시간까지 안 자? 얼른 자자 💤", "내일 또 만나요, 잘 자 🌙");
-    else if (h < 11) lines.push("좋은 아침! 오늘 기분은 어때? ☀️", "아침은 먹었어? 🍞", "오늘도 화이팅! 💪");
+    if (h < 6) lines.push("이 시간까지 안 자? 💤", "내일 또 만나요, 잘 자 🌙");
+    else if (h < 11) lines.push("좋은 아침! 기분 어때? ☀️", "아침은 먹었어? 🍞", "오늘도 화이팅! 💪");
     else if (h < 14) lines.push("점심 맛있게 먹어! 🍚", "오늘 기분은 어때? 😊", "오늘도 화이팅! 💪");
     else if (h < 18) lines.push("오후도 힘내자! 🌿", "물 한 잔 마시고 하자 💧", "오늘 기분은 어때? 😊");
     else if (h < 22) lines.push("오늘 하루 어땠어? 🌙", "수고했어, 오늘도! 💚", "저녁은 뭐 먹었어? 🍝");
     else lines.push("오늘도 고생 많았어 🌙", "푹 쉬고 내일 또 보자 💤");
     try {
-        if (me && !coupleMyAnswer()) lines.push("오늘의 질문 아직이야! 같이 답해 볼래? 💬");
+        if (me && !coupleMyAnswer()) lines.push("오늘의 질문 아직이야! 💬");
         if (me && !coupleTodayMood(me)) lines.push("오늘 기분 남겨 줄래? 🙂");
         if (other && coupleIsOnline(other)) lines.push(`${otherName}도 지금 들어와 있어! 💚`);
-        if (couplePetState() === "bloom") lines.push("오늘은 특별한 날이야! 축하해 🎉");
+        if (couplePetState() === "bloom") lines.push("특별한 날이야! 축하해 🎉");
     } catch (_) { }
     return lines;
 }
