@@ -2943,17 +2943,112 @@ function handleMapUrlInput(e) {
 }
 
 // 8. Modals Management (Quick Add & Visit Logging)
+// v445 add sheet: chips drive the hidden <select id="add-place-category"> and the hidden "날짜 미정"
+// checkbox, so every date/category helper written for the old form keeps working unchanged.
+function addSheetSync() {
+    const cat = document.getElementById("add-place-category");
+    document.querySelectorAll("#add-cat-chips button").forEach(b => b.classList.toggle("is-on", cat && b.dataset.v === cat.value));
+    const undated = document.getElementById("add-place-undated");
+    const isUndated = !undated || undated.checked;
+    document.querySelectorAll("#add-when-chips button").forEach(b => b.classList.toggle("is-on", (b.dataset.v === "undated") === isUndated));
+    const row = document.getElementById("add-dates-row");
+    if (row) row.style.display = isUndated ? "none" : "";
+}
+document.addEventListener("click", e => {
+    const c = e.target.closest && e.target.closest("#add-cat-chips button");
+    if (c) {
+        const sel = document.getElementById("add-place-category");
+        sel.value = c.dataset.v;
+        toggleCustomCategoryInput("add");
+        addSheetSync();
+        return;
+    }
+    const w = e.target.closest && e.target.closest("#add-when-chips button");
+    if (w) {
+        const cb = document.getElementById("add-place-undated");
+        cb.checked = w.dataset.v === "undated";
+        if (!cb.checked && !document.getElementById("add-place-date").value) applyDateFieldState("add", Date.now());
+        else window.toggleUndatedDate("add");
+        addSheetSync();
+    }
+});
+
+// v446: the name is looked up in Kakao Places as it is typed and the matches are listed under the field,
+// so a name with many branches ("스타벅스", "런던베이글뮤지엄") never lands silently on the wrong one.
+// The first match is picked by default; "목록에 없어요" saves the place without a location.
+const addHits = { q: "", hits: [], pick: 0, timer: null, seq: 0 };
+async function addHitsSearch(q) {
+    if (addHits.q === q) return addHits.hits;
+    const seq = ++addHits.seq;
+    let hits = [];
+    try {
+        if (typeof courseKakaoReady === "function" && await courseKakaoReady()) hits = await courseKakaoKeyword(q, { size: 5 });
+    } catch (err) { console.warn("[Add place] Kakao lookup failed", err); }
+    if (seq !== addHits.seq) return hits;   // a newer search started meanwhile
+    addHits.q = q; addHits.hits = (hits || []).slice(0, 5); addHits.pick = addHits.hits.length ? 0 : -1; addHits.more = false;
+    addHitsRender();
+    return addHits.hits;
+}
+function addHitsRender(state) {
+    const box = document.getElementById("add-hits");
+    if (!box) return;
+    if (state === "loading") { box.innerHTML = `<div class="add-hit-note">📍 지도에서 찾는 중…</div>`; return; }
+    if (!addHits.q) { box.innerHTML = ""; return; }
+    if (!addHits.hits.length) { box.innerHTML = `<div class="add-hit-note">📍 지도에서 못 찾았어요 · 위치 없이 저장돼요</div>`; return; }
+    const showAll = addHits.more || addHits.pick >= 3;
+    const rows = showAll ? addHits.hits : addHits.hits.slice(0, 3);
+    box.innerHTML = rows.map((h, i) => {
+        const addr = h.road_address_name || h.address_name || "";
+        const kind = (h.category_name || "").split(">").pop().trim();
+        return `<button type="button" class="add-hit${i === addHits.pick ? " is-on" : ""}" data-i="${i}">
+            <b>${escapeHtml(h.place_name)}</b><small>${escapeHtml([addr, kind].filter(Boolean).join(" · "))}</small></button>`;
+    }).join("") + `<div class="add-hit-foot">
+        ${rows.length < addHits.hits.length ? `<button type="button" class="add-hit-more">다른 곳 ${addHits.hits.length - rows.length}개 더 보기</button>` : ""}
+        <button type="button" class="add-hit add-hit-none${addHits.pick === -1 ? " is-on" : ""}" data-i="-1">목록에 없어요</button></div>`;
+}
+function addHitsReset() {
+    clearTimeout(addHits.timer); addHits.seq++;
+    addHits.q = ""; addHits.hits = []; addHits.pick = 0;
+    addHitsRender();
+}
+document.addEventListener("input", e => {
+    if (!e.target || e.target.id !== "add-place-name") return;
+    const q = e.target.value.trim();
+    clearTimeout(addHits.timer);
+    if (q.length < 2) { addHitsReset(); return; }
+    addHitsRender("loading");
+    addHits.timer = setTimeout(() => addHitsSearch(q), 450);
+});
+document.addEventListener("click", e => {
+    if (e.target.closest && e.target.closest("#add-hits .add-hit-more")) { addHits.more = true; addHitsRender(); return; }
+    const b = e.target.closest && e.target.closest("#add-hits .add-hit");
+    if (!b) return;
+    addHits.pick = Number(b.dataset.i);
+    addHitsRender();
+});
+
 function openAddPlaceModal() {
     document.getElementById("modal-place-add").classList.add("active");
-    // 기본값: 오늘 날짜, "미정" 체크 해제
-    applyDateFieldState("add", Date.now());
+    addHitsReset();
+    // 기본값: 날짜 미정 (v445) — "날짜 정하기"를 누르면 오늘부터 채워져요
+    applyDateFieldState("add", null);
+    const sel = document.getElementById("add-place-category");
+    if (sel) sel.value = "Cafe";
+    toggleCustomCategoryInput("add");
+    document.getElementById("add-link-row")?.classList.add("hidden");
+    document.getElementById("add-link-toggle")?.classList.remove("hidden");
+    addSheetSync();
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => document.getElementById("add-place-name")?.focus(), 80);
 }
 
 function closeAddPlaceModal() {
     document.getElementById("modal-place-add").classList.remove("active");
     document.getElementById("form-place-add").reset();
-    // form.reset()은 체크박스만 되돌리므로 날짜 입력의 disabled 상태를 직접 푼다
-    applyDateFieldState("add", Date.now());
+    ["add-place-lat", "add-place-lng"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    applyDateFieldState("add", null);
+    addHitsReset();
+    addSheetSync();
 }
 
 async function handleAddPlaceSubmit(e) {
@@ -2978,10 +3073,29 @@ async function handleAddPlaceSubmit(e) {
         return;
     }
 
+    // v445/v446: no lat/lng fields any more. A pasted map link still fills them; otherwise the spot
+    // picked from the Kakao match list gives the coordinates and the address (notes is the address
+    // everywhere — see CLAUDE.md). "목록에 없어요" or no match leaves them empty (updateMapMarkers()
+    // tries the name later), instead of the old random spot in Seoul.
+    let address = "";
+    const submitBtn = document.getElementById("btn-add-submit");
     if (isNaN(lat) || isNaN(lng)) {
-        lat = 37.5665 + (Math.random() - 0.5) * 0.03;
-        lng = 126.9780 + (Math.random() - 0.5) * 0.03;
+        if (addHits.q !== name) {   // saved before the list for this exact name came back
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "📍 위치 찾는 중…"; }
+            clearTimeout(addHits.timer);
+            await addHitsSearch(name);
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "💗 담기"; }
+        }
+        const hit = addHits.q === name && addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
+        if (hit) {
+            lat = parseFloat(hit.y); lng = parseFloat(hit.x);
+            address = hit.road_address_name || hit.address_name || "";
+        }
     }
+    if (isNaN(lat) || isNaN(lng)) { lat = null; lng = null; }
+    // The memo is a person's note, not an address: it goes in as this phone's comment.
+    const me = (typeof couple !== "undefined" && couple.me) || "A";
+    const memoField = me === "B" ? "commentB" : "commentA";
 
     try {
         const newAddedId = await db.places.add({
@@ -2991,7 +3105,8 @@ async function handleAddPlaceSubmit(e) {
             lat,
             lng,
             priority,
-            notes,
+            notes: address,
+            [memoField]: notes,
             isVisited: 0,
             review: "",
             peopleCount: 2,
@@ -4370,11 +4485,13 @@ function visitedCardHtml(place, big) {
     const address = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
     const when = shortPlaceDate(place.createdAt || place.date, place.endDate);
     const open = list.length ? `openGallerySliderModal(${place.id}, ${cover})` : `openEditPlaceModal(${place.id})`;
-    const photo = list.length
-        ? `<img src="${LAZY_PIXEL}" data-vs-id="${place.id}" data-pidx="${cover}" alt="">`
+    // v446: the cover plus the next photo side by side; each opens the sheet at its own picture.
+    const shown = list.length >= 2 ? [cover, (cover + 1) % list.length] : list.length ? [cover] : [];
+    const photo = shown.length
+        ? shown.map(i => `<img src="${LAZY_PIXEL}" data-vs-id="${place.id}" data-pidx="${i}" alt="" onclick="event.stopPropagation(); openGallerySliderModal(${place.id}, ${i})">`).join("")
         : `<span class="vs-noimg" style="background:${bg}">${emoji}</span>`;
     return `<div class="vs-card card${big ? " is-big" : ""}" onclick="${open}">
-        <div class="vs-photo">${photo}
+        <div class="vs-photo${shown.length === 2 ? " is-two" : ""}">${photo}
             ${when ? `<span class="vs-date">${escapeHtml(when)}</span>` : ""}
             ${list.length ? `<span class="vs-count">📷 ${list.length}</span>` : ""}
             <button type="button" class="vs-edit" title="수정" onclick="event.stopPropagation(); openEditPlaceModal(${place.id})">✏️</button>
@@ -4488,7 +4605,7 @@ async function renderPlacesList() {
         if (filteredVisited.length === 0) {
             visitedContainer.innerHTML = `<div class="tab-empty">${searchVal ? "찾는 장소가 없어요 🔍" : "데이트를 다녀오면 위시리스트에서 ✓ 다녀왔어요를 눌러 주세요 💕"}</div>`;
         } else {
-            // v438: photo-first cards grouped by month; the newest of each month is shown large.
+            // v438: photo-first cards grouped by month. v446: every card full width with both comments.
             const months = [];
             filteredVisited.forEach(place => {
                 const t = parseAnyDate(place.createdAt || place.date);
@@ -4499,8 +4616,7 @@ async function renderPlacesList() {
             });
             visitedContainer.innerHTML = months.map(g => `
                 <div class="wl-sec"><span>${g.key}</span><b>${g.places.length}곳</b></div>
-                ${visitedCardHtml(g.places[0], true)}
-                ${g.places.length > 1 ? `<div class="vs-grid">${g.places.slice(1).map(p => visitedCardHtml(p, false)).join("")}</div>` : ""}`).join("");
+                ${g.places.map(p => visitedCardHtml(p, true)).join("")}`).join("");
             visitedContainer.querySelectorAll("img[data-vs-id]").forEach(img => {
                 const place = filteredVisited.find(p => String(p.id) === img.dataset.vsId);
                 const list = place && (place.photos || (place.photo ? [place.photo] : []));

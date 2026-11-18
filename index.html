@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261118_v444">
+    <link rel="stylesheet" href="style.css?v=20261118_v446">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -587,124 +587,60 @@
     </div>
 
     <!-- Modal: Place Registration (Quick Add) -->
-    <div class="modal-overlay" id="modal-place-add">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3>💖 가고 싶은 장소 추가</h3>
-                <button class="modal-close" id="btn-close-modal"><i data-lucide="x"></i></button>
+    <!-- v445: quick add as a bottom sheet. Name + kind + when + memo; the location is looked up from the
+         name on save (Kakao), so there are no lat/lng fields (they stay as hidden inputs for the map-link parser). -->
+    <div class="modal-overlay ps-overlay" id="modal-place-add" onclick="if (event.target === this) closeAddPlaceModal()">
+        <div class="ps-sheet add-sheet">
+            <div class="ps-grab"></div>
+            <div class="ps-head">
+                <div class="ps-title"><h4 class="add-title">💗 가고 싶은 곳 추가</h4><div class="ps-meta">이름을 적고 아래 목록에서 맞는 곳을 골라요</div></div>
+                <button type="button" class="ps-x" id="btn-close-modal" aria-label="닫기"><i data-lucide="x"></i></button>
             </div>
-            <form class="modal-body" id="form-place-add">
-                <div class="form-group">
-                    <label for="add-place-name">장소 이름 *</label>
-                    <input type="text" id="add-place-name" placeholder="예: 페이브 베이커리 연남" required>
+            <form id="form-place-add" class="add-form">
+                <input type="text" id="add-place-name" class="add-name" placeholder="장소 이름 (예: 어니언 성수)" required autocomplete="off">
+                <div class="add-hits" id="add-hits"></div>
+
+                <div class="add-label">종류</div>
+                <div class="add-chips" id="add-cat-chips">
+                    <button type="button" data-v="Cafe" class="is-on">☕ 카페</button>
+                    <button type="button" data-v="Restaurant">🍽 맛집</button>
+                    <button type="button" data-v="Bar">🍷 술집</button>
+                    <button type="button" data-v="Park">🌿 산책</button>
+                    <button type="button" data-v="Museum">🎨 전시</button>
+                    <button type="button" data-v="Other">📍 기타</button>
+                    <button type="button" data-v="custom">✏️ 직접</button>
                 </div>
-                
-                <div class="form-group">
-                    <label for="add-place-category">장소 종류</label>
-                    <select id="add-place-category" onchange="toggleCustomCategoryInput('add')">
-                        <option value="Cafe">카페 (Cafe)</option>
-                        <option value="Restaurant">맛집 (Restaurant)</option>
-                        <option value="Bar">술집/바 (Bar)</option>
-                        <option value="Park">공원/산책 (Park)</option>
-                        <option value="Museum">문화/미술관 (Museum)</option>
-                        <option value="Other">기타 (Other)</option>
-                        <option value="custom">✏️ 직접 입력</option>
-                    </select>
-                    <input type="text" id="add-place-custom-category" placeholder="카테고리 직접 입력 (예: 보드게임, 피크닉)" style="display:none; margin-top:0.4rem;">
+                <select id="add-place-category" hidden onchange="toggleCustomCategoryInput('add')">
+                    <option value="Cafe">Cafe</option><option value="Restaurant">Restaurant</option><option value="Bar">Bar</option>
+                    <option value="Park">Park</option><option value="Museum">Museum</option><option value="Other">Other</option><option value="custom">custom</option>
+                </select>
+                <input type="text" id="add-place-custom-category" class="add-input" placeholder="종류 직접 입력 (예: 보드게임, 피크닉)" style="display:none;">
+
+                <div class="add-label">언제</div>
+                <div class="add-chips" id="add-when-chips">
+                    <button type="button" data-v="undated" class="is-on">날짜 미정</button>
+                    <button type="button" data-v="dated">📅 날짜 정하기</button>
+                </div>
+                <input type="checkbox" id="add-place-undated" hidden onchange="toggleUndatedDate('add')">
+                <div class="add-dates" id="add-dates-row">
+                    <input type="date" id="add-place-date" class="add-input" oninput="handleDateRangeStartInput('add')">
+                    <span>~</span>
+                    <input type="date" id="add-place-end-date" class="add-input" oninput="handleDateRangeEndInput('add')">
                 </div>
 
-                <div class="form-group">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <label for="add-place-date" style="margin:0;">방문 예정 날짜</label>
-                        <label style="font-size:0.72rem; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--color-primary); font-weight:700;">
-                            <input type="checkbox" id="add-place-undated" onchange="toggleUndatedDate('add')"> 📅 날짜 미정
-                        </label>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
-                        <input type="date" id="add-place-date" oninput="handleDateRangeStartInput('add')" style="flex:1; min-width:0;">
-                        <span style="color:var(--color-text-med); font-weight:700; flex-shrink:0;">~</span>
-                        <input type="date" id="add-place-end-date" oninput="handleDateRangeEndInput('add')" style="flex:1; min-width:0;">
-                    </div>
-                    <p style="font-size:0.68rem; color:var(--color-text-low); margin:4px 0 0;">뒷칸은 기본적으로 앞칸과 같은 날짜예요. 뒷칸만 다르게 바꾸면 자동으로 여러 날짜(기간)로 등록돼요.</p>
-                </div>
+                <div class="add-label">메모 <small>(선택 · 내 한마디로 저장돼요)</small></div>
+                <textarea id="add-place-notes" class="add-input" rows="2" placeholder="예: 시그니처 케이크 꼭 먹기!"></textarea>
 
-                <div class="form-group">
-                    <label for="add-place-url">지도 링크 입력 (구글/네이버 공유 URL)</label>
-                    <input type="url" id="add-place-url" placeholder="지도 링크를 붙여넣으세요">
-                    <span class="help-text">공유용 긴 URL인 경우 위도/경도를 자동 파싱합니다.</span>
+                <button type="button" class="add-more" id="add-link-toggle" onclick="this.classList.add('hidden'); document.getElementById('add-link-row').classList.remove('hidden')">＋ 지도 링크 붙이기</button>
+                <div class="hidden" id="add-link-row">
+                    <input type="url" id="add-place-url" class="add-input" placeholder="네이버·카카오·구글 지도 공유 링크">
                 </div>
+                <input type="hidden" id="add-place-lat"><input type="hidden" id="add-place-lng">
+                <input type="hidden" id="add-place-priority" value="medium">
 
-                <div class="form-group-row">
-                    <div class="form-group">
-                        <label for="add-place-lat">위도 (Latitude)</label>
-                        <input type="number" id="add-place-lat" step="any" placeholder="예: 37.5612">
-                    </div>
-                    <div class="form-group">
-                        <label for="add-place-lng">경도 (Longitude)</label>
-                        <input type="number" id="add-place-lng" step="any" placeholder="예: 126.9248">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="add-place-notes">추천 사유 / 시키고 싶은 메뉴</label>
-                    <textarea id="add-place-notes" rows="3" placeholder="예: 시그니처 멜팅 초콜릿 케이크 필수!"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="add-place-priority">가고 싶은 열정 정도</label>
-                    <select id="add-place-priority">
-                        <option value="medium">꼭 가봐요 (Medium)</option>
-                        <option value="high">당장 가요!! 🔥 (High)</option>
-                        <option value="low">천천히 가요 (Low)</option>
-                    </select>
-                </div>
-
-                <div class="modal-footer">
+                <div class="add-actions">
                     <button type="button" class="btn btn-outline" id="btn-cancel-modal">취소</button>
-                    <button type="submit" class="btn btn-primary">보관함에 쏙</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal: Visit Log & Review (Wishlist -> Visited) -->
-    <div class="modal-overlay" id="modal-visit-log">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3>🎀 방문 완료 기록 작성</h3>
-                <button class="modal-close" id="btn-close-visit-modal"><i data-lucide="x"></i></button>
-            </div>
-            <form class="modal-body" id="form-visit-log">
-                <input type="hidden" id="visit-place-id">
-                
-                <div class="form-group">
-                    <label>방문한 장소</label>
-                    <div class="read-only-val" id="visit-place-name">장소명</div>
-                </div>
-
-
-                <div class="form-group-row" style="margin-top:0.4rem;">
-                    <div class="form-group">
-                        <label for="visit-comment-a">💬 <span id="visit-lbl-comment-a">초코</span> 코멘트 작성하기</label>
-                        <input type="text" id="visit-comment-a" placeholder="예: 맛있는 음식 먹어서 너무 행복했어! 💕">
-                    </div>
-                    <div class="form-group">
-                        <label for="visit-comment-b">💬 <span id="visit-lbl-comment-b">딸기</span> 코멘트 작성하기</label>
-                        <input type="text" id="visit-comment-b" placeholder="예: 다음에 꼭 또 오고 싶어! ✨">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="visit-photo">커플 추억 사진 (선택, 여러 장 가능)</label>
-                    <input type="file" id="visit-photo" accept="image/*" multiple style="display: none;">
-                    <div class="photo-preview-box" id="visit-photo-preview">
-                        <span>여기를 클릭해 이미지를 선택하세요. (여러 장 선택 가능) 📸</span>
-                    </div>
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline" id="btn-cancel-visit-modal">취소</button>
-                    <button type="submit" class="btn btn-primary">기록 저장</button>
+                    <button type="submit" class="btn btn-primary" id="btn-add-submit">💗 담기</button>
                 </div>
             </form>
         </div>
@@ -1148,21 +1084,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261118_v444"></script>
+    <script src="app.js?v=20261118_v446"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261118_v444"></script>
+    <script src="studio.js?v=20261118_v446"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261118_v444"></script>
+    <script src="couple.js?v=20261118_v446"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261118_v444"></script>
+    <script src="together.js?v=20261118_v446"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261118_v444"></script>
+    <script src="course.js?v=20261118_v446"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261118_v444').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261118_v446').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

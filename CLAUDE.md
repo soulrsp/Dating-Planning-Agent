@@ -144,7 +144,7 @@ without a Naver key configured.
 
 Every tab opens with a gradient hero card (`.tab-hero`, filled by its renderer) and a tools row (`.tab-search` +
 `.tab-round-btn`). 위시리스트 = one-line rows grouped 다가오는 약속 / 언젠가 / 지난 날짜 that open in place
-(`wishRowHtml`, open state in `wishOpenRows`). 다녀온 곳 = photo cards grouped by month, newest of each month large
+(`wishRowHtml`, open state in `wishOpenRows`). 다녀온 곳 = full-width photo cards grouped by month (two photos side by side, both comments; v446)
 (`visitedCardHtml`). 갤러리 = [추억 앨범 | 꾸민 사진] segments (`setGallerySeg`, per device) with photos grouped by
 place. AI 플래너 = four tiles that open one field each (`coursePlan.openField`). Place photos open as a bottom
 sheet (`#modal-gallery-slider`, still driven by `openGallerySliderModal` / `updateGallerySliderUI`). Shared helpers:
