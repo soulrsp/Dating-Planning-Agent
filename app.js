@@ -160,6 +160,46 @@ function sanitizeRoomId(value) {
     return String(value || "").normalize("NFC").replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 64);
 }
 let syncRoomId = sanitizeRoomId(new URLSearchParams(window.location.search).get("room")) || sanitizeRoomId(localStorage.getItem("aura_sync_room_id")) || "0";
+// True when neither the link nor this device named a room, so "0" is just the fallback. That happens on
+// a freshly added iPhone home-screen icon: it keeps its own storage apart from Safari, so the room
+// Safari remembered isn't there. Shown as a "우리 방 번호" prompt on the dashboard (auraRoomPrompt).
+// A stored "0" counts too: the settings form saves whatever room is showing, fallback included.
+const ROOM_IS_FALLBACK = !sanitizeRoomId(new URLSearchParams(window.location.search).get("room"))
+    && ["", "0"].includes(sanitizeRoomId(localStorage.getItem("aura_sync_room_id")));
+// Keep the room in the address bar, so "홈 화면에 추가" made from any page of the app captures it.
+(function keepRoomInUrl() {
+    try {
+        const u = new URL(window.location.href);
+        if (!ROOM_IS_FALLBACK && !u.searchParams.get("room")) {
+            u.searchParams.set("room", syncRoomId);
+            history.replaceState(history.state, "", u.toString());
+        }
+    } catch (_) {}
+})();
+function auraRoomPrompt() {
+    if (!ROOM_IS_FALLBACK || document.getElementById("room-prompt")) return;
+    const host = document.getElementById("tab-dashboard");
+    if (!host) return;
+    const box = document.createElement("div");
+    box.id = "room-prompt";
+    box.className = "card room-prompt";
+    box.innerHTML = `<div class="room-prompt-title">🔑 우리 방 번호를 알려주세요</div>
+        <div class="room-prompt-text">방 번호 없이 열려서 빈 화면이 보이고 있어요. 홈 화면 아이콘으로 처음 열면 이럴 수 있어요. 한 번만 넣으면 이 기기가 기억해요.</div>
+        <div class="room-prompt-row"><input type="text" id="room-prompt-input" inputmode="numeric" placeholder="방 번호 (예: 77)" maxlength="64">
+        <button type="button" class="btn btn-primary" id="room-prompt-go">열기</button></div>`;
+    host.prepend(box);
+    const go = () => {
+        const id = sanitizeRoomId(document.getElementById("room-prompt-input").value);
+        if (!id) return;
+        try { localStorage.setItem("aura_sync_room_id", id); } catch (_) {}
+        const u = new URL(window.location.href);
+        u.searchParams.set("room", id);
+        window.location.replace(u.toString());
+    };
+    document.getElementById("room-prompt-go").addEventListener("click", go);
+    document.getElementById("room-prompt-input").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+}
+document.addEventListener("DOMContentLoaded", auraRoomPrompt);
 // Every request to this URL carries the signed-in user's ID token (patchFetchForAuth), so a custom
 // database URL may only be a Firebase Realtime Database origin — never an arbitrary server that
 // would receive the token. Returns the normalized origin, or "" when the value isn't one.

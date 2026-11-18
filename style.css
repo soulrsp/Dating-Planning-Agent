@@ -3807,3 +3807,10 @@ body {
     align-self: flex-start; font-size: 0.74rem; font-weight: 700; color: var(--color-secondary);
     background: rgba(181, 23, 158, 0.08); border-radius: 999px; padding: 0.2rem 0.7rem; margin-right: 1.6rem;
 }
+
+/* ---- "우리 방 번호" prompt when the app opened without a room (app.js auraRoomPrompt, v424) ---- */
+.room-prompt { border: 2px solid var(--color-primary); background: rgba(255, 101, 132, 0.06); margin-bottom: 1rem; padding: 1rem 1.1rem; }
+.room-prompt-title { font-weight: 800; font-size: 1.05rem; color: var(--color-primary); margin-bottom: 0.35rem; }
+.room-prompt-text { font-size: 0.82rem; color: var(--color-text-med); line-height: 1.5; margin-bottom: 0.7rem; }
+.room-prompt-row { display: flex; gap: 0.5rem; }
+.room-prompt-row input { flex: 1; min-width: 0; padding: 0.6rem 0.8rem; border-radius: 12px; border: 1px solid rgba(255, 101, 132, 0.35); font-size: 1rem; }

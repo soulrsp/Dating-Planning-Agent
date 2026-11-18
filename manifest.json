@@ -2,7 +2,7 @@
   "name": "AURA - 러블리 AI 데이트 플래너",
   "short_name": "AURA 데이트",
   "description": "커플을 위한 러블리 AI 데이트 플래너 & 실시간 데이터 연동 에이전트",
-  "start_url": "./index.html",
+  "id": "./index.html",
   "display": "standalone",
   "background_color": "#FFF0F2",
   "theme_color": "#FF6584",
