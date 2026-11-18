@@ -648,9 +648,10 @@ window.courseShare = async function(id) {
 
     const link = `${courseAppBase()}?room=${encodeURIComponent(syncRoomId)}&course=${r.shareId}`;
     const w = r.weather && !r.weather.none ? r.weather : null;
-    const wText = w ? `${courseWeatherLabel(w.code).join(" ")} ${w.tmin}°/${w.tmax}°` : "";
+    const wText = w ? `${courseWeatherLabel(w.code).join(" ")} ${w.tmin}° / ${w.tmax}° · 비 ${w.pop}%` : "";
     const title = `💗 ${r.course.title}`;
-    const desc = [`${courseDateLabel(r.date)} · ${r.prefs.region}`, wText].filter(Boolean).join(" · ");
+    // Date/area on one line, weather on its own line (KakaoTalk keeps the \n), so neither wraps mid-way.
+    const desc = [`📅 ${courseDateLabel(r.date)} · ${r.prefs.region}`, wText].filter(Boolean).join("\n");
 
     // Kakao SDK already loaded when the card rendered; calling it synchronously keeps the tap "fresh".
     if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized() && window.Kakao.Share) {
