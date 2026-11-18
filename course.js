@@ -93,61 +93,60 @@ function courseDateChips() {
         .map(c => ({ label: c.label, ymd: courseYmd(c.d) }));
 }
 
+// v438: hero + four summary tiles (언제 / 어디서 / 시간 / 분위기·예산). Tapping a tile opens just that
+// field below the tiles (coursePlan.openField); the request line and the go button are always there.
 function courseRenderForm() {
     const box = document.getElementById("course-builder");
     if (!box) return;
     if (!coursePlan.prefs) courseLoadPrefs();
     if (!coursePlan.date || courseDaysAhead(coursePlan.date) < 0) coursePlan.date = courseYmd(new Date());
     const p = coursePlan.prefs;
+    const open = coursePlan.openField || "";
     const chip = (active, onclick, label) => `<button type="button" class="studio-chip small${active ? " active" : ""}" onclick="${onclick}">${label}</button>`;
-    const dateChips = courseDateChips();
+    const ahead = courseDaysAhead(coursePlan.date);
+    const vibeLabels = COURSE_VIBES.filter(([k]) => p.vibes.includes(k)).map(([, l]) => l.replace(/^\S+\s/, ""));
+    const budget = (COURSE_BUDGETS.find(([k]) => k === p.budget) || [, "상관없음"])[1];
+    const tile = (key, icon, label, value, sub) => `<button type="button" class="ct-tile${open === key ? " is-open" : ""}" onclick="courseOpenField('${key}')">
+        <small>${icon} ${label}</small><b id="ct-${key}">${escapeHtml(value)}</b><i>${escapeHtml(sub)}</i></button>`;
+    let panel = "";
+    if (open === "when") panel = `<div class="studio-chips">${courseDateChips().map(c => chip(c.ymd === coursePlan.date, `courseSetDate('${c.ymd}')`, c.label)).join("")}
+            <input type="date" class="course-date-input" value="${coursePlan.date}" min="${courseYmd(new Date())}" onchange="courseSetDate(this.value)"></div>`;
+    else if (open === "where") panel = `<input type="text" id="course-region" class="course-input" maxlength="40" placeholder="예: 대전 둔산동, 성수동, 전주 한옥마을" value="${escapeHtml(p.region)}"
+            oninput="coursePlan.prefs.region = this.value; var t = document.getElementById('ct-where'); if (t) t.textContent = this.value || '정해 주세요'">`;
+    else if (open === "time") panel = `<div class="studio-chips">${Object.entries(COURSE_TIMES).map(([k, t]) => chip(p.time === k, `courseSetPref('time', '${k}')`, t.label)).join("")}</div>`;
+    else if (open === "mood") panel = `<label class="ct-label">이런 데이트 (여러 개 골라도 돼요)</label>
+            <div class="studio-chips">${COURSE_VIBES.map(([k, l]) => chip(p.vibes.includes(k), `courseToggleVibe('${k}')`, l)).join("")}</div>
+            <label class="ct-label">예산 (둘이 합쳐)</label>
+            <div class="studio-chips">${COURSE_BUDGETS.map(([k, l]) => chip(p.budget === k, `courseSetPref('budget', '${k}')`, l)).join("")}</div>
+            <div class="course-checks">
+                <label><input type="checkbox" ${p.useWish ? "checked" : ""} onchange="coursePlan.prefs.useWish = this.checked; courseSavePrefs()"> 💖 위시리스트 장소 넣어주기</label>
+                <label><input type="checkbox" ${p.useManual ? "checked" : ""} onchange="coursePlan.prefs.useManual = this.checked; courseSavePrefs()"> 📖 서로 사용 설명서의 음식 취향 반영</label>
+            </div>`;
     box.innerHTML = `
-        <div class="course-form-head">
-            <div class="bot-avatar"><i data-lucide="cloud-sun"></i></div>
-            <div>
-                <div class="bot-name">날씨 맞춤 AI 데이트 코스</div>
-                <div class="bot-status">그날 날씨·미세먼지를 보고, 우리 위시리스트와 취향까지 챙겨서 짜드려요</div>
-            </div>
+        <div class="tab-hero tg-pink course-hero"><h3>이번 데이트,<br>어디 갈까?</h3><p>날씨·미세먼지·위시리스트까지 보고 짜 줘요</p>
+            <img src="images/character/stage-4.webp" alt=""></div>
+        <div class="ct-tiles">
+            ${tile("when", "📅", "언제", courseDateLabel(coursePlan.date), ahead === 0 ? "오늘" : ahead === 1 ? "내일" : `${ahead}일 뒤`)}
+            ${tile("where", "📍", "어디서", p.region || "정해 주세요", p.region ? "탭해서 바꾸기" : "동네나 역 이름")}
+            ${tile("time", "🕒", "시간", (COURSE_TIMES[p.time] || COURSE_TIMES.day).label.replace(/^\S+\s/, ""), `${(COURSE_TIMES[p.time] || COURSE_TIMES.day).from}시 ~ ${(COURSE_TIMES[p.time] || COURSE_TIMES.day).to}시`)}
+            ${tile("mood", "💗", "분위기 · 예산", vibeLabels.length ? vibeLabels.slice(0, 2).join(" · ") + (vibeLabels.length > 2 ? ` 외 ${vibeLabels.length - 2}` : "") : "아무거나", budget)}
         </div>
-        <div class="course-field">
-            <label>📅 언제</label>
-            <div class="studio-chips">
-                ${dateChips.map(c => chip(c.ymd === coursePlan.date, `courseSetDate('${c.ymd}')`, c.label)).join("")}
-                <input type="date" class="course-date-input" value="${coursePlan.date}" min="${courseYmd(new Date())}" onchange="courseSetDate(this.value)">
-            </div>
-            <div class="studio-chips">
-                ${Object.entries(COURSE_TIMES).map(([k, t]) => chip(p.time === k, `courseSetPref('time', '${k}')`, t.label)).join("")}
-            </div>
-        </div>
-        <div class="course-field">
-            <label for="course-region">📍 어디서</label>
-            <input type="text" id="course-region" class="course-input" maxlength="40" placeholder="예: 대전 둔산동, 성수동, 전주 한옥마을" value="${escapeHtml(p.region)}" oninput="coursePlan.prefs.region = this.value">
-        </div>
-        <div class="course-field">
-            <label>💗 이런 데이트 (여러 개 골라도 돼요)</label>
-            <div class="studio-chips">
-                ${COURSE_VIBES.map(([k, l]) => chip(p.vibes.includes(k), `courseToggleVibe('${k}')`, l)).join("")}
-            </div>
-        </div>
-        <div class="course-field">
-            <label>💰 예산 (둘이 합쳐)</label>
-            <div class="studio-chips">
-                ${COURSE_BUDGETS.map(([k, l]) => chip(p.budget === k, `courseSetPref('budget', '${k}')`, l)).join("")}
-            </div>
-        </div>
-        <div class="course-field">
-            <label for="course-extra">✍️ 더 바라는 점 (선택)</label>
-            <input type="text" id="course-extra" class="course-input" maxlength="120" placeholder="예: 조용한 곳 위주로, 마지막은 분위기 좋은 바" value="${escapeHtml(p.extra || "")}" oninput="coursePlan.prefs.extra = this.value">
-        </div>
-        <div class="course-checks">
-            <label><input type="checkbox" ${p.useWish ? "checked" : ""} onchange="coursePlan.prefs.useWish = this.checked; courseSavePrefs()"> 💖 위시리스트 장소 넣어주기</label>
-            <label><input type="checkbox" ${p.useManual ? "checked" : ""} onchange="coursePlan.prefs.useManual = this.checked; courseSavePrefs()"> 📖 서로 사용 설명서의 음식 취향 반영</label>
+        ${panel ? `<div class="ct-panel">${panel}<button type="button" class="ct-done" onclick="courseOpenField('')">완료</button></div>` : ""}
+        <div class="ct-wish">
+            <label for="course-extra">✍️ 이번 코스에 꼭 넣고 싶은 것</label>
+            <input type="text" id="course-extra" class="course-input" maxlength="120" placeholder="예: 저녁은 파스타, 많이 걷진 않게" value="${escapeHtml(p.extra || "")}" oninput="coursePlan.prefs.extra = this.value">
         </div>
         <button type="button" id="course-go-btn" class="btn btn-primary course-go" onclick="courseGenerate()" ${coursePlan.busy ? "disabled" : ""}>
             ${coursePlan.busy ? `<span class="course-spin"></span> <span id="course-progress">코스 짜는 중…</span>` : "✨ 날씨 보고 코스 짜기"}
         </button>`;
     if (window.lucide) lucide.createIcons();
+    if (open === "where") setTimeout(() => document.getElementById("course-region")?.focus(), 30);
 }
+window.courseOpenField = function(key) {
+    coursePlan.openField = coursePlan.openField === key ? "" : key;
+    courseSavePrefs();
+    courseRenderForm();
+};
 
 window.courseSetDate = function(ymd) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || "")) return;

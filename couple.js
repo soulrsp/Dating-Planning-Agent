@@ -431,6 +431,7 @@ window.coupleStartSync = async function() {
     couple.presenceId = setInterval(couplePresenceBeat, COUPLE_PRESENCE_MS);
     coupleApplyOpen(); // the dashboard's 명똑똑 row can show real points now
     if (typeof renderDdayCard === "function") renderDdayCard();
+    setTimeout(() => coupleSay(false), 1500); // 명똑똑's hello
 };
 
 document.addEventListener("visibilitychange", () => {
@@ -1309,6 +1310,66 @@ function coupleNeedsLook() {
     return [n.answer && n.answer[other], n.mood && n.mood[other], couple.hearts[other]].some(x => x && (x.at || 0) > looked);
 }
 // Called by coupleRender() and by app.js's renderDdayCard() (which may run before or after it).
+// ── 명똑똑 says hello (v441) ────────────────────────────────────────────────────────────────────
+// From 어린이 (stage 2) up, 명똑똑 greets in a speech bubble on the dashboard's D-day card: once when the
+// app opens, again when it comes back after a while, and on a tap of the bubble for another line.
+// Lines depend on the time of day and on what's going on (today's question, mood, partner online,
+// a special day), picked at random from what fits.
+const COUPLE_TALK_MIN_STAGE = 2;
+const COUPLE_TALK_MS = 6500;
+let coupleTalkUntil = 0, coupleTalkText = "", coupleTalkTimer = null, coupleTalkLastAt = 0;
+function coupleTalkLines() {
+    const h = new Date().getHours();
+    const me = couple.me, other = me ? coupleOther(me) : null;
+    const otherName = other ? coupleName(other) : "";
+    const lines = [];
+    if (h < 6) lines.push("이 시간까지 안 자? 얼른 자자 💤", "내일 또 만나요, 잘 자 🌙");
+    else if (h < 11) lines.push("좋은 아침! 오늘 기분은 어때? ☀️", "아침은 먹었어? 🍞", "오늘도 화이팅! 💪");
+    else if (h < 14) lines.push("점심 맛있게 먹어! 🍚", "오늘 기분은 어때? 😊", "오늘도 화이팅! 💪");
+    else if (h < 18) lines.push("오후도 힘내자! 🌿", "물 한 잔 마시고 하자 💧", "오늘 기분은 어때? 😊");
+    else if (h < 22) lines.push("오늘 하루 어땠어? 🌙", "수고했어, 오늘도! 💚", "저녁은 뭐 먹었어? 🍝");
+    else lines.push("오늘도 고생 많았어 🌙", "푹 쉬고 내일 또 보자 💤");
+    try {
+        if (me && !coupleMyAnswer()) lines.push("오늘의 질문 아직이야! 같이 답해 볼래? 💬");
+        if (me && !coupleTodayMood(me)) lines.push("오늘 기분 남겨 줄래? 🙂");
+        if (other && coupleIsOnline(other)) lines.push(`${otherName}도 지금 들어와 있어! 💚`);
+        if (couplePetState() === "bloom") lines.push("오늘은 특별한 날이야! 축하해 🎉");
+    } catch (_) { }
+    return lines;
+}
+function coupleHeroTalkHtml() {
+    if (Date.now() > coupleTalkUntil || !coupleTalkText) return "";
+    return `<button type="button" class="dh-talk" onclick="event.stopPropagation(); coupleSay(true)">${escapeHtml(coupleTalkText)}</button>`;
+}
+// Re-attach after renderDdayCard rebuilt the card (polls re-render it while the bubble is up).
+window.coupleHeroBubbleRestore = function() {
+    const card = document.getElementById("dday-card");
+    if (!card || card.querySelector(".dh-talk")) return;
+    const html = coupleHeroTalkHtml();
+    if (html) card.insertAdjacentHTML("beforeend", html);
+};
+window.coupleSay = function(another) {
+    const card = document.getElementById("dday-card");
+    if (!card || !couple.pollId) return;
+    if (coupleStageFor(couplePoints()) < COUPLE_TALK_MIN_STAGE) return;
+    if (couplePetState() === "sleepy" && !another) return;
+    const lines = coupleTalkLines().filter(l => l !== coupleTalkText);
+    if (!lines.length) return;
+    coupleTalkText = lines[Math.floor(Math.random() * lines.length)];
+    coupleTalkUntil = Date.now() + COUPLE_TALK_MS;
+    coupleTalkLastAt = Date.now();
+    card.querySelector(".dh-talk")?.remove();
+    card.insertAdjacentHTML("beforeend", coupleHeroTalkHtml());
+    clearTimeout(coupleTalkTimer);
+    coupleTalkTimer = setTimeout(() => {
+        const b = document.querySelector("#dday-card .dh-talk");
+        if (b) { b.classList.add("is-out"); setTimeout(() => b.remove(), 400); }
+    }, COUPLE_TALK_MS);
+};
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && couple.pollId && Date.now() - coupleTalkLastAt > 30 * 60 * 1000) setTimeout(() => coupleSay(false), 1200);
+});
+
 // 명똑똑 row on the dashboard (v430): sprite, stage + points, progress to the next stage, today's question
 // status, and the 키우기/접기 toggle for the 오늘의 우리 card (#couple-toggle-slot lives in here now).
 // Before the first sync it shows just the sprite and name, so it never flashes a wrong stage.

@@ -140,6 +140,16 @@ When adding anything that touches the map, implement both branches — shipping 
 common mistake here since Naver is the default in testing but Leaflet is the real fallback for anyone
 without a Naver key configured.
 
+## Tab layouts (v438+)
+
+Every tab opens with a gradient hero card (`.tab-hero`, filled by its renderer) and a tools row (`.tab-search` +
+`.tab-round-btn`). 위시리스트 = one-line rows grouped 다가오는 약속 / 언젠가 / 지난 날짜 that open in place
+(`wishRowHtml`, open state in `wishOpenRows`). 다녀온 곳 = photo cards grouped by month, newest of each month large
+(`visitedCardHtml`). 갤러리 = [추억 앨범 | 꾸민 사진] segments (`setGallerySeg`, per device) with photos grouped by
+place. AI 플래너 = four tiles that open one field each (`coursePlan.openField`). Place photos open as a bottom
+sheet (`#modal-gallery-slider`, still driven by `openGallerySliderModal` / `updateGallerySliderUI`). Shared helpers:
+`placeCategoryLook` (emoji, tint, Korean label), `shortPlaceDate`, `placeRegion`.
+
 ## `app.js` layout
 
 The file is organized as sequentially numbered sections via `// N. Section Name` comments (numbering

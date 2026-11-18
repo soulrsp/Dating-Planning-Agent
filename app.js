@@ -1014,6 +1014,39 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // 4. Tab Navigation Logic
+// Swipe left/right anywhere on a tab to move to the next/previous one, in bottom-nav order (v441).
+// Ignored when the swipe starts on something that scrolls or drags sideways itself (the map, photo
+// strips, chip rows, inputs), when a modal is open, or when the motion is mostly vertical.
+const AURA_TAB_ORDER = ["dashboard", "wishlist", "visited", "gallery", "ai-planner", "settings"];
+(function auraTabSwipe() {
+    let start = null;
+    const blocked = el => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+            if (n.id === "map" || n.matches?.("input, textarea, select, .ps-thumbs, .studio-chips, .leaflet-container, [data-no-swipe]")) return true;
+            if (n.scrollWidth > n.clientWidth + 4) { const ox = getComputedStyle(n).overflowX; if (ox === "auto" || ox === "scroll") return true; }
+        }
+        return false;
+    };
+    document.addEventListener("touchstart", e => {
+        start = null;
+        if (window.innerWidth > 768 || e.touches.length !== 1) return;
+        if (document.querySelector(".modal-overlay.active")) return;
+        const t = e.target;
+        if (!t.closest || !t.closest(".main-content") || blocked(t)) return;
+        start = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    }, { passive: true });
+    document.addEventListener("touchend", e => {
+        if (!start) return;
+        const dx = e.changedTouches[0].clientX - start.x, dy = e.changedTouches[0].clientY - start.y;
+        const quick = Date.now() - start.t < 600;
+        start = null;
+        if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+        const cur = AURA_TAB_ORDER.indexOf(currentActiveTab);
+        const next = AURA_TAB_ORDER[cur + (dx < 0 ? 1 : -1)];
+        if (cur >= 0 && next) switchTab(next);
+    }, { passive: true });
+})();
+
 function switchTab(tabId) {
     document.querySelectorAll(".nav-menu .nav-item, .mobile-bottom-nav .mobile-nav-item").forEach(el => el.classList.remove("active"));
     document.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active"));
@@ -1414,7 +1447,7 @@ function auraCheckSvg(size) {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="${AURA_VISIT_COLOR}"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 // Map pin: a drop with a heart (wishlist) or check (visited). The tip (13, 35) is the place itself.
-const AURA_PIN_W = 26, AURA_PIN_H = 36, AURA_PIN_TIP_X = 13, AURA_PIN_TIP_Y = 35;
+const AURA_PIN_W = 18, AURA_PIN_H = 25, AURA_PIN_TIP_X = 9, AURA_PIN_TIP_Y = 24; // 2/3 of the first size (v441)
 function auraPinSvg(isVisited) {
     const fill = isVisited ? AURA_VISIT_COLOR : AURA_WISH_COLOR, stroke = isVisited ? AURA_VISIT_STROKE : AURA_WISH_STROKE;
     const mark = isVisited
@@ -4242,6 +4275,129 @@ window.viewFestivalOnMap = function(id) {
 };
 
 // 10. Places Render List
+// ── Wishlist rows (v438) ────────────────────────────────────────────────────────────────────────
+const PLACE_CATEGORY_LOOK = {
+    cafe: ["☕", "#FBEAF0", "카페"], restaurant: ["🍽", "#FAEEDA", "맛집"], bar: ["🍷", "#F6E6F1", "술집"],
+    park: ["🌿", "#EAF3DE", "산책"], museum: ["🎨", "#EEEDFE", "전시"], other: ["📍", "#E6F1FB", ""]
+};
+function placeCategoryLook(category) {
+    return PLACE_CATEGORY_LOOK[String(category || "other").toLowerCase()] || ["💗", "#FBEAF0", String(category || "")];
+}
+const KOR_WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+function shortPlaceDate(startVal, endVal) {
+    const s = parseAnyDate(startVal);
+    if (!s) return "";
+    const f = ms => { const d = new Date(ms); return `${d.getMonth() + 1}.${d.getDate()}`; };
+    const e = parseAnyDate(endVal);
+    if (e && e !== s) return `${f(s)} ~ ${f(e)}`;
+    return `${f(s)} ${KOR_WEEKDAYS[new Date(s).getDay()]}`;
+}
+function placeRegion(address) {
+    const parts = String(address || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim().split(/\s+/).filter(Boolean);
+    return parts.find(p => /(구|군)$/.test(p)) || parts.find(p => /(동|읍|면)$/.test(p)) || parts[1] || parts[0] || "";
+}
+const wishOpenRows = new Set();
+window.toggleWishRow = function(id) {
+    const el = document.getElementById(`wl-${id}`);
+    if (!el) return;
+    if (wishOpenRows.has(id)) wishOpenRows.delete(id); else wishOpenRows.add(id);
+    el.classList.toggle("is-open", wishOpenRows.has(id));
+};
+function wishRowHtml(place) {
+    const cat = applyCategoryOverride(place.name, place.notes, place.category);
+    const [emoji, bg] = placeCategoryLook(cat);
+    const address = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    const when = shortPlaceDate(place.createdAt || place.date, place.endDate);
+    const sub = [when || "날짜 미정", placeRegion(address)].filter(Boolean).join(" · ");
+    const t = parseAnyDate(place.createdAt || place.date);
+    let badge = `<i data-lucide="chevron-down" class="wl-chev"></i>`;
+    if (t) {
+        const n = localDayDiff(new Date(), new Date(t));
+        badge = n >= 0 ? `<span class="wl-dd${n <= 7 ? " is-soon" : ""}">${n === 0 ? "오늘" : `D-${n}`}</span>` : `<span class="wl-dd is-past">지남</span>`;
+    }
+    const url = safeUrl(place.url);
+    return `<div class="wl-item${wishOpenRows.has(place.id) ? " is-open" : ""}" id="wl-${place.id}">
+        <button type="button" class="wl-row" onclick="toggleWishRow(${place.id})">
+            <span class="wl-em" style="background:${bg}">${emoji}</span>
+            <span class="wl-t"><b>${escapeHtml(place.name)}</b><small>${escapeHtml(sub)}</small></span>
+            ${badge}
+        </button>
+        <div class="wl-detail">
+            <div class="wl-addr">📍 ${escapeHtml(address) || "주소 정보 없음"}</div>
+            ${renderCommentsBlock(place)}
+            <div class="wl-actions">
+                <button type="button" class="wl-btn" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, ${jsArg(encodeURIComponent(place.name))})">🗺 지도</button>
+                ${url ? `<a class="wl-btn" href="${escapeHtml(url)}" target="_blank" rel="noopener">🔗 링크</a>` : ""}
+                <button type="button" class="wl-btn" onclick="openEditPlaceModal(${place.id})">✏️ 수정</button>
+                <button type="button" class="wl-btn" onclick="deletePlace(${place.id}, ${jsArg(place.name)})">🗑</button>
+                <button type="button" class="wl-btn is-done" onclick="openVisitModal(${place.id}, ${jsArg(place.name)})">✓ 다녀왔어요</button>
+            </div>
+        </div>
+    </div>`;
+}
+function renderWishlistHero(wishlistPlaces) {
+    const hero = document.getElementById("wishlist-hero");
+    if (!hero) return;
+    const now = todayStartMs();
+    const upcoming = wishlistPlaces.filter(p => parseAnyDate(p.createdAt || p.date) >= now)
+        .sort((a, b) => parseAnyDate(a.createdAt || a.date) - parseAnyDate(b.createdAt || b.date));
+    const undated = wishlistPlaces.filter(p => !parseAnyDate(p.createdAt || p.date)).length;
+    let line = "날짜를 정하면 다가오는 약속으로 모여요";
+    if (upcoming.length) {
+        const n = localDayDiff(new Date(), new Date(parseAnyDate(upcoming[0].createdAt || upcoming[0].date)));
+        line = `다음 약속은 ${n === 0 ? "오늘" : n === 1 ? "내일" : `${n}일 뒤`} · ${upcoming[0].name}`;
+    }
+    hero.innerHTML = `<h3>가고 싶은 곳 ${wishlistPlaces.length}곳</h3><p>${escapeHtml(line)}</p>
+        <div class="th-chips"><span>약속 ${upcoming.length}</span><span>날짜 미정 ${undated}</span></div>
+        <img src="images/character/sticker-1.webp" alt="">`;
+}
+
+// ── Visited cards (v438) ────────────────────────────────────────────────────────────────────────
+function visitedCoverIndex(place, list) {
+    return (typeof place.coverPhotoIndex === "number" && place.coverPhotoIndex >= 0 && place.coverPhotoIndex < list.length) ? place.coverPhotoIndex : 0;
+}
+function visitedBubbleHtml(place, who) {
+    const text = who === "A" ? place.commentA : place.commentB;
+    const name = who === "A" ? partnerAName : partnerBName;
+    if (!text) return `<button type="button" class="vs-bub vs-bub-empty${who === "B" ? " is-b" : ""}" onclick="event.stopPropagation(); quickEditComment(${place.id}, '${who}')">＋ ${escapeHtml(name)} 한마디</button>`;
+    return `<button type="button" class="vs-bub${who === "B" ? " is-b" : ""}" onclick="event.stopPropagation(); quickEditComment(${place.id}, '${who}')">${escapeHtml(name)} · ${escapeHtml(text)}</button>`;
+}
+function visitedCardHtml(place, big) {
+    const list = place.photos || (place.photo ? [place.photo] : []);
+    const cover = visitedCoverIndex(place, list);
+    const cat = applyCategoryOverride(place.name, place.notes, place.category);
+    const [emoji, bg, catLabel] = placeCategoryLook(cat);
+    const address = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    const when = shortPlaceDate(place.createdAt || place.date, place.endDate);
+    const open = list.length ? `openGallerySliderModal(${place.id}, ${cover})` : `openEditPlaceModal(${place.id})`;
+    const photo = list.length
+        ? `<img src="${LAZY_PIXEL}" data-vs-id="${place.id}" data-pidx="${cover}" alt="">`
+        : `<span class="vs-noimg" style="background:${bg}">${emoji}</span>`;
+    return `<div class="vs-card card${big ? " is-big" : ""}" onclick="${open}">
+        <div class="vs-photo">${photo}
+            ${when ? `<span class="vs-date">${escapeHtml(when)}</span>` : ""}
+            ${list.length ? `<span class="vs-count">📷 ${list.length}</span>` : ""}
+            <button type="button" class="vs-edit" title="수정" onclick="event.stopPropagation(); openEditPlaceModal(${place.id})">✏️</button>
+        </div>
+        <div class="vs-body">
+            <b>${escapeHtml(place.name)}</b>
+            <small>${emoji} ${escapeHtml([catLabel, placeRegion(address)].filter(Boolean).join(" · ") || "위치 없음")}</small>
+            ${big ? `<div class="vs-bubs">${visitedBubbleHtml(place, "A")}${visitedBubbleHtml(place, "B")}</div>` : ""}
+        </div>
+    </div>`;
+}
+function renderVisitedHero(visitedPlaces) {
+    const hero = document.getElementById("visited-hero");
+    if (!hero) return;
+    const now = new Date();
+    const thisMonth = visitedPlaces.filter(p => { const t = parseAnyDate(p.createdAt || p.date); if (!t) return false; const d = new Date(t); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); }).length;
+    const photos = visitedPlaces.reduce((n, p) => n + (p.photos ? p.photos.length : (p.photo ? 1 : 0)), 0);
+    hero.innerHTML = `<h3>함께 다녀온 곳 ${visitedPlaces.length}곳</h3>
+        <p>${thisMonth ? `이번 달에만 ${thisMonth}곳, ` : ""}사진 ${photos.toLocaleString()}장을 남겼어요</p>
+        <div class="th-chips"><span>${now.getMonth() + 1}월 ${thisMonth}곳</span><span>사진 ${photos.toLocaleString()}</span></div>
+        <img src="images/character/sticker-4.webp" alt="">`;
+}
+
 async function renderPlacesList() {
     const mainContent = document.querySelector(".main-content");
     const savedScrollTop = mainContent ? mainContent.scrollTop : 0;
@@ -4286,66 +4442,20 @@ async function renderPlacesList() {
                    (place.commentB && place.commentB.toLowerCase().includes(searchVal));
         });
         
+        renderWishlistHero(wishlistPlaces);
         if (filteredWishlist.length === 0) {
-            wishlistContainer.innerHTML = `
-                <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--color-text-med);">
-                    <i data-lucide="heart" style="width:40px; height:40px; margin:0 auto 1rem; color:var(--color-primary);"></i>
-                    <p>위시리스트가 비어있어요. 가고 싶은 데이트 스팟을 추가해보세요 🌸</p>
-                </div>
-            `;
+            wishlistContainer.innerHTML = `<div class="tab-empty">${searchVal ? "찾는 장소가 없어요 🔍" : "가고 싶은 데이트 스팟을 ＋로 담아 보세요 🌸"}</div>`;
         } else {
+            // v438: one-line rows grouped by date; a row opens in place for memo + actions.
+            const groups = [["upcoming", "다가오는 약속"], ["undated", "언젠가 가고 싶은 곳"], ["past", "날짜가 지났어요"]];
+            const byGroup = { upcoming: [], undated: [], past: [] };
             filteredWishlist.forEach(place => {
-                const card = document.createElement("div");
-                card.className = "place-card card";
-                card.style.position = "relative";
-
-                const displayCategory = applyCategoryOverride(place.name, place.notes, place.category);
-                const catBadge = categoryBadgeClassAndStyle(displayCategory);
-
-                // 방문 예정일 (없으면 "미정"으로 표시)
-                const dateStr = formatDisplayDateRange(place.createdAt || place.date, place.endDate);
-                const dateHtml = dateStr
-                    ? dateStr
-                    : `<span style="color:var(--color-text-med); opacity:0.8; font-weight:600;">미정</span>`;
-
-                // Clean address
-                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-
-                let cardContent = `
-                    <div class="place-card-top-actions">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, ${jsArg(place.name)})" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
-                    </div>
-                    <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${escapeHtml(displayCategory)}</span>
-                        <span class="place-priority-dot priority-${place.priority}"></span>
-                    </div>
-                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${escapeHtml(place.name)}</h4>
-                    
-                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        <div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문 예정일:</strong> ${dateHtml}</div>
-                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${escapeHtml(cleanAddress) || '등록된 주소 정보'}</div>
-                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, ${jsArg(encodeURIComponent(place.name))})">
-                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
-                            </button>
-                        </div>
-                    </div>
-                `;
-                
-                cardContent += renderCommentsBlock(place);
-
-                cardContent += `
-                    <div class="place-actions">
-                        ${safeUrl(place.url) ? `<a href="${escapeHtml(safeUrl(place.url))}" rel="noopener" target="_blank" class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.75rem;"><i data-lucide="external-link"></i> 네이버 지도</a>` : ''}
-                        <button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.75rem;" onclick="openVisitModal(${place.id}, ${jsArg(place.name)})">
-                            <i data-lucide="check"></i> 방문 완료 📸
-                        </button>
-                    </div>
-                `;
-                card.innerHTML = cardContent;
-                wishlistContainer.appendChild(card);
+                const t = parseAnyDate(place.createdAt || place.date);
+                byGroup[!t ? "undated" : (t >= nowMs || parseAnyDate(place.endDate) >= nowMs ? "upcoming" : "past")].push(place);
             });
+            wishlistContainer.innerHTML = groups.filter(([k]) => byGroup[k].length).map(([k, title]) => `
+                <div class="wl-sec"><span>${title}</span><b>${byGroup[k].length}</b></div>
+                <div class="wl-list card">${byGroup[k].map(wishRowHtml).join("")}</div>`).join("");
         }
     }
 
@@ -4374,82 +4484,27 @@ async function renderPlacesList() {
                    (place.commentB && place.commentB.toLowerCase().includes(searchVal));
         });
         
+        renderVisitedHero(visitedPlaces);
         if (filteredVisited.length === 0) {
-            visitedContainer.innerHTML = `
-                <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--color-text-med);">
-                    <i data-lucide="smile" style="width:40px; height:40px; margin:0 auto 1rem; color:var(--color-secondary);"></i>
-                    <p>아직 다녀온 데이트 장소가 없어요. 데이트를 다녀온 후 후기를 남겨보세요! 💕</p>
-                </div>
-            `;
+            visitedContainer.innerHTML = `<div class="tab-empty">${searchVal ? "찾는 장소가 없어요 🔍" : "데이트를 다녀오면 위시리스트에서 ✓ 다녀왔어요를 눌러 주세요 💕"}</div>`;
         } else {
+            // v438: photo-first cards grouped by month; the newest of each month is shown large.
+            const months = [];
             filteredVisited.forEach(place => {
-                const card = document.createElement("div");
-                card.className = "place-card card";
-                card.style.position = "relative";
-                
-                const displayCategory = applyCategoryOverride(place.name, place.notes, place.category);
-                const catBadge = categoryBadgeClassAndStyle(displayCategory);
-
-                // Date formatting using robust parser (기간으로 등록된 경우 "시작일 ~ 종료일" 표시)
-                const rawDate = place.createdAt || place.date;
-                const dateStr = formatDisplayDateRange(rawDate, place.endDate);
-
-                // Clean address
-                let cleanAddress = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-
-                let cardContent = `
-                    <div class="place-card-top-actions">
-                        <button class="edit-card-btn" onclick="openEditPlaceModal(${place.id})" title="수정 (✏️)"><i data-lucide="edit-3"></i></button>
-                        <button class="delete-card-btn" onclick="deletePlace(${place.id}, ${jsArg(place.name)})" title="삭제 (🗑️)"><i data-lucide="trash-2"></i></button>
-                    </div>
-                    <div class="place-card-header">
-                        <span class="place-category-badge ${catBadge.cls}" style="${catBadge.style}">${escapeHtml(displayCategory)}</span>
-                    </div>
-                    <h4 class="place-title" style="margin-top:0.2rem; margin-bottom:0.4rem;">${escapeHtml(place.name)}</h4>
-                    
-                    <div class="place-card-meta-details" style="font-size:0.78rem; color:var(--color-text-med); display:flex; flex-direction:column; gap:0.35rem; background:rgba(255,101,132,0.04); padding:0.55rem 0.7rem; border-radius:10px; border:1px solid rgba(255,101,132,0.12);">
-                        ${dateStr ? `<div><i data-lucide="calendar" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:var(--color-primary);"></i><strong>방문일:</strong> ${dateStr}</div>` : ''}
-                        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                            <div style="flex-grow:1;"><i data-lucide="map-pin" style="width:13px; height:13px; display:inline-block; vertical-align:middle; margin-right:4px; color:#FF9F1C;"></i><strong>주소:</strong> ${escapeHtml(cleanAddress) || '등록된 주소 정보'}</div>
-                            <button class="btn btn-outline" style="padding:0.18rem 0.55rem; font-size:0.68rem; height:24px; border-radius:8px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06); flex-shrink:0;" onclick="viewPlaceOnLoveMap(${place.lat || 37.5665}, ${place.lng || 126.9780}, ${jsArg(encodeURIComponent(place.name))})">
-                                <i data-lucide="map" style="width:11px; height:11px;"></i> 지도에서 보기 🗺️
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                cardContent += renderCommentsBlock(place);
-
-
-                const photoList = place.photos || (place.photo ? [place.photo] : []);
-                if (photoList.length > 0) {
-                    // Show the cover photo first (leftmost) so it matches what's set as the representative photo.
-                    const coverIdx = (typeof place.coverPhotoIndex === 'number' && place.coverPhotoIndex >= 0 && place.coverPhotoIndex < photoList.length) ? place.coverPhotoIndex : 0;
-                    const orderedIndices = coverIdx > 0 ? [coverIdx, ...photoList.map((_, i) => i).filter(i => i !== coverIdx)] : photoList.map((_, i) => i);
-                    cardContent += `
-                        <div class="card-photos-section" style="padding-top:0.4rem; border-top:1px dashed rgba(255,112,150,0.15);">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <button type="button" class="btn-toggle-card-photos" onclick="toggleCardPhotos(${place.id})" style="font-size:0.72rem; padding:0.2rem 0.55rem; border-radius:10px; background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--color-primary); cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
-                                    <i data-lucide="image" style="width:13px; height:13px;"></i>
-                                    <span id="toggle-photo-text-${place.id}">추억 사진 (${photoList.length}장) 숨기기 🔽</span>
-                                </button>
-                            </div>
-                            <div class="card-photo-thumbnails" id="card-photos-container-${place.id}" style="display:flex; gap:6px; margin-top:0.4rem; overflow-x:auto; padding-bottom:4px;">
-                                ${orderedIndices.map(pIdx => `
-                                    <img src="${LAZY_PIXEL}" data-pidx="${pIdx}" alt="추억 사진" onclick="openGallerySliderModal(${place.id}, ${pIdx})" style="width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,112,150,0.2); cursor:pointer; flex-shrink:0; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
-                                `).join('')}
-                            </div>
-                        </div>
-                    `;
-                }
-                
-                card.innerHTML = cardContent;
-                // The thumbnails above are 1px placeholders; hand each its real photo lazily (see
-                // setLazyPhoto) instead of embedding every full-size base64 photo in this HTML string.
-                card.querySelectorAll(".card-photo-thumbnails img[data-pidx]").forEach(img => {
-                    setLazyPhoto(img, photoList[Number(img.dataset.pidx)]);
-                });
-                visitedContainer.appendChild(card);
+                const t = parseAnyDate(place.createdAt || place.date);
+                const key = t ? `${new Date(t).getFullYear()}년 ${new Date(t).getMonth() + 1}월` : "날짜 없음";
+                let g = months.find(m => m.key === key);
+                if (!g) months.push(g = { key, places: [] });
+                g.places.push(place);
+            });
+            visitedContainer.innerHTML = months.map(g => `
+                <div class="wl-sec"><span>${g.key}</span><b>${g.places.length}곳</b></div>
+                ${visitedCardHtml(g.places[0], true)}
+                ${g.places.length > 1 ? `<div class="vs-grid">${g.places.slice(1).map(p => visitedCardHtml(p, false)).join("")}</div>` : ""}`).join("");
+            visitedContainer.querySelectorAll("img[data-vs-id]").forEach(img => {
+                const place = filteredVisited.find(p => String(p.id) === img.dataset.vsId);
+                const list = place && (place.photos || (place.photo ? [place.photo] : []));
+                if (list && list[Number(img.dataset.pidx)]) setLazyPhoto(img, list[Number(img.dataset.pidx)]);
             });
         }
     }
@@ -4737,6 +4792,7 @@ function renderDdayCard() {
         : `<span class="dh-num">D-${localDayDiff(today, parseYmdLocal(coupleDates.anniversary))}</span><span class="dh-unit">사귀는 날까지</span>`);
     card.innerHTML = `<div class="dh-main">${main}</div>
         <div class="dh-chips">${chips.map(c => `<span class="dh-chip">${escapeHtml(c)}</span>`).join("")}</div>${pet}`;
+    if (typeof coupleHeroBubbleRestore === "function") coupleHeroBubbleRestore(); // couple.js speech bubble
     if (typeof coupleApplyOpen === "function") coupleApplyOpen(); // couple.js
     auraFitMap();
 }
@@ -7183,6 +7239,16 @@ function renderSelectedDateDetails(dateStr, places, filterType = 'all') {
     });
 }
 
+// 갤러리 segments (v438): 추억 앨범 / 꾸민 사진, remembered per device.
+window.setGallerySeg = function(seg) {
+    const box = document.getElementById("gallery-container");
+    if (!box) return;
+    box.dataset.seg = seg === "made" ? "made" : "album";
+    box.querySelectorAll(".tab-seg button").forEach(b => b.classList.toggle("is-on", b.dataset.seg === box.dataset.seg));
+    try { localStorage.setItem("aura_gallery_seg", box.dataset.seg); } catch (_) {}
+};
+document.addEventListener("DOMContentLoaded", () => { try { const s = localStorage.getItem("aura_gallery_seg"); if (s) setGallerySeg(s); } catch (_) {} });
+
 async function renderGallery() {
     scheduleMemoryWidgetRefresh();
     const mainContent = document.querySelector(".main-content");
@@ -7194,7 +7260,7 @@ async function renderGallery() {
     if (!container) return;
 
     container.innerHTML = "";
-    if (typeof renderCreationsSection === "function") renderCreationsSection(); // studio.js
+    if (typeof renderCreationsSection === "function") await renderCreationsSection(); // studio.js
     const allPlaces = await getPlaces();
     const places = allPlaces.filter(p => (p.isVisited === 1 || p.isVisited === true || p.isVisited === "1" || p.isVisited === "true") && p.isDeleted !== 1);
     
@@ -7218,71 +7284,38 @@ async function renderGallery() {
         totalPhotoCount += photos.length;
     });
 
-    if (countEl) {
-        countEl.textContent = `함께 다녀온 ${galleryPlaces.length}곳의 장소에서 기록된 총 ${totalPhotoCount}장의 소중한 커플 추억 💖`;
-    }
+    // v438 hero + album grouped by place (up to 6 photos each; the 6th tile says "+N" when there are more)
+    const hero = document.getElementById("gallery-hero");
+    const madeCount = typeof creationsShown !== "undefined" && Array.isArray(creationsShown) ? creationsShown.length : 0;
+    if (hero) hero.innerHTML = `<h3>우리의 추억 ${totalPhotoCount.toLocaleString()}장</h3>
+        <p>${galleryPlaces.length}곳의 데이트 사진${madeCount ? ` · 꾸민 사진 ${madeCount}장` : ""}</p>
+        <div class="th-chips"><button type="button" onclick="openPhotoStudio()">✨ 꾸미기 시작 ›</button></div>
+        <img src="images/character/sticker-2.webp" alt="">`;
+    const empty = document.getElementById("creations-empty");
+    if (empty) empty.classList.toggle("hidden", madeCount > 0);
 
     if (galleryPlaces.length === 0) {
-        container.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align:center; padding:3rem; color:var(--color-text-med);">
-                <i data-lucide="camera" style="width:48px; height:48px; opacity:0.3; margin-bottom:0.8rem;"></i>
-                <p style="font-size:0.95rem;">아직 등록된 추억 사진이 없습니다.<br>'함께 다녀온 곳'의 장소 기록에 예쁜 추억 사진을 업로드해 보세요! 🌸</p>
-            </div>
-        `;
+        container.innerHTML = `<div class="tab-empty">아직 추억 사진이 없어요.<br>다녀온 곳에 사진을 올리면 여기에 모여요 🌸</div>`;
         lucide.createIcons();
         return;
     }
 
-    galleryPlaces.forEach(p => {
+    container.innerHTML = galleryPlaces.map(p => {
         const photos = p.photos || (p.photo ? [p.photo] : []);
         const coverIdx = (typeof p.coverPhotoIndex === 'number' && p.coverPhotoIndex >= 0 && p.coverPhotoIndex < photos.length) ? p.coverPhotoIndex : 0;
-        const coverPhoto = photos[coverIdx];
-        const photoCount = photos.length;
-
-        const card = document.createElement("div");
-        card.className = "gallery-card";
-
-        const dateStr = formatDisplayDateRange(p.createdAt || p.date, p.endDate);
-
-        const commentA = (p.commentA || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-        const commentB = (p.commentB || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
-
-        let commentsHtml = '';
-        if (commentA) {
-            commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
-                <span style="font-weight:700; color:var(--color-primary); background:rgba(255,101,132,0.12); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${escapeHtml(partnerAName)}</span>
-                <span>${escapeHtml(commentA)}</span>
-            </div>`;
-        }
-        if (commentB) {
-            commentsHtml += `<div style="font-size:0.75rem; color:var(--color-text-med); margin-top:3px; display:flex; align-items:flex-start; gap:4px;">
-                <span style="font-weight:700; color:#FF9F1C; background:rgba(255,159,28,0.14); padding:1px 5px; border-radius:4px; font-size:0.68rem; flex-shrink:0;">💬 ${escapeHtml(partnerBName)}</span>
-                <span>${escapeHtml(commentB)}</span>
-            </div>`;
-        }
-
-        card.innerHTML = `
-            <div class="gallery-img-wrapper" onclick="openGallerySliderModal(${p.id}, ${coverIdx})" style="cursor:pointer;">
-                <img src="${coverPhoto}" alt="${escapeHtml(p.name)}">
-                <div class="gallery-img-overlay">
-                    <span>🔍 추억 갤러리 감상하기</span>
-                </div>
-                ${photoCount > 1 ? `<span style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); color:#fff; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.3); pointer-events:none;">🖼️ ${photoCount}장</span>` : ''}
-            </div>
-            <div class="gallery-card-body">
-                <h5 class="gallery-place-title" onclick="openGallerySliderModal(${p.id}, ${coverIdx})" style="cursor:pointer;">${escapeHtml(p.name)}</h5>
-                <div class="gallery-place-meta">
-                    <span>${dateStr}</span>
-                </div>
-                ${commentsHtml}
-                <div class="gallery-action-bar" style="margin-top:auto; padding-top:6px;">
-                    <button class="btn btn-outline" style="width:100%; font-size:0.75rem; padding:0.35rem; height:32px; border-color:var(--color-primary); color:var(--color-primary); justify-content:center;" onclick="openEditPlaceModal(${p.id}, true)">
-                        ✏️ 수정/추가
-                    </button>
-                </div>
-            </div>
-        `;
-        container.appendChild(card);
+        const order = [coverIdx, ...photos.map((_, i) => i).filter(i => i !== coverIdx)];
+        const shown = order.slice(0, 6);
+        const t = parseAnyDate(p.createdAt || p.date);
+        const month = t ? `${new Date(t).getMonth() + 1}월 · ` : "";
+        return `<div class="wl-sec ga-sec" onclick="openGallerySliderModal(${p.id}, ${coverIdx})"><span>${month}${escapeHtml(p.name)}</span><b>${photos.length}장 ›</b></div>
+            <div class="ga-grid">${shown.map((pIdx, k) => `<button type="button" class="ga-tile" onclick="openGallerySliderModal(${p.id}, ${pIdx})">
+                <img src="${LAZY_PIXEL}" data-ga-id="${p.id}" data-pidx="${pIdx}" alt="">
+                ${k === 5 && photos.length > 6 ? `<span class="ga-more">+${photos.length - 6}</span>` : ""}</button>`).join("")}</div>`;
+    }).join("");
+    container.querySelectorAll("img[data-ga-id]").forEach(img => {
+        const place = galleryPlaces.find(p => String(p.id) === img.dataset.gaId);
+        const list = place && (place.photos || (place.photo ? [place.photo] : []));
+        if (list && list[Number(img.dataset.pidx)]) setLazyPhoto(img, list[Number(img.dataset.pidx)]);
     });
 
     lucide.createIcons();
@@ -7322,7 +7355,8 @@ window.openGallerySliderModal = async function(placeId, initialIdx = 0) {
     activePlaceInfo = {
         id: place.id,
         name: place.name,
-        meta: `${dateStr} · (${place.category})`,
+        meta: [shortPlaceDate(place.createdAt || place.date, place.endDate) || dateStr, placeCategoryLook(applyCategoryOverride(place.name, place.notes, place.category))[2], placeRegion(place.notes)].filter(Boolean).join(" · "),
+        place,
         comments: place.commentA || place.commentB ? `💬 ${place.commentA ? partnerAName + ': ' + place.commentA : ''} ${place.commentB ? partnerBName + ': ' + place.commentB : ''}` : "",
         coverPhotoIndex: (typeof place.coverPhotoIndex === 'number' && place.coverPhotoIndex >= 0 && place.coverPhotoIndex < activeGalleryPhotos.length) ? place.coverPhotoIndex : 0
     };
@@ -7345,15 +7379,11 @@ function updateGallerySliderUI() {
 
     if (mainImg) mainImg.src = activeGalleryPhotos[activePhotoIndex];
     if (nameEl) nameEl.textContent = activePlaceInfo.name;
-    if (metaEl) metaEl.textContent = `${activePlaceInfo.meta} [${activePhotoIndex + 1} / ${activeGalleryPhotos.length}]`;
-    if (commEl) {
-        if (activePlaceInfo.comments) {
-            commEl.style.display = "block";
-            commEl.textContent = activePlaceInfo.comments;
-        } else {
-            commEl.style.display = "none";
-        }
-    }
+    if (metaEl) metaEl.textContent = activePlaceInfo.meta;
+    const countEl = document.getElementById("ps-count");
+    if (countEl) countEl.textContent = activeGalleryPhotos.length > 1 ? `${activePhotoIndex + 1} / ${activeGalleryPhotos.length}` : "";
+    document.querySelectorAll("#modal-gallery-slider .ps-arrow").forEach(b => { b.style.display = activeGalleryPhotos.length > 1 ? "" : "none"; });
+    if (commEl) commEl.innerHTML = activePlaceInfo.place ? visitedBubbleHtml(activePlaceInfo.place, "A") + visitedBubbleHtml(activePlaceInfo.place, "B") : "";
 
     if (thumbsContainer) {
         thumbsContainer.innerHTML = "";
@@ -7380,6 +7410,22 @@ function updateGallerySliderUI() {
         coverBtn.style.opacity = isCover ? "0.6" : "1";
     }
 }
+
+window.psEditPlace = function() {
+    const id = activePlaceInfo && activePlaceInfo.id;
+    closeGallerySliderModal();
+    if (id) openEditPlaceModal(id);
+};
+// Swipe left/right on the big photo (v438)
+(function psSwipe() {
+    let x0 = null;
+    document.addEventListener("touchstart", e => { if (e.target.closest && e.target.closest("#ps-photo")) x0 = e.touches[0].clientX; }, { passive: true });
+    document.addEventListener("touchend", e => {
+        if (x0 === null) return;
+        const dx = e.changedTouches[0].clientX - x0; x0 = null;
+        if (Math.abs(dx) > 40) navigateGallerySlider(dx < 0 ? 1 : -1);
+    }, { passive: true });
+})();
 
 window.navigateGallerySlider = function(direction) {
     if (activeGalleryPhotos.length <= 1) return;
