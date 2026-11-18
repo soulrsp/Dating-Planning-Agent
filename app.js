@@ -648,12 +648,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     db.places.count().then(n => window.auraDbg("로컬DB 정상: " + n + "곳")).catch(e => window.auraDbg("로컬DB 실패: " + (e && e.message ? e.message : e)));
 
     // Populate settings UI from LocalStorage
-    document.getElementById("settings-gemini-key").value = geminiApiKey;
-    document.getElementById("settings-naver-client-id").value = naverClientId;
-    const kakaoInput = document.getElementById("settings-kakao-api-key");
-    if (kakaoInput) kakaoInput.value = kakaoApiKey;
-    const tourApiInput = document.getElementById("settings-tourapi-key");
-    if (tourApiInput) tourApiInput.value = tourApiKey;
+    // API keys aren't put back into the fields (they're shared through the room now, see
+    // loadRoomKeys); the fields only take a new key, and a status line says whether one is set.
+    auraRenderKeyStatus();
     document.getElementById("settings-partner-a-name").value = partnerAName;
     document.getElementById("settings-partner-b-name").value = partnerBName;
     document.getElementById("settings-sync-room-id").value = syncRoomId;
@@ -681,12 +678,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!localStorage.getItem("aura_naver_client_id")) {
             naverClientId = roomDefaultKeys.naverClientId;
             localStorage.setItem("aura_naver_client_id", naverClientId);
-            document.getElementById("settings-naver-client-id").value = naverClientId;
         }
         if (!localStorage.getItem("aura_kakao_key")) {
             kakaoApiKey = roomDefaultKeys.kakaoApiKey;
             localStorage.setItem("aura_kakao_key", kakaoApiKey);
-            if (kakaoInput) kakaoInput.value = kakaoApiKey;
         }
     }
 
@@ -1059,10 +1054,7 @@ function switchTab(tabId) {
             loadFestivalData();
         }
     } else if (tabId === "settings") {
-        const gemKeyEl = document.getElementById("settings-gemini-key");
-        if (gemKeyEl) gemKeyEl.value = geminiApiKey;
-        const navIdEl = document.getElementById("settings-naver-client-id");
-        if (navIdEl) navIdEl.value = naverClientId;
+        auraRenderKeyStatus();
         const pAEl = document.getElementById("settings-partner-a-name");
         if (pAEl) pAEl.value = partnerAName;
         const pBEl = document.getElementById("settings-partner-b-name");
@@ -4914,6 +4906,8 @@ function startCloudSyncLoop() {
         return;
     }
 
+    loadRoomKeys(); // Gemini / TourAPI keys shared through the room (v425)
+
     if (pulse) pulse.style.display = "inline-block";
     if (mobilePulse) mobilePulse.style.display = "inline-block";
     if (statusText) statusText.innerHTML = `연결 룸: <strong>${escapeHtml(syncRoomId)}</strong> 🔗`;
@@ -5169,6 +5163,79 @@ async function pushAllLocalPlacesToCloud() {
         await savePlaceToCloud(p.id);
     }
 }
+
+// ── Room-shared API keys (v425) ─────────────────────────────────────────────────────────────────
+// Gemini and TourAPI keys used to be typed into 설정 on every phone and kept in that phone's
+// localStorage only. Now they live in aura-rooms/{room}/keys {gemini, tourapi, updatedAt}: entered
+// once (auraSaveRoomKeys), read by both partners' phones (loadRoomKeys). The room path is protected
+// by the database rule's email allowlist, so only the two signed-in people can read it. localStorage
+// still caches them so the app works offline and before the first pull.
+// Migration: a phone that has a key locally and finds none in the room uploads its own.
+function roomKeysUrl() { return `${getFirebaseDbUrl()}/aura-rooms/${encodeURIComponent(syncRoomId)}/keys.json`; }
+function auraApplyKeys(gemini, tourapi) {
+    if (typeof gemini === "string" && gemini && gemini !== geminiApiKey) {
+        geminiApiKey = gemini;
+        localStorage.setItem("aura_gemini_key", gemini);
+        if (typeof checkApiKeyAlert === "function") checkApiKeyAlert();
+    }
+    if (typeof tourapi === "string" && tourapi && tourapi !== tourApiKey) {
+        tourApiKey = tourapi;
+        localStorage.setItem("aura_tourapi_key", tourapi);
+    }
+    auraRenderKeyStatus();
+}
+async function loadRoomKeys() {
+    if (!syncRoomId || ROOM_IS_FALLBACK) return;
+    try {
+        const r = await fetch(`${roomKeysUrl()}?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const k = (await r.json()) || {};
+        auraApplyKeys(k.gemini, k.tourapi);
+        const up = {};
+        if (!k.gemini && geminiApiKey) up.gemini = geminiApiKey;
+        if (!k.tourapi && tourApiKey) up.tourapi = tourApiKey;
+        if (Object.keys(up).length) {
+            up.updatedAt = Date.now();
+            await fetch(`${roomKeysUrl()}?print=silent`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(up) });
+            console.log("[Keys] shared this phone's keys with the room:", Object.keys(up).filter(x => x !== "updatedAt").join(", "));
+        }
+    } catch (e) {
+        console.warn("[Keys] room keys load failed:", e);
+    }
+}
+function auraRenderKeyStatus() {
+    const set = (id, has) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = has ? "✅ 등록돼 있어요. 바꿀 때만 새로 입력하세요." : "아직 없어요. 한 번만 입력하면 두 사람 폰이 같이 써요.";
+    };
+    set("settings-gemini-status", !!geminiApiKey);
+    set("settings-tourapi-status", !!tourApiKey);
+    const line = document.getElementById("settings-room-line");
+    if (line) line.textContent = ROOM_IS_FALLBACK ? "방 번호 없이 열려 있어요. 대시보드 맨 위에서 우리 방 번호를 넣어주세요." : `우리 방: ${syncRoomId} · 자동으로 동기화되고 있어요.`;
+}
+window.auraSaveRoomKeys = async function() {
+    const gEl = document.getElementById("settings-gemini-key");
+    const tEl = document.getElementById("settings-tourapi-key");
+    const gemini = gEl ? gEl.value.trim() : "";
+    const tourapi = tEl ? tEl.value.trim() : "";
+    if (!gemini && !tourapi) { showToast("바꿀 키를 입력해주세요.", "info"); return; }
+    const tourChanged = !!tourapi && tourapi !== tourApiKey;
+    auraApplyKeys(gemini, tourapi);
+    if (gEl) gEl.value = "";
+    if (tEl) tEl.value = "";
+    if (tourChanged) loadFestivalData(true);
+    if (!syncRoomId || ROOM_IS_FALLBACK) { showToast("이 폰에만 저장했어요. 방에 연결되면 함께 쓸 수 있어요.", "info"); return; }
+    const up = { updatedAt: Date.now() };
+    if (gemini) up.gemini = gemini;
+    if (tourapi) up.tourapi = tourapi;
+    try {
+        const r = await fetch(`${roomKeysUrl()}?print=silent`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(up) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        showToast("키를 우리 방에 저장했어요. 상대방 폰도 곧 같이 써요 🔑", "success");
+    } catch (e) {
+        showToast("이 폰에는 저장했지만 방에 올리지 못했어요: " + e.message, "warning");
+    }
+};
 
 // Settings-only save — partner names & public client keys. Small, rarely-conflicting scalars, so a
 // wholesale PATCH here is fine; place data must never travel through this path (see savePlaceToCloud).
@@ -6330,12 +6397,7 @@ window.confirmSaveAICourseToWishlist = async function() {
 
 // 14. Settings Logic
 async function saveSettings() {
-    const apiKeyVal = document.getElementById("settings-gemini-key").value.trim();
-    const naverClientIdVal = document.getElementById("settings-naver-client-id").value.trim();
-    const kakaoInputEl = document.getElementById("settings-kakao-api-key");
-    const kakaoApiKeyVal = kakaoInputEl ? kakaoInputEl.value.trim() : kakaoApiKey;
-    const tourApiInputEl = document.getElementById("settings-tourapi-key");
-    const tourApiKeyVal = tourApiInputEl ? tourApiInputEl.value.trim() : tourApiKey;
+    // Keys have their own save (auraSaveRoomKeys); the map keys are built in / come from the room.
     const partnerAVal = document.getElementById("settings-partner-a-name").value.trim() || "SH";
     const partnerBVal = document.getElementById("settings-partner-b-name").value.trim() || "SA";
     const syncRoomVal = sanitizeRoomId(document.getElementById("settings-sync-room-id").value.trim());
@@ -6349,20 +6411,11 @@ async function saveSettings() {
     const coupleDatesVal = readCoupleDateSettings();
     if (!coupleDatesVal) return;
 
-    localStorage.setItem("aura_gemini_key", apiKeyVal);
-    localStorage.setItem("aura_naver_client_id", naverClientIdVal);
-    localStorage.setItem("aura_kakao_key", kakaoApiKeyVal);
-    localStorage.setItem("aura_tourapi_key", tourApiKeyVal);
     localStorage.setItem("aura_partner_a_name", partnerAVal);
     localStorage.setItem("aura_partner_b_name", partnerBVal);
     localStorage.setItem("aura_sync_room_id", syncRoomVal);
     localStorage.setItem("aura_firebase_url", firebaseUrVal);
     
-    geminiApiKey = apiKeyVal;
-    naverClientId = naverClientIdVal;
-    kakaoApiKey = kakaoApiKeyVal;
-    const tourApiKeyChanged = tourApiKey !== tourApiKeyVal;
-    tourApiKey = tourApiKeyVal;
     partnerAName = partnerAVal;
     partnerBName = partnerBVal;
     const roomChanged = syncRoomId !== syncRoomVal;
@@ -6395,10 +6448,6 @@ async function saveSettings() {
     await renderCalendar();
 
     updatePartnerNamesUI();
-
-    if (tourApiKeyChanged && tourApiKey) {
-        loadFestivalData(true);
-    }
 
     showToast("AURA 환경 설정이 안전하게 저장되었습니다 💖", "success");
     checkApiKeyAlert();

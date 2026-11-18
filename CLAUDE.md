@@ -109,10 +109,15 @@ There's no script for this; it's manual.
 
 - Naver Maps Client ID and the Kakao JS key are public, domain-restricted keys — safe to ship in
   client code (the Ncloud/Kakao console domain allowlist is the actual defense).
-- Gemini API key and the TourAPI (data.go.kr) key are real secrets. They are **never hardcoded** —
-  each user pastes their own into the Settings tab, which stores it in `localStorage` only
-  (`aura_gemini_key`, `aura_tourapi_key`) and it is never synced through the room's cloud settings.
-  Follow this pattern for any new external API key: local-only, entered via Settings, never committed.
+- Gemini API key and the TourAPI (data.go.kr) key are real secrets. They are **never hardcoded or
+  committed**. Since v425 they are entered once in 설정 → 고급 → [키 저장] and shared per room at
+  `aura-rooms/{room}/keys` {gemini, tourapi, updatedAt} (`loadRoomKeys` / `auraSaveRoomKeys` in app.js);
+  the room rule's email allowlist means only that couple can read them. `localStorage`
+  (`aura_gemini_key`, `aura_tourapi_key`) is just a cache, and a phone that has a key the room lacks
+  uploads it. The fields never show a stored key back. Keep them out of `saveSettingsToCloud`'s
+  room-level PATCH. A new external API key follows the same pattern: `keys/`, entered via Settings.
+  The Naver map / Kakao keys are public and no longer have Settings fields (defaults in app.js, room
+  overrides via the synced `naverClientId` / `kakaoApiKey`).
 - `secrets/` (gitignored) holds the maintainer's own keys/notes for reference — don't read from it to
   wire up features, and never echo its contents into code or commit history.
 

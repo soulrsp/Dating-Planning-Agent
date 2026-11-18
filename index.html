@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261118_v424">
+    <link rel="stylesheet" href="style.css?v=20261118_v425">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -473,61 +473,24 @@
                 <div class="card settings-card">
                     <h3 class="card-heading"><i data-lucide="sliders" class="margin-right-sm text-primary"></i>AURA 환경 설정</h3>
                     <div class="settings-form">
-                        <div class="form-group">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label for="settings-gemini-key" style="margin:0;">Gemini API Key</label>
-                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('gemini')">
-                                    ❓ 가이드 / 발급방법
-                                </button>
-                            </div>
-                            <input type="password" id="settings-gemini-key" placeholder="Gemini API Key를 입력하세요">
-                        </div>
-
-                        <div class="form-group">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label for="settings-naver-client-id" style="margin:0;">네이버 지도 Client ID</label>
-                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('naver')">
-                                    ❓ 가이드 / 발급방법
-                                </button>
-                            </div>
-                            <input type="text" id="settings-naver-client-id" placeholder="네이버 클라우드 플랫폼 Maps Client ID를 입력하세요">
-                            <span class="help-text">등록 시 전용 네이버 지도로 로드되며, 미입력 시 Leaflet 지도로 작동합니다.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label for="settings-kakao-api-key" style="margin:0;">카카오 장소 검색 API Key (JavaScript 키)</label>
-                            </div>
-                            <input type="text" id="settings-kakao-api-key" placeholder="카카오 디벨로퍼스 JavaScript 키를 입력하세요">
-                            <span class="help-text">등록 시 상호명(가게, 식당, 카페, 브랜드)을 CORS 제한 없이 100% 정밀 탐색합니다.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <label for="settings-tourapi-key" style="margin:0;">문화축제 정보 API Key (공공데이터포털)</label>
-                                <button type="button" class="btn btn-outline" style="padding:0.15rem 0.55rem; font-size:0.7rem; height:24px; border-color:var(--color-primary); color:var(--color-primary); background:rgba(255,101,132,0.06);" onclick="openApiGuideModal('tourapi')">
-                                    ❓ 가이드 / 발급방법
-                                </button>
-                            </div>
-                            <input type="password" id="settings-tourapi-key" placeholder="공공데이터포털 TourAPI 인증키를 입력하세요">
-                            <span class="help-text">AI플래너 탭의 '대전 주변 축제·행사' 표를 채우는 데 사용됩니다. 이 키는 다른 커플과 공유되지 않고 이 기기에만 저장됩니다.</span>
-                        </div>
-
+                        <!-- v425: grouped and trimmed. Map keys (public) are built in / come from the room; the
+                             secret keys (Gemini, TourAPI) are entered once and shared through the room cloud. -->
+                        <h4 class="settings-section"><span>💞</span> 우리 정보</h4>
                         <div class="form-group-row">
                             <div class="form-group">
-                                <label for="settings-partner-a-name">파트너 A 이름 (SH)</label>
+                                <label for="settings-partner-a-name">파트너 A 이름</label>
                                 <input type="text" id="settings-partner-a-name" placeholder="기본값: SH" value="SH">
                             </div>
                             <div class="form-group">
-                                <label for="settings-partner-b-name">파트너 B 이름 (SA)</label>
+                                <label for="settings-partner-b-name">파트너 B 이름</label>
                                 <input type="text" id="settings-partner-b-name" placeholder="기본값: SA" value="SA">
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="settings-anniversary">💞 사귄 날 (D-day 기준일)</label>
+                            <label for="settings-anniversary">사귄 날 (D-day 기준일)</label>
                             <input type="date" id="settings-anniversary">
-                            <span class="help-text">대시보드에 함께한 날수와 100일·주년 D-day가 표시돼요. 사귄 날이 1일째입니다. 생일과 함께 두 사람 기기에 동기화됩니다.</span>
+                            <span class="help-text">사귄 날이 1일째예요. 생일과 함께 두 사람 폰에 동기화돼요.</span>
                         </div>
 
                         <div class="form-group-row">
@@ -547,31 +510,12 @@
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="settings-sync-room-id">실시간 동기화 룸 이름 (방 이름)</label>
-                            <input type="text" id="settings-sync-room-id" placeholder="예: lovestory (비워둘 시 동기화 미사용)">
-                            <span class="help-text">주소창에 <code>?room=방이름</code>을 붙이거나 여기에 입력하면 5초마다 자동 동기화 룸이 실행됩니다.</span>
-                            <button type="button" class="btn btn-outline" id="btn-force-sync" style="margin-top:0.6rem;" onclick="forceCloudSync()"><i data-lucide="refresh-cw"></i> 지금 클라우드와 강제 동기화</button>
-                            <span class="help-text">다른 기기에서 올린 사진/장소가 안 보일 때 눌러보세요. 평소 자동 동기화가 건너뛰는 확인 절차를 무시하고 전부 다시 확인합니다.</span>
+                        <div class="form-group-row">
+                            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
                         </div>
 
+                        <h4 class="settings-section"><span>🔐</span> 계정</h4>
                         <div class="form-group">
-                            <label for="settings-firebase-url">Firebase Database URL (격리용 선택)</label>
-                            <input type="text" id="settings-firebase-url" placeholder="예: https://your-db.firebasedatabase.app">
-                            <span class="help-text">비워두면 AURA 기본 분리 경로(aura-rooms/)를 사용하며, 입력하면 본인의 전용 Firebase DB로 완벽히 격리됩니다.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label>데이터 수동 관리</label>
-                            <div class="btn-row">
-                                <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 데이터 내보내기</button>
-                                <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 데이터 가져오기</button>
-                                <input type="file" id="file-import-data" class="hidden" accept=".json">
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>로그인 계정</label>
                             <div class="btn-row" style="align-items:center; gap:0.6rem;">
                                 <span id="auth-current-email" style="font-size:0.82rem; color:var(--color-text-med);"></span>
                                 <button type="button" class="btn btn-outline" id="btn-google-signout"><i data-lucide="log-out"></i> 로그아웃</button>
@@ -582,21 +526,69 @@
                             <label>네이버·카톡 앱에서 열기용 비밀번호</label>
                             <p id="auth-password-status" style="font-size:0.78rem; color:var(--color-text-med); margin:0 0 0.4rem;">네이버·카카오톡 안에서는 구글 로그인이 막혀 있어요. 여기서 비밀번호를 만들어 두면 그 앱들 안에서도 이 메일 주소와 비밀번호로 로그인할 수 있어요.</p>
                             <div class="btn-row" style="gap:0.5rem; flex-wrap:wrap;">
-                                <input type="password" id="auth-new-password" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" style="flex:1; min-width:150px;">
-                                <input type="password" id="auth-new-password2" placeholder="한 번 더" autocomplete="new-password" style="flex:1; min-width:120px;">
+                                <input type="password" id="auth-new-password" placeholder="새 비밀번호" autocomplete="new-password" style="flex:1; min-width:130px;">
+                                <input type="password" id="auth-new-password2" placeholder="한 번 더" autocomplete="new-password" style="flex:1; min-width:110px;">
                                 <button type="button" class="btn btn-primary" id="btn-set-password" onclick="auraSetPassword()">비밀번호 저장</button>
                             </div>
                         </div>
 
+                        <h4 class="settings-section"><span>🔄</span> 동기화</h4>
                         <div class="form-group">
-                            <label>지인 커플 초대하기</label>
-                            <button type="button" class="btn btn-outline" onclick="openApiGuideModal('firebase-rules')"><i data-lucide="user-plus"></i> 초대하는 방법 보기</button>
-                            <span class="help-text">새 커플에게 전용 ?room= 주소를 만들어주는 Firebase 보안 규칙 문구를 안내합니다.</span>
+                            <div id="settings-room-line" class="help-text" style="margin-bottom:0.5rem;"></div>
+                            <button type="button" class="btn btn-outline" id="btn-force-sync" onclick="forceCloudSync()"><i data-lucide="refresh-cw"></i> 지금 클라우드와 강제 동기화</button>
+                            <span class="help-text">상대방이 올린 사진·장소가 안 보일 때 눌러보세요.</span>
                         </div>
 
-                        <div class="form-group-row">
-                            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
-                        </div>
+                        <details class="settings-advanced">
+                            <summary>⚙️ 고급 설정 (API 키 · 방 · 데이터)</summary>
+
+                            <div class="form-group">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <label for="settings-gemini-key" style="margin:0;">Gemini API 키 (AI 코스·사진 꾸미기)</label>
+                                    <button type="button" class="btn btn-outline settings-guide-btn" onclick="openApiGuideModal('gemini')">❓ 발급방법</button>
+                                </div>
+                                <input type="password" id="settings-gemini-key" placeholder="Gemini API 키" autocomplete="off">
+                                <span class="help-text" id="settings-gemini-status"></span>
+                            </div>
+
+                            <div class="form-group">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <label for="settings-tourapi-key" style="margin:0;">축제 정보 API 키 (공공데이터포털)</label>
+                                    <button type="button" class="btn btn-outline settings-guide-btn" onclick="openApiGuideModal('tourapi')">❓ 발급방법</button>
+                                </div>
+                                <input type="password" id="settings-tourapi-key" placeholder="TourAPI 인증키" autocomplete="off">
+                                <span class="help-text" id="settings-tourapi-status"></span>
+                            </div>
+                            <span class="help-text" style="display:block; margin:-0.4rem 0 1rem;">키는 한 번만 넣고 [키 저장]을 누르면 우리 방에 저장돼 두 사람 폰이 함께 써요. 로그인한 우리 둘만 읽을 수 있어요.</span>
+                            <div class="form-group-row" style="margin-bottom:1rem;">
+                                <button type="button" class="btn btn-primary" id="btn-save-keys" onclick="auraSaveRoomKeys()">키 저장</button>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="settings-sync-room-id">방 이름</label>
+                                <input type="text" id="settings-sync-room-id" placeholder="예: 77">
+                                <span class="help-text">다른 방으로 옮길 때만 바꾸세요. 바꾼 뒤 위의 [설정 저장]을 눌러요.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="settings-firebase-url">Firebase Database URL (보통 비워 둬요)</label>
+                                <input type="text" id="settings-firebase-url" placeholder="비워 두면 기본 DB">
+                            </div>
+
+                            <div class="form-group">
+                                <label>데이터 수동 관리</label>
+                                <div class="btn-row">
+                                    <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 내보내기</button>
+                                    <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 가져오기</button>
+                                    <input type="file" id="file-import-data" class="hidden" accept=".json">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>지인 커플 초대하기</label>
+                                <button type="button" class="btn btn-outline" onclick="openApiGuideModal('firebase-rules')"><i data-lucide="user-plus"></i> 초대하는 방법 보기</button>
+                            </div>
+                        </details>
                     </div>
                 </div>
             </section>
@@ -1291,21 +1283,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261118_v424"></script>
+    <script src="app.js?v=20261118_v425"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261118_v424"></script>
+    <script src="studio.js?v=20261118_v425"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261118_v424"></script>
+    <script src="couple.js?v=20261118_v425"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261118_v424"></script>
+    <script src="together.js?v=20261118_v425"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261118_v424"></script>
+    <script src="course.js?v=20261118_v425"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261118_v424').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261118_v425').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

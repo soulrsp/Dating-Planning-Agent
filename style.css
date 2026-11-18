@@ -3814,3 +3814,15 @@ body {
 .room-prompt-text { font-size: 0.82rem; color: var(--color-text-med); line-height: 1.5; margin-bottom: 0.7rem; }
 .room-prompt-row { display: flex; gap: 0.5rem; }
 .room-prompt-row input { flex: 1; min-width: 0; padding: 0.6rem 0.8rem; border-radius: 12px; border: 1px solid rgba(255, 101, 132, 0.35); font-size: 1rem; }
+
+/* ---- Settings tab, grouped (v425) ---- */
+.settings-section { display: flex; align-items: center; gap: 0.45rem; margin: 1.6rem 0 0.8rem; padding-bottom: 0.45rem; font-size: 1rem; font-weight: 800; color: var(--color-text-dark, #3c2a33); border-bottom: 1px solid rgba(255, 101, 132, 0.18); }
+.settings-section:first-of-type { margin-top: 0.4rem; }
+.settings-section span { font-size: 1.1rem; }
+.settings-advanced { margin-top: 1.6rem; border: 1px solid rgba(255, 101, 132, 0.2); border-radius: 16px; padding: 0.2rem 1rem; background: rgba(255, 255, 255, 0.5); }
+.settings-advanced[open] { padding-bottom: 1rem; }
+.settings-advanced summary { cursor: pointer; padding: 0.8rem 0; font-weight: 700; font-size: 0.9rem; color: var(--color-text-med); list-style: none; }
+.settings-advanced summary::-webkit-details-marker { display: none; }
+.settings-advanced summary::after { content: "▾"; float: right; transition: transform .2s; }
+.settings-advanced[open] summary::after { transform: rotate(180deg); }
+.settings-guide-btn { padding: 0.15rem 0.55rem !important; font-size: 0.7rem !important; height: 24px; border-color: var(--color-primary) !important; color: var(--color-primary) !important; background: rgba(255, 101, 132, 0.06) !important; }
