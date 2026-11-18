@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261118_v427">
+    <link rel="stylesheet" href="style.css?v=20261118_v428">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -470,113 +470,121 @@
 
             <!-- Tab: Settings -->
             <section id="tab-settings" class="tab-pane">
-                <div class="card settings-card">
-                    <h3 class="card-heading"><i data-lucide="sliders" class="margin-right-sm text-primary"></i>AURA 환경 설정</h3>
-                    <div class="settings-form">
-                        <!-- v425: grouped and trimmed. Map keys (public) are built in / come from the room; the
-                             secret keys (Gemini, TourAPI) are entered once and shared through the room cloud. -->
-                        <h4 class="settings-section"><span>💞</span> 우리 정보</h4>
-                        <div class="form-group-row">
-                            <div class="form-group">
-                                <label for="settings-partner-a-name">파트너 A 이름</label>
-                                <input type="text" id="settings-partner-a-name" placeholder="기본값: SH" value="SH">
-                            </div>
-                            <div class="form-group">
-                                <label for="settings-partner-b-name">파트너 B 이름</label>
-                                <input type="text" id="settings-partner-b-name" placeholder="기본값: SA" value="SA">
-                            </div>
+                <!-- v428: one card per group. Element ids are the ones app.js reads — keep them when editing. -->
+                <div class="settings-wrap">
+                    <div class="settings-hero">
+                        <img src="images/icon-192.png" alt="" class="settings-hero-icon">
+                        <div>
+                            <div class="settings-hero-title">설정</div>
+                            <div class="settings-hero-sub">우리 둘만의 공간을 꾸며요</div>
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="settings-anniversary">사귄 날 (D-day 기준일)</label>
-                            <input type="date" id="settings-anniversary">
-                            <span class="help-text">사귄 날이 1일째예요. 생일과 함께 두 사람 폰에 동기화돼요.</span>
-                        </div>
-
-                        <div class="form-group-row">
-                            <div class="form-group">
-                                <label for="settings-birthday-a" id="label-birthday-a">🎂 파트너 A 생일</label>
-                                <div class="birthday-input-row">
-                                    <input type="text" id="settings-birthday-a" placeholder="월-일 (예: 02-17)" inputmode="numeric" maxlength="8">
-                                    <label class="lunar-toggle"><input type="checkbox" id="settings-birthday-a-lunar"> 음력</label>
+                    <div class="card settings-group">
+                        <div class="settings-group-head"><span class="sg-icon">💞</span><div><b>우리 정보</b><small>이름 · 사귄 날 · 생일 — 두 사람 폰에 같이 저장돼요</small></div></div>
+                        <div class="settings-form">
+                            <div class="form-group-row">
+                                <div class="form-group">
+                                    <label for="settings-partner-a-name">파트너 A 이름</label>
+                                    <input type="text" id="settings-partner-a-name" placeholder="기본값: SH" value="SH">
+                                </div>
+                                <div class="form-group">
+                                    <label for="settings-partner-b-name">파트너 B 이름</label>
+                                    <input type="text" id="settings-partner-b-name" placeholder="기본값: SA" value="SA">
                                 </div>
                             </div>
+
                             <div class="form-group">
-                                <label for="settings-birthday-b" id="label-birthday-b">🎂 파트너 B 생일</label>
-                                <div class="birthday-input-row">
-                                    <input type="text" id="settings-birthday-b" placeholder="월-일 (예: 01-20)" inputmode="numeric" maxlength="8">
-                                    <label class="lunar-toggle"><input type="checkbox" id="settings-birthday-b-lunar"> 음력</label>
+                                <label for="settings-anniversary">사귄 날</label>
+                                <input type="date" id="settings-anniversary">
+                                <span class="help-text">사귄 날이 1일째예요. D-day와 100일·주년 기념일이 계산돼요.</span>
+                            </div>
+
+                            <div class="form-group-row">
+                                <div class="form-group">
+                                    <label for="settings-birthday-a" id="label-birthday-a">🎂 파트너 A 생일</label>
+                                    <div class="birthday-input-row">
+                                        <input type="text" id="settings-birthday-a" placeholder="월-일 (예: 02-17)" inputmode="numeric" maxlength="8">
+                                        <label class="lunar-toggle"><input type="checkbox" id="settings-birthday-a-lunar"> 음력</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="settings-birthday-b" id="label-birthday-b">🎂 파트너 B 생일</label>
+                                    <div class="birthday-input-row">
+                                        <input type="text" id="settings-birthday-b" placeholder="월-일 (예: 01-20)" inputmode="numeric" maxlength="8">
+                                        <label class="lunar-toggle"><input type="checkbox" id="settings-birthday-b-lunar"> 음력</label>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div class="form-group-row">
-                            <button class="btn btn-primary" id="btn-save-settings">설정 저장</button>
+                            <button class="btn btn-primary settings-save-btn" id="btn-save-settings">💾 우리 정보 저장</button>
                         </div>
+                    </div>
 
-                        <h4 class="settings-section"><span>🔐</span> 계정</h4>
-                        <div class="form-group">
-                            <div class="btn-row" style="align-items:center; gap:0.6rem;">
-                                <span id="auth-current-email" style="font-size:0.82rem; color:var(--color-text-med);"></span>
-                                <button type="button" class="btn btn-outline" id="btn-google-signout"><i data-lucide="log-out"></i> 로그아웃</button>
-                            </div>
+                    <div class="card settings-group">
+                        <div class="settings-group-head"><span class="sg-icon">🔐</span><div><b>계정</b><small>로그인 · 네이버/카톡 앱용 비밀번호</small></div></div>
+                        <div class="settings-row">
+                            <span class="settings-avatar">👤</span>
+                            <span id="auth-current-email" class="settings-row-main"></span>
+                            <button type="button" class="btn btn-outline settings-mini-btn" id="btn-google-signout"><i data-lucide="log-out"></i> 로그아웃</button>
                         </div>
-
-                        <div class="form-group">
+                        <div class="settings-sub form-group">
                             <label>네이버·카톡 앱에서 열기용 비밀번호</label>
-                            <p id="auth-password-status" style="font-size:0.78rem; color:var(--color-text-med); margin:0 0 0.4rem;">네이버·카카오톡 안에서는 구글 로그인이 막혀 있어요. 여기서 비밀번호를 만들어 두면 그 앱들 안에서도 이 메일 주소와 비밀번호로 로그인할 수 있어요.</p>
-                            <div class="btn-row" style="gap:0.5rem; flex-wrap:wrap;">
-                                <input type="password" id="auth-new-password" placeholder="새 비밀번호" autocomplete="new-password" style="flex:1; min-width:130px;">
-                                <input type="password" id="auth-new-password2" placeholder="한 번 더" autocomplete="new-password" style="flex:1; min-width:110px;">
-                                <button type="button" class="btn btn-primary" id="btn-set-password" onclick="auraSetPassword()">비밀번호 저장</button>
+                            <p id="auth-password-status" class="help-text">네이버·카카오톡 안에서는 구글 로그인이 막혀 있어요. 비밀번호를 만들어 두면 그 앱들 안에서도 이 메일 주소와 비밀번호로 로그인할 수 있어요.</p>
+                            <div class="settings-password-row">
+                                <input type="password" id="auth-new-password" placeholder="새 비밀번호" autocomplete="new-password">
+                                <input type="password" id="auth-new-password2" placeholder="한 번 더" autocomplete="new-password">
                             </div>
+                            <button type="button" class="btn btn-outline settings-wide-btn" id="btn-set-password" onclick="auraSetPassword()">🔑 비밀번호 저장</button>
                         </div>
+                    </div>
 
-                        <h4 class="settings-section"><span>🔄</span> 동기화</h4>
-                        <div class="form-group">
-                            <div id="settings-room-line" class="help-text" style="margin-bottom:0.5rem;"></div>
-                            <button type="button" class="btn btn-outline" id="btn-force-sync" onclick="forceCloudSync()"><i data-lucide="refresh-cw"></i> 지금 클라우드와 강제 동기화</button>
-                            <span class="help-text">상대방이 올린 사진·장소가 안 보일 때 눌러보세요.</span>
+                    <div class="card settings-group">
+                        <div class="settings-group-head"><span class="sg-icon">🔄</span><div><b>동기화</b><small>두 사람 폰이 같은 내용을 보도록 자동으로 맞춰요</small></div></div>
+                        <div class="settings-row">
+                            <span class="settings-live-dot"></span>
+                            <span id="settings-room-line" class="settings-row-main"></span>
                         </div>
+                        <button type="button" class="btn btn-outline settings-wide-btn" id="btn-force-sync" onclick="forceCloudSync()"><i data-lucide="refresh-cw"></i> 지금 강제 동기화</button>
+                        <span class="help-text">상대방이 올린 사진·장소가 안 보일 때 눌러보세요.</span>
+                    </div>
 
-                        <details class="settings-advanced">
-                            <summary>⚙️ 고급 설정 (API 키 · 방 · 데이터)</summary>
-
+                    <details class="card settings-group settings-advanced">
+                        <summary class="settings-group-head"><span class="sg-icon">⚙️</span><div><b>고급 설정</b><small>API 키 · 방 · 데이터 백업 · 초대</small></div></summary>
+                        <div class="settings-form">
                             <div class="form-group">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <label for="settings-gemini-key" style="margin:0;">Gemini API 키 (AI 코스·사진 꾸미기)</label>
+                                <div class="settings-label-row">
+                                    <label for="settings-gemini-key">Gemini API 키 <small>(AI 코스·사진 꾸미기)</small></label>
                                     <button type="button" class="btn btn-outline settings-guide-btn" onclick="openApiGuideModal('gemini')">❓ 발급방법</button>
                                 </div>
-                                <input type="password" id="settings-gemini-key" placeholder="Gemini API 키" autocomplete="off">
+                                <input type="password" id="settings-gemini-key" placeholder="바꿀 때만 입력" autocomplete="off">
                                 <span class="help-text" id="settings-gemini-status"></span>
                             </div>
 
                             <div class="form-group">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <label for="settings-tourapi-key" style="margin:0;">축제 정보 API 키 (공공데이터포털)</label>
+                                <div class="settings-label-row">
+                                    <label for="settings-tourapi-key">축제 정보 API 키 <small>(공공데이터포털)</small></label>
                                     <button type="button" class="btn btn-outline settings-guide-btn" onclick="openApiGuideModal('tourapi')">❓ 발급방법</button>
                                 </div>
-                                <input type="password" id="settings-tourapi-key" placeholder="TourAPI 인증키" autocomplete="off">
+                                <input type="password" id="settings-tourapi-key" placeholder="바꿀 때만 입력" autocomplete="off">
                                 <span class="help-text" id="settings-tourapi-status"></span>
                             </div>
-                            <span class="help-text" style="display:block; margin:0 0 0.8rem;">키는 한 번만 넣고 [키 저장]을 누르면 우리 방에 저장돼 두 사람 폰이 함께 써요. 로그인한 우리 둘만 읽을 수 있어요.</span>
-                            <div class="form-group-row" style="margin-bottom:1rem;">
-                                <button type="button" class="btn btn-primary" id="btn-save-keys" onclick="auraSaveRoomKeys()">키 저장</button>
-                            </div>
+                            <span class="help-text">키는 한 번만 넣고 [키 저장]을 누르면 우리 방에 저장돼 두 사람 폰이 함께 써요. 로그인한 우리 둘만 읽을 수 있어요.</span>
+                            <button type="button" class="btn btn-outline settings-wide-btn" id="btn-save-keys" onclick="auraSaveRoomKeys()">🔑 키 저장</button>
 
                             <div class="form-group">
                                 <label for="settings-sync-room-id">방 이름</label>
                                 <input type="text" id="settings-sync-room-id" placeholder="예: 77">
-                                <span class="help-text">다른 방으로 옮길 때만 바꾸세요. 바꾼 뒤 위의 [설정 저장]을 눌러요.</span>
+                                <span class="help-text">다른 방으로 옮길 때만 바꾸고, 위의 [우리 정보 저장]을 눌러요.</span>
                             </div>
 
                             <div class="form-group">
-                                <label for="settings-firebase-url">Firebase Database URL (보통 비워 둬요)</label>
+                                <label for="settings-firebase-url">Firebase Database URL <small>(보통 비워 둬요)</small></label>
                                 <input type="text" id="settings-firebase-url" placeholder="비워 두면 기본 DB">
                             </div>
 
                             <div class="form-group">
-                                <label>데이터 수동 관리</label>
+                                <label>데이터 백업</label>
                                 <div class="btn-row">
                                     <button class="btn btn-outline" id="btn-export-data"><i data-lucide="download"></i> 내보내기</button>
                                     <button class="btn btn-outline" id="btn-import-data-trigger"><i data-lucide="upload"></i> 가져오기</button>
@@ -586,10 +594,10 @@
 
                             <div class="form-group">
                                 <label>지인 커플 초대하기</label>
-                                <button type="button" class="btn btn-outline" onclick="openApiGuideModal('firebase-rules')"><i data-lucide="user-plus"></i> 초대하는 방법 보기</button>
+                                <button type="button" class="btn btn-outline settings-wide-btn" onclick="openApiGuideModal('firebase-rules')"><i data-lucide="user-plus"></i> 초대하는 방법 보기</button>
                             </div>
-                        </details>
-                    </div>
+                        </div>
+                    </details>
                 </div>
             </section>
         </main>
@@ -1283,21 +1291,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261118_v427"></script>
+    <script src="app.js?v=20261118_v428"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261118_v427"></script>
+    <script src="studio.js?v=20261118_v428"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261118_v427"></script>
+    <script src="couple.js?v=20261118_v428"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261118_v427"></script>
+    <script src="together.js?v=20261118_v428"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261118_v427"></script>
+    <script src="course.js?v=20261118_v428"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261118_v427').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261118_v428').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

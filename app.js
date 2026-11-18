@@ -4563,9 +4563,44 @@ function getLunarDateFormatter() {
 const lunarToSolarCache = new Map();
 // The solar date of lunar month/day (never a leap month) in the lunar year that starts in `lunarYear`.
 // A lunar 30th that the month doesn't have that year is celebrated on the 29th.
+// Korean lunar calendar 1940–2100, built in so lunar birthdays work on every phone (v428). Many phone
+// browsers (Samsung Internet, some Android WebViews) ship without ICU's dangi/chinese calendars, so the
+// Intl path below returned nothing there and a lunar birthday never showed on the calendar.
+// One entry per lunar year from 1940: "<days from Jan 1 to lunar new year>[.<leap month>].<month bits>",
+// month bits in base 36, one per month in order (leap month in its place), 1 = 30 days, 0 = 29.
+// Generated from ICU's dangi calendar (Korean, KST — e.g. 2027 Seollal is Feb 7, not China's Feb 6).
+const KOREAN_LUNAR_FIRST_YEAR = 1940;
+const KOREAN_LUNAR_TABLE = "38.2mi 26.6.5e2 45.295 35.12l 25.4.123 43.gt 32.1t9 21.2.4yz 40.239 28.7.591 47.28a 36.28l 26.5.251 44.yj 34.gr 23.3.3mf 42.10r 30.8.46j 49.1at 38.1be 27.6.4a2 45.245 35.xi 24.4.432 43.21j 32.10n 21.3.2li 39.2ol 29.7.2mt 47.12i 36.1wt 26.5.1ul 45.xa 33.21a 22.4.571 41.2lh 30.8.59l 48.28k 37.2ne 27.6.3q2 46.1uj 35.wr 24.4.42j 43.217 32.10.4ej 50.1b9 39.1ck 28.6.4hh 48.ja 36.1uj 26.5.1tj 45.wn 34.18r 22.3.2mi 40.2w5 30.8.2p5 49.14d 38.ja 27.5.3n2 46.1ta 35.2hi 23.4.5n9 42.2mi 31.2p1 21.2.28l 39.12k 28.7.47v 48.gt 37.1t9 25.5.4yz 44.239 33.28a 22.3.4lm 40.28l 30.9.245 49.xm 38.21n 27.5.3mf 46.10r 35.239 24.4.4gl 42.1be 31.251 21.2.245 40.xi 28.6.432 47.21j 37.10n 26.5.2li 43.2oj 33.14a 22.3.48a 41.1v1 30.11.1ul 49.xa 38.219 27.6.571 45.2lh 34.2mq 23.5.5ec 42.296 31.1v1 21.2.1uj 40.wr 29.7.42f 47.217 36.279 25.5.4h1 44.1ck 32.256 22.3.3p2 41.1tn 31.8.1tj 49.wn 38.18r 27.6.2mi 45.2w5 34.1bm 23.4.4a4 42.246 32.1tj 21.3.1ta 39.2hi 28.7.591 47.2mi 35.2p1 25.5.28l 44.12i 33.23x 22.4.3ml 41.1t9 30.8.4yz 49.239 37.28a 26.6.4h6 45.251 35.122 23.4.43e 42.21n 32.10r 21.3.46j 39.237 28.7.2vp 47.1be 36.251 25.5.1x1 44.xi 33.21j 23.4.21b 41.10m 29.8.5ra 48.2mr 38.14a 26.6.48a 45.1v1 35.xa 24.4.432 42.219 31.2li 20.3.5r9 39.2mq".split(" ");
+function lunarToSolarFromTable(lunarYear, month, day) {
+    const entry = KOREAN_LUNAR_TABLE[lunarYear - KOREAN_LUNAR_FIRST_YEAR];
+    if (!entry) return undefined; // outside the table: let Intl try
+    const f = entry.split(".");
+    const offset = parseInt(f[0], 10);
+    const leap = f.length === 3 ? parseInt(f[1], 10) : 0;
+    const count = leap ? 13 : 12;
+    const bits = parseInt(f[f.length - 1], 36).toString(2).padStart(count, "0");
+    let days = offset;
+    for (let i = 0; i < count; i++) {
+        const isLeapMonth = leap && i === leap;          // the leap month comes right after month `leap`
+        const monthNo = i < (leap ? leap + 1 : 99) ? i + 1 : i; // regular month number of slot i
+        const len = bits[i] === "1" ? 30 : 29;
+        if (!isLeapMonth && monthNo === month) {
+            const d = Math.min(day, len);                // a "30th" in a 29-day month → the 29th
+            return new Date(lunarYear, 0, 1 + days + d - 1);
+        }
+        days += len;
+    }
+    return null;
+}
+
 function lunarToSolar(lunarYear, month, day) {
     const cacheKey = `${lunarYear}-${month}-${day}`;
     if (lunarToSolarCache.has(cacheKey)) return lunarToSolarCache.get(cacheKey);
+    const fromTable = lunarToSolarFromTable(lunarYear, month, day);
+    if (fromTable !== undefined) {
+        lunarToSolarCache.set(cacheKey, fromTable);
+        return fromTable;
+    }
     const f = getLunarDateFormatter();
     let result = null;
     if (f) {

@@ -3834,22 +3834,53 @@ body {
 .room-prompt-row { display: flex; gap: 0.5rem; }
 .room-prompt-row input { flex: 1; min-width: 0; padding: 0.6rem 0.8rem; border-radius: 12px; border: 1px solid rgba(255, 101, 132, 0.35); font-size: 1rem; }
 
-/* ---- Settings tab, grouped (v425) ---- */
-.settings-section { display: flex; align-items: center; gap: 0.45rem; margin: 1.6rem 0 0.8rem; padding-bottom: 0.45rem; font-size: 1rem; font-weight: 800; color: var(--color-text-dark, #3c2a33); border-bottom: 1px solid rgba(255, 101, 132, 0.18); }
-.settings-section:first-of-type { margin-top: 0.4rem; }
-.settings-section span { font-size: 1.1rem; }
-.settings-advanced { margin-top: 1.6rem; border: 1px solid rgba(255, 101, 132, 0.2); border-radius: 16px; padding: 0.2rem 1rem; background: rgba(255, 255, 255, 0.5); }
-.settings-advanced[open] { padding-bottom: 1rem; }
-.settings-advanced summary { cursor: pointer; padding: 0.8rem 0; font-weight: 700; font-size: 0.9rem; color: var(--color-text-med); list-style: none; }
-.settings-advanced summary::-webkit-details-marker { display: none; }
-.settings-advanced summary::after { content: "▾"; float: right; transition: transform .2s; }
-.settings-advanced[open] summary::after { transform: rotate(180deg); }
-.settings-guide-btn { padding: 0.15rem 0.55rem !important; font-size: 0.7rem !important; height: 24px; border-color: var(--color-primary) !important; color: var(--color-primary) !important; background: rgba(255, 101, 132, 0.06) !important; }
-.settings-advanced .form-group > .help-text[id$="-status"] { display: block; margin-top: 0.35rem; }
-.settings-advanced .form-group { margin-bottom: 1.1rem; }
 .dday-set-link { color: var(--color-primary); font-weight: 700; font-size: 0.85rem; text-decoration: none; }
 /* Travel time between course stops (course.js courseLegText, v427) */
 .course-leg { font-weight: 700; color: var(--color-primary); font-size: 0.8rem; }
 
 /* Count bubble is a phone-only extra (see the 768px block); desktop badges already say the number. */
 .badge-count { display: none; }
+
+/* ==========================================
+   Settings tab (v428): one card per group
+   ========================================== */
+.settings-wrap { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+.settings-hero { display: flex; align-items: center; gap: 0.9rem; padding: 0.25rem 0.25rem 0.5rem; }
+.settings-hero-icon { width: 56px; height: 56px; border-radius: 16px; box-shadow: 0 6px 18px rgba(255, 101, 132, 0.25); object-fit: cover; }
+.settings-hero-title { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 800; color: var(--color-text-high); line-height: 1.1; }
+.settings-hero-sub { font-size: 0.82rem; color: var(--color-text-med); margin-top: 0.15rem; }
+
+.settings-group { padding: 1.1rem 1.15rem 1.2rem; border-radius: 22px; }
+.settings-group-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.9rem; }
+.settings-group-head b { display: block; font-size: 1rem; font-weight: 800; color: var(--color-text-high); }
+.settings-group-head small { display: block; font-size: 0.74rem; color: var(--color-text-low); margin-top: 0.1rem; }
+.sg-icon { flex: none; width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+    background: linear-gradient(135deg, rgba(255, 101, 132, 0.14), rgba(181, 160, 230, 0.18)); }
+.settings-group .settings-form { margin-top: 0; gap: 1rem; }
+
+.settings-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.75rem; border-radius: 14px; background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(255, 101, 132, 0.12); margin-bottom: 0.75rem; }
+.settings-row-main { flex: 1; min-width: 0; font-size: 0.85rem; color: var(--color-text-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255, 101, 132, 0.12); font-size: 0.95rem; }
+.settings-live-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #4AD66D; box-shadow: 0 0 0 4px rgba(74, 214, 109, 0.18); margin: 0 0.3rem; }
+.settings-mini-btn { flex: none; padding: 0.35rem 0.7rem !important; font-size: 0.75rem !important; }
+.settings-mini-btn svg { width: 14px; height: 14px; }
+.settings-sub { display: flex; flex-direction: column; gap: 0.5rem; }
+.settings-sub > label { font-size: 0.85rem; font-weight: 700; color: var(--color-text-high); }
+.settings-sub .help-text { margin: 0; }
+.settings-password-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.settings-password-row input { min-width: 0; }
+.settings-wide-btn { width: 100%; justify-content: center; }
+.settings-save-btn { width: 100%; justify-content: center; margin-top: 0.25rem; }
+.settings-group > .help-text { display: block; margin-top: 0.5rem; }
+.settings-label-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 4px; }
+.settings-label-row label { margin: 0; }
+.settings-group label small, .settings-label-row label small { font-weight: 500; color: var(--color-text-low); }
+.settings-group .form-group > .help-text[id$="-status"] { display: block; margin-top: 0.3rem; }
+
+.settings-advanced > summary { cursor: pointer; list-style: none; margin-bottom: 0; }
+.settings-advanced > summary::-webkit-details-marker { display: none; }
+.settings-advanced > summary::after { content: "▾"; margin-left: auto; color: var(--color-text-low); transition: transform .2s; }
+.settings-advanced[open] > summary { margin-bottom: 0.9rem; }
+.settings-advanced[open] > summary::after { transform: rotate(180deg); }
+.settings-guide-btn { padding: 0.15rem 0.55rem !important; font-size: 0.7rem !important; height: 24px; border-color: var(--color-primary) !important; color: var(--color-primary) !important; background: rgba(255, 101, 132, 0.06) !important; }
