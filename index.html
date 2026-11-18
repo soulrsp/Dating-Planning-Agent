@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261118_v448">
+    <link rel="stylesheet" href="style.css?v=20261119_v450">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -860,6 +860,116 @@
         </div>
     </div>
 
+    <!-- Modal: Photo Studio (collage / filter / frame editor — app.js section 16) -->
+    <div class="modal-overlay" id="modal-photo-studio">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>✨ 사진 꾸미기</h3>
+                <button class="modal-close" onclick="closePhotoStudio()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body studio-body">
+                <div id="studio-empty" class="studio-empty hidden">꾸밀 사진을 골라주세요. 1장이면 필터, 여러 장이면 콜라주가 돼요.</div>
+                <div id="studio-preview-wrap" class="studio-preview-wrap">
+                    <canvas id="studio-preview"></canvas>
+                </div>
+                <div id="studio-item-panel" class="studio-item-panel hidden"></div>
+
+                <div class="studio-section">
+                    <div class="studio-label">사진 <span>(최대 9장 · 고른 순서대로 들어가요)</span></div>
+                    <div id="studio-selected" class="studio-selected"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label-row">
+                        <div class="studio-label">스티커 · 글씨 <span>(눌러서 넣고, 사진 위에서 옮겨요)</span></div>
+                        <button type="button" class="studio-chip small active" onclick="studioAddText()">＋ 글씨</button>
+                    </div>
+                    <div id="studio-sticker-tabs" class="studio-chips"></div>
+                    <div id="studio-sticker-grid" class="studio-sticker-grid"></div>
+                </div>
+
+                <div class="studio-section studio-ai-section">
+                    <div class="studio-label">🤖 AI 꾸미기 <span>(얼굴을 찾아서 자동으로 붙여요 · Gemini 키 필요)</span></div>
+                    <div id="studio-ai-themes" class="studio-chips"></div>
+                    <button type="button" class="studio-chip small studio-ai-btn studio-ai-caption-btn" onclick="studioAiCaptions()">✍️ 어울리는 문구 추천받기</button>
+                    <div id="studio-ai-status" class="studio-ai-status"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">🎬 움직이는 사진</div>
+                    <div id="studio-video-hint" class="studio-ai-status"></div>
+                    <div class="studio-chips">
+                        <button type="button" class="studio-chip small active studio-needs-photo" onclick="studioMakeVideo('normal')">🎬 영상 만들기</button>
+                        <button type="button" class="studio-chip small studio-needs-photo" onclick="studioMakeVideo('profile')">💛 카톡 프사 영상 (6초)</button>
+                        <button type="button" class="studio-chip small studio-needs-photo" onclick="studioMakeVideo('background')">📱 카톡 배경 영상</button>
+                    </div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">💛 카톡 프사 · 배경 <span>(커플 프사 반반 나누기도 돼요)</span></div>
+                    <button type="button" class="studio-chip small active studio-needs-photo studio-ai-caption-btn" onclick="openKakaoMaker()">💛 카톡용으로 만들기</button>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">레이아웃</div>
+                    <div id="studio-layouts" class="studio-chips"></div>
+                    <div class="studio-row">
+                        <label for="studio-gap">테두리</label>
+                        <input type="range" id="studio-gap" min="0" max="60" step="2" oninput="studioSetGap(this.value)">
+                        <label class="studio-check"><input type="checkbox" id="studio-rounded" onchange="studioSetRounded(this.checked)"> 둥근 모서리</label>
+                    </div>
+                    <div class="studio-row">
+                        <label>배경색</label>
+                        <div id="studio-backgrounds" class="studio-swatches"></div>
+                    </div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">필터</div>
+                    <div id="studio-filters" class="studio-chips"></div>
+                    <div class="studio-row"><label for="studio-adj-brightness">밝기</label><input type="range" id="studio-adj-brightness" min="-50" max="50" oninput="studioSetAdjust('brightness', this.value)"></div>
+                    <div class="studio-row"><label for="studio-adj-contrast">대비</label><input type="range" id="studio-adj-contrast" min="-50" max="50" oninput="studioSetAdjust('contrast', this.value)"></div>
+                    <div class="studio-row"><label for="studio-adj-saturation">채도</label><input type="range" id="studio-adj-saturation" min="-50" max="50" oninput="studioSetAdjust('saturation', this.value)"></div>
+                    <button type="button" class="studio-link-btn" onclick="studioResetAdjust()">밝기·대비·채도 초기화</button>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">그림 효과 · 보정 <span>(기기 안에서 처리돼요)</span></div>
+                    <div id="studio-arts" class="studio-chips"></div>
+                    <div class="studio-row"><label for="studio-smooth">뽀샤시</label><input type="range" id="studio-smooth" min="0" max="100" step="5" oninput="studioSetSmooth(this.value)"></div>
+                    <div class="studio-label" style="margin-top:0.3rem">얼굴 보정 <span>(베타 · 처음 한 번 약 7MB를 받아요 · 사진은 밖으로 안 나가요)</span></div>
+                    <div class="studio-row"><label for="studio-reshape-jaw">턱선</label><input type="range" id="studio-reshape-jaw" min="0" max="100" step="5" oninput="studioSetReshape('jaw', this.value)"></div>
+                    <div class="studio-row"><label for="studio-reshape-eye">눈 크게</label><input type="range" id="studio-reshape-eye" min="0" max="100" step="5" oninput="studioSetReshape('eye', this.value)"></div>
+                    <div id="studio-face-status" class="studio-ai-status"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">🪄 배경 바꾸기 <span>(사람만 남기고 뒤를 바꿔요 · 기기 안에서 처리)</span></div>
+                    <div id="studio-bg-modes" class="studio-chips"></div>
+                    <div id="studio-bg-fills" class="studio-swatches hidden"></div>
+                    <label class="studio-check"><input type="checkbox" id="studio-bg-outline" onchange="studioSetBgSwap('outline', this.checked)"> 스티커처럼 흰 테두리</label>
+                    <div id="studio-bg-status" class="studio-ai-status"></div>
+                </div>
+
+                <div class="studio-section">
+                    <div class="studio-label">프레임 · 문구</div>
+                    <div id="studio-frames" class="studio-chips">
+                        <button type="button" class="studio-chip" data-frame="none" onclick="studioSet('frame', 'none')">없음</button>
+                        <button type="button" class="studio-chip" data-frame="polaroid" onclick="studioSet('frame', 'polaroid')">폴라로이드</button>
+                        <button type="button" class="studio-chip" data-frame="stamp" onclick="studioSet('frame', 'stamp')">날짜 도장</button>
+                        <button type="button" class="studio-chip" id="studio-logo-chip" onclick="studioToggleLogo()">AURA 로고</button>
+                    </div>
+                    <input type="text" id="studio-caption" maxlength="60" placeholder="사진 아래 문구 (비워두면 없음)" oninput="studioSetCaption(this.value)">
+                    <div id="studio-caption-suggestions" class="studio-chips"></div>
+                </div>
+            </div>
+            <div class="studio-footer">
+                <button type="button" class="btn btn-outline studio-needs-photo" onclick="studioSaveToPhone()"><i data-lucide="download"></i> 폰에 저장</button>
+                <button type="button" class="btn btn-primary studio-needs-photo" onclick="studioSaveToAlbum()"><i data-lucide="cloud-upload"></i> 꾸민 사진에 저장</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: 지난 질문 모아보기 (couple.js) -->
     <div class="modal-overlay" id="modal-couple-archive">
         <div class="modal-card studio-card">
@@ -1053,7 +1163,11 @@
                 <button class="modal-close" onclick="closeWishlistQuickDateModal()"><i data-lucide="x"></i></button>
             </div>
             <div class="modal-body">
-                <p id="wishlistq-place-name" style="font-weight:700; font-size:1rem; margin-bottom:0.9rem;"></p>
+                <div class="form-group">
+                    <label for="wishlistq-place-name">이름</label>
+                    <input type="text" id="wishlistq-place-name" maxlength="80" autocomplete="off" enterkeyhint="done" placeholder="장소 이름" onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}">
+                    <p id="wishlistq-place-orig" style="font-size:0.68rem; color:var(--color-text-low); margin:4px 0 0;"></p>
+                </div>
                 <div class="form-group">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                         <label for="wishlistq-place-date" style="margin:0;">방문 예정 날짜</label>
@@ -1127,21 +1241,21 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261118_v448"></script>
+    <script src="app.js?v=20261119_v450"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261118_v448"></script>
+    <script src="studio.js?v=20261119_v450"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261118_v448"></script>
+    <script src="couple.js?v=20261119_v450"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261118_v448"></script>
+    <script src="together.js?v=20261119_v450"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261118_v448"></script>
+    <script src="course.js?v=20261119_v450"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261118_v448').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261119_v450').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

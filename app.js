@@ -900,17 +900,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("form-visit-log")?.addEventListener("submit", handleVisitLogSubmit);
     document.getElementById("visit-photo")?.addEventListener("change", handlePhotoUploadPreview);
 
-    // In-app Map Direct Search logic
-    const btnMapSearch = document.getElementById("btn-map-search");
-    if (btnMapSearch) {
-        btnMapSearch.addEventListener("click", () => handleInAppMapSearch());
-    }
-    const inputMapSearch = document.getElementById("map-search-query");
-    if (inputMapSearch) {
-        inputMapSearch.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") handleInAppMapSearch();
-        });
-    }
+    // In-app map search: the button and Enter key are wired inline in index.html (onclick /
+    // onkeydown). Binding them here as well ran every search twice ("검색어를 입력해 주세요" ×2).
 
     // AI 플래너 (날씨 맞춤 코스) lives in course.js and is drawn by courseInit() from startCloudSyncLoop().
 
@@ -1470,7 +1461,7 @@ async function updateMapMarkers() {
             place.lat = place.lat / 10.0;
             place.lng = place.lng / 10.0;
             await db.places.update(place.id, { lat: place.lat, lng: place.lng });
-            triggerSyncUpload(place.id);
+            triggerSyncUpload(place.id, ["lat", "lng"]);
         }
 
         if (!place.lat || !place.lng || (place.lat > 45 || place.lat < 30 || place.lng > 135 || place.lng < 120)) {
@@ -1481,11 +1472,12 @@ async function updateMapMarkers() {
                     place.lat = refined.lat;
                     place.lng = refined.lng;
                     await db.places.update(place.id, { lat: refined.lat, lng: refined.lng });
-                    triggerSyncUpload(place.id);
+                    triggerSyncUpload(place.id, ["lat", "lng"]);
                 }
             }
         }
     }
+    repairPlaceholderAddresses(places);
 
     if (isNaverMapActive) {
         // Naver Map Markers Rendering
@@ -1511,10 +1503,11 @@ async function updateMapMarkers() {
             
             const infowindow = new naver.maps.InfoWindow({
                 content: `
-                    <div style="padding: 10px; font-family:var(--font-body); width:180px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15);">
+                    <div style="padding: 10px; font-family:var(--font-body); width:210px; background:white; border-radius:12px; border:1px solid rgba(255,112,150,0.15); box-shadow:0 4px 14px rgba(0,0,0,0.08);">
                         <strong style="color:var(--color-text-high); font-size:0.9rem;">${escapeHtml(place.name)}</strong>
-                        <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${escapeHtml(place.category)}</div>
-                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${escapeHtml(place.notes) || '메모 없음'}</p>
+                        <div style="font-size:0.7rem; color:var(--color-primary); margin-top:2px;">${escapeHtml(mapPinPopupText(place).category)}</div>
+                        <p style="font-size:0.75rem; color:var(--color-text-med); margin:4px 0 0 0;">${escapeHtml(mapPinPopupText(place).address) || '주소 없음'}</p>
+                        ${mapPinPopupActionsHtml(place)}
                     </div>
                 `,
                 borderWidth: 0,
@@ -1563,7 +1556,8 @@ async function updateMapMarkers() {
         const latLngs = [];
         
         places.forEach(place => {
-            if (!place.lat || !place.lng) return;
+            // Same filter as the Naver branch: no pins for deleted places or tombstones.
+            if (!place.lat || !place.lng || place.isDeleted === 1 || place.isVisited === -1) return;
             const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
             const customIcon = L.divIcon({
                 className: 'custom-map-marker',
@@ -1575,11 +1569,13 @@ async function updateMapMarkers() {
             
             const popupCategoryText = applyCategoryOverride(place.name, place.notes, place.category);
             const popupCatBadge = categoryBadgeClassAndStyle(popupCategoryText);
+            const popupText = mapPinPopupText({ ...place, category: popupCategoryText });
             const popupContent = `
-                <div class="map-popup-card" style="font-family:var(--font-body); min-width:140px;">
+                <div class="map-popup-card" style="font-family:var(--font-body); min-width:190px;">
                     <strong style="font-size: 0.9rem; color: var(--color-text-high);">${escapeHtml(place.name)}</strong>
-                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${escapeHtml(popupCategoryText)}</span>
-                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${escapeHtml(place.notes)}</p>
+                    <span class="place-category-badge ${popupCatBadge.cls}" style="display:inline-block; margin-top:4px; font-size:0.6rem; ${popupCatBadge.style}">${escapeHtml(popupText.category)}</span>
+                    <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: var(--color-text-med);">${escapeHtml(popupText.address) || '주소 없음'}</p>
+                    ${mapPinPopupActionsHtml(place)}
                 </div>
             `;
             
@@ -2198,36 +2194,77 @@ async function searchNominatimFree(query, userLat, userLng) {
     return byKey.size > 0 ? Array.from(byKey.values()) : null;
 }
 
+// Coordinates → address (v450). Kakao's coord2Address first (it works wherever the Kakao SDK loads),
+// then Naver's reverseGeocode; each is capped at 3s. Resolves null when neither answers.
+const MANUAL_PIN_PLACEHOLDER = "사용자 선택 지도 위치"; // what manual pins saved before v450 when Naver failed
+async function kakaoCoordToAddress(lat, lng) {
+    if (!(await waitForKakaoSdk()) || !window.kakao.maps.services.Geocoder) return null;
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(null), 3000);
+        try {
+            new window.kakao.maps.services.Geocoder().coord2Address(lng, lat, (result, status) => {
+                clearTimeout(timer);
+                const r = status === window.kakao.maps.services.Status.OK && Array.isArray(result) ? result[0] : null;
+                resolve(r ? ((r.road_address && r.road_address.address_name) || (r.address && r.address.address_name) || null) : null);
+            });
+        } catch (err) { clearTimeout(timer); resolve(null); }
+    });
+}
+function naverCoordToAddress(lat, lng) {
+    return new Promise((resolve) => {
+        if (!(window.naver && naver.maps && naver.maps.Service && naver.maps.Service.reverseGeocode)) { resolve(null); return; }
+        const timer = setTimeout(() => resolve(null), 3000);
+        try {
+            naver.maps.Service.reverseGeocode({
+                coords: new naver.maps.LatLng(lat, lng),
+                orders: [naver.maps.Service.OrderType.ADDR, naver.maps.Service.OrderType.ROAD_ADDR].join(',')
+            }, (status, response) => {
+                clearTimeout(timer);
+                const a = status === naver.maps.Service.Status.OK && response && response.v2 && response.v2.address;
+                resolve(a ? (a.roadAddress || a.jibunAddress || null) : null);
+            });
+        } catch (err) { clearTimeout(timer); resolve(null); }
+    });
+}
+async function coordsToAddress(lat, lng) {
+    return (await kakaoCoordToAddress(lat, lng)) || (await naverCoordToAddress(lat, lng)) || null;
+}
+
+// Places whose address is the manual-pin placeholder (or blank) get a real one from their coordinates.
+// Writes only `notes`, once per place per session, and never overwrites an address someone typed.
+const addressRepairTried = new Set();
+async function repairPlaceholderAddresses(places) {
+    for (const place of places) {
+        if (place.isDeleted === 1 || place.isVisited === -1 || !place.lat || !place.lng) continue;
+        const notes = String(place.notes || "").trim();
+        if (notes && notes !== MANUAL_PIN_PLACEHOLDER) continue;
+        if (addressRepairTried.has(place.id)) continue;
+        addressRepairTried.add(place.id);
+        const address = await coordsToAddress(place.lat, place.lng);
+        if (!address) continue;
+        const fresh = await db.places.get(place.id);
+        if (!fresh || (String(fresh.notes || "").trim() && fresh.notes.trim() !== MANUAL_PIN_PLACEHOLDER)) continue;
+        await db.places.update(place.id, { notes: address });
+        triggerSyncUpload(place.id, ["notes"]);
+        console.log(`[Address Repair] ${place.name}: ${address}`);
+    }
+}
+
 // Enable Manual Map Pin Placement Mode when auto-search returns 0 items
 window.enableManualMapPinMode = function(placeName) {
     showToast(`지도의 원하는 건물/위치를 직접 클릭하면 '${placeName}' 마커가 생성됩니다 📍`, "info");
-    
+    const place = async (lat, lng) => {
+        const address = await coordsToAddress(lat, lng);
+        if (!address) showToast("주소를 찾지 못했어요. 저장 후 수정에서 주소를 적어 주세요", "info");
+        createManualPin(placeName, address || "", lat, lng);
+    };
     if (isNaverMapActive && map && window.naver && window.naver.maps) {
-        const listener = naver.maps.Event.addListener(map, "click", async (e) => {
+        const listener = naver.maps.Event.addListener(map, "click", (e) => {
             naver.maps.Event.removeListener(listener);
-            const lat = e.coord.lat();
-            const lng = e.coord.lng();
-            
-            let addrStr = "사용자 선택 지도 위치";
-            try {
-                if (naver.maps.Service && naver.maps.Service.reverseGeocode) {
-                    naver.maps.Service.reverseGeocode({
-                        coords: e.coord,
-                        orders: [
-                            naver.maps.Service.OrderType.ADDR,
-                            naver.maps.Service.OrderType.ROAD_ADDR
-                        ].join(',')
-                    }, (status, response) => {
-                        if (status === naver.maps.Service.Status.OK && response.v2 && response.v2.address) {
-                            addrStr = response.v2.address.roadAddress || response.v2.address.jibunAddress || addrStr;
-                        }
-                        createManualPin(placeName, addrStr, lat, lng);
-                    });
-                    return;
-                }
-            } catch(err) {}
-            createManualPin(placeName, addrStr, lat, lng);
+            place(e.coord.lat(), e.coord.lng());
         });
+    } else if (map && typeof map.once === "function") {
+        map.once("click", (e) => place(e.latlng.lat, e.latlng.lng));
     }
 };
 
@@ -2413,6 +2450,19 @@ const GEMINI_CANDIDATE_MODELS = [
     "gemini-1.5-flash"
 ];
 
+// The models endpoint lists old versions first, and Google retires those for new keys ("no longer
+// available to new users") or overloads the aliases, so in v448 a course tried five dead models
+// (~1 min) before one answered. Newest numbered stable flash first, then lite, preview, aliases.
+function geminiModelRank(name) {
+    const v = /gemini-(\d+(?:\.\d+)?)/.exec(name);
+    let rank = v ? parseFloat(v[1]) * 100 : 0;
+    if (/lite/i.test(name)) rank -= 20;
+    if (/preview|exp/i.test(name)) rank -= 40;
+    if (/omni/i.test(name)) rank -= 60;
+    return rank;
+}
+const GEMINI_LAST_OK_KEY = "aura_gemini_model_ok";
+
 let cachedGeminiModelList = null;
 async function getAvailableGeminiModels() {
     if (cachedGeminiModelList) return cachedGeminiModelList;
@@ -2429,7 +2479,8 @@ async function getAvailableGeminiModels() {
             .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
             .map(m => m.name.replace(/^models\//, ""))
             // Keep to the cheap/fast "flash" family and exclude non-text variants (vision/tts/image/embedding).
-            .filter(n => /flash/i.test(n) && !/vision|embed|tts|image/i.test(n));
+            .filter(n => /flash/i.test(n) && !/vision|embed|tts|image/i.test(n))
+            .sort((a, b) => geminiModelRank(b) - geminiModelRank(a));
     } catch (e) {
         console.warn("[Gemini API] 모델 목록 조회 실패, 고정 후보 목록만 사용:", e.message);
         cachedGeminiModelList = [];
@@ -2446,7 +2497,9 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
     let lastError = null;
 
     const discovered = await getAvailableGeminiModels();
-    const candidateModels = [...new Set([...discovered, ...GEMINI_CANDIDATE_MODELS])];
+    let lastOk = "";
+    try { lastOk = localStorage.getItem(GEMINI_LAST_OK_KEY) || ""; } catch (_) { }
+    const candidateModels = [...new Set([...(lastOk ? [lastOk] : []), ...discovered, ...GEMINI_CANDIDATE_MODELS])];
 
     for (const modelName of candidateModels) {
         try {
@@ -2512,6 +2565,7 @@ async function callGeminiRaw(userPrompt, systemInstruction = "", isJsonMode = tr
             const data = await response.json();
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!text) throw new Error("AI 응답 데이터가 비어있습니다.");
+            try { localStorage.setItem(GEMINI_LAST_OK_KEY, modelName); } catch (_) { }
             return text;
         } catch (err) {
             lastError = err;
@@ -2737,8 +2791,11 @@ window.copyNaverMapUrl = function(encoded) {
 let pendingWishlistQuickSaveData = null;
 window.saveMapSearchResult = function(encoded) {
     pendingWishlistQuickSaveData = JSON.parse(decodeURIComponent(encoded));
+    // v450: the name is editable before saving ("빌라드파티엔" → "빌라드파티엔 - 동완쌤 결혼식").
     const nameEl = document.getElementById("wishlistq-place-name");
-    if (nameEl) nameEl.textContent = pendingWishlistQuickSaveData.name;
+    if (nameEl) nameEl.value = pendingWishlistQuickSaveData.name || "";
+    const origEl = document.getElementById("wishlistq-place-orig");
+    if (origEl) origEl.textContent = `검색된 이름: ${pendingWishlistQuickSaveData.name || ""} · 약속 이름처럼 바꿔도 돼요`;
     applyDateFieldState("wishlistq", new Date().toISOString());
     const modal = document.getElementById("modal-wishlist-quickdate");
     if (modal) modal.classList.add("active");
@@ -2751,17 +2808,21 @@ window.closeWishlistQuickDateModal = function() {
 };
 
 window.confirmWishlistQuickDate = async function() {
-    const data = pendingWishlistQuickSaveData;
+    let data = pendingWishlistQuickSaveData;
     const chosenDate = readDateFieldValue("wishlistq");
     const chosenEndDate = readEndDateFieldValue("wishlistq");
     if (!isValidDateRange(chosenDate, chosenEndDate)) {
         showToast("종료일은 시작일보다 빠를 수 없습니다.", "danger");
         return;
     }
+    const nameEl = document.getElementById("wishlistq-place-name");
+    const typedName = nameEl ? nameEl.value.trim() : "";
     const modal = document.getElementById("modal-wishlist-quickdate");
     if (modal) modal.classList.remove("active");
     pendingWishlistQuickSaveData = null;
     if (!data) return;
+    // Keep the searched name for the Naver map link; the saved place takes the typed one.
+    if (typedName && typedName !== data.name) data = { ...data, searchName: data.name, name: typedName };
     await finalizeSaveMapSearchResultToWishlist(data, chosenDate, chosenEndDate);
 };
 
@@ -2784,7 +2845,7 @@ async function finalizeSaveMapSearchResultToWishlist(data, chosenDate, chosenEnd
             }
         }
 
-        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.searchName || data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
         // "Duplicate" only means an active (non-tombstoned) entry for this place on the SAME chosen
         // date (or both "미정") — a different date is a separate visit plan and should be allowed,
         // e.g. planning to go to the same cafe again next month.
@@ -3535,7 +3596,7 @@ async function handleEditPlaceSubmit(e) {
     // photos re-sent the date and both comments too — and whenever this device's copy of those was blank
     // or stale, that silently erased them for both people. "Unchanged" is judged against what the form
     // showed: the address with its "- AURA ..." tag stripped, dates by calendar day.
-    const cleanedOldNotes = (place.notes || "").replace(/s*-s*AURA.*$/, "").replace(/^💡s*메모:s*/, "").trim();
+    const cleanedOldNotes = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
     const newCommentA = commentAEl ? commentAEl.value.trim() : (place.commentA || "");
     const newCommentB = commentBEl ? commentBEl.value.trim() : (place.commentB || "");
     const oldStart = place.createdAt || place.date;
@@ -4436,6 +4497,55 @@ const PLACE_CATEGORY_LOOK = {
 function placeCategoryLook(category) {
     return PLACE_CATEGORY_LOOK[String(category || "other").toLowerCase()] || ["💗", "#FBEAF0", String(category || "")];
 }
+// Love-map pin popup text: Korean category label and the address without its "- AURA …" tag
+// (the popups used to show "Restaurant" and the raw notes).
+function mapPinPopupText(place) {
+    const [emoji, , label] = placeCategoryLook(place.category);
+    const address = (place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
+    return { category: `${emoji} ${label || "기타"}`, address };
+}
+// The pin popup body with actions (v450): photos for a visited place, a jump to its card, and Kakao
+// directions. Shared by the Naver InfoWindow and the Leaflet popup.
+function mapPinPopupActionsHtml(place) {
+    const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
+    const photoCount = (place.photos || (place.photo ? [place.photo] : [])).length;
+    const btn = "flex:1 1 auto; border:0; border-radius:999px; padding:6px 8px; font-size:0.72rem; font-weight:700; cursor:pointer; text-decoration:none; text-align:center; white-space:nowrap; font-family:inherit;";
+    const soft = `${btn} background:#FBEAF0; color:var(--color-primary);`;
+    const parts = [];
+    if (isVisited && photoCount) {
+        parts.push(`<button type="button" style="${soft}" onclick="openPlaceFromMap(${place.id}, 'photos')">📷 사진 ${photoCount}</button>`);
+    }
+    parts.push(`<button type="button" style="${soft}" onclick="openPlaceFromMap(${place.id}, 'card')">${isVisited ? "💗 추억 카드" : "📝 카드 보기"}</button>`);
+    const directions = `https://map.kakao.com/link/to/${encodeURIComponent(String(place.name || "목적지").replace(/,/g, " "))},${place.lat},${place.lng}`;
+    parts.push(`<a href="${escapeHtml(directions)}" target="_blank" rel="noopener" style="${btn} background:var(--color-primary); color:#fff;">🧭 길찾기</a>`);
+    return `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:8px;">${parts.join("")}</div>`;
+}
+// Pin popup → the place's photos, or its card on the wishlist / visited tab.
+window.openPlaceFromMap = async function(id, what) {
+    const place = await db.places.get(Number(id));
+    if (!place) { showToast("장소를 찾지 못했어요", "error"); return; }
+    if (activeInfoWindow) { activeInfoWindow.close(); activeInfoWindow = null; }
+    if (map && !isNaverMapActive && typeof map.closePopup === "function") map.closePopup();
+    if (what === "photos") { openGallerySliderModal(place.id, 0); return; }
+    const isVisited = place.isVisited === 1 || place.isVisited === true || place.isVisited === "1" || place.isVisited === "true";
+    switchTab(isVisited ? "visited" : "wishlist");
+    // Clear a search filter that would hide the card.
+    const search = document.getElementById(isVisited ? "visited-search-input" : "wishlist-search-input");
+    if (search && search.value) { search.value = ""; await renderPlacesList(); }
+    if (!isVisited) {
+        wishOpenRows.add(place.id);
+        const row = document.getElementById(`wl-${place.id}`);
+        if (row) row.classList.add("is-open");
+    }
+    setTimeout(() => {
+        const el = document.getElementById(isVisited ? `vs-${place.id}` : `wl-${place.id}`);
+        if (!el) return;
+        el.scrollIntoView({ block: "center" }); // instant: a smooth scroll can stall while photos lazy-load
+        el.classList.remove("map-jump-flash");
+        void el.offsetWidth;
+        el.classList.add("map-jump-flash");
+    }, 120);
+};
 const KOR_WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 function shortPlaceDate(startVal, endVal) {
     const s = parseAnyDate(startVal);
@@ -4528,7 +4638,7 @@ function visitedCardHtml(place, big) {
     const photo = shown.length
         ? shown.map(i => `<img src="${LAZY_PIXEL}" data-vs-id="${place.id}" data-pidx="${i}" alt="" onclick="event.stopPropagation(); openGallerySliderModal(${place.id}, ${i})">`).join("")
         : `<span class="vs-noimg" style="background:${bg}">${emoji}</span>`;
-    return `<div class="vs-card card${big ? " is-big" : ""}" onclick="${open}">
+    return `<div class="vs-card card${big ? " is-big" : ""}" id="vs-${place.id}" onclick="${open}">
         <div class="vs-photo${shown.length === 2 ? " is-two" : ""}">${photo}
             ${when ? `<span class="vs-date">${escapeHtml(when)}</span>` : ""}
             ${list.length ? `<span class="vs-count">📷 ${list.length}</span>` : ""}

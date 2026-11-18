@@ -4214,3 +4214,10 @@ textarea.add-input { resize: none; }
 .vs-photo.is-two { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 2px; overflow: hidden; }
 .vs-photo.is-two img { min-width: 0; min-height: 0; height: 100%; }
 .vs-bub { white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
+
+/* v450: a card reached from a love-map pin popup glows briefly */
+@keyframes mapJumpFlash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 112, 150, 0); }
+    25%, 60% { box-shadow: 0 0 0 4px rgba(255, 112, 150, 0.55); }
+}
+.map-jump-flash { animation: mapJumpFlash 1.6s ease-out; border-radius: 16px; }
