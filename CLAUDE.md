@@ -224,6 +224,10 @@ headed `// ── …` comments: layouts/filters/patterns → base render → st
   phones). It applies after 얼굴 보정 in `studioSourceImages`, and the result is cached per photo +
   settings in `studioReshapeCache`. When the segmenter returns two confidence masks, the last one
   is the person.
+- **Picture stickers (v453).** A sticker item whose `emoji` is `"img:<key>"` draws `STUDIO_IMAGE_STICKERS[key]`
+  (transparent WebP in `images/stickers/`) instead of text; export waits for it like fonts. The soju bottle was
+  made with local Qwen-Image (`design/stickers/gen_soju.py`, source PNG alongside) and cut with `cut.py`'s
+  `background_mask`/`to_rgba`. Use this only for things Unicode has no emoji for.
 - KakaoTalk publishes no pixel spec for personal profiles. The maker uses 1080² (profile and the
   two couple halves) and 1080×1920 (background). Profile videos stay under KakaoTalk's 6s limit
   and background videos under 15s.

@@ -685,9 +685,29 @@ const STUDIO_STICKER_SETS = [
     { id: "sparkle", name: "✨ 반짝", items: ["✨", "⭐", "🌟", "💫", "🎀", "🌸", "🌷", "🌹", "🌼", "🦋", "🍀", "🌈", "☁️", "🌙", "☀️", "❄️"] },
     { id: "face", name: "😆 표정", items: ["😆", "🤭", "😎", "🥳", "🤪", "😳", "🥺", "😚", "😋", "🙈", "😴", "🤩", "😇", "🫠", "😤", "👍"] },
     { id: "animal", name: "🐰 동물", items: ["🐶", "🐱", "🐰", "🐻", "🐼", "🐥", "🦊", "🐹", "🐨", "🐯", "🐧", "🐳", "🦄", "🐾", "🐣", "🐸"] },
-    { id: "date", name: "🍰 데이트", items: ["🍰", "🎂", "🍓", "🍒", "🧋", "☕", "🍷", "🥂", "🍿", "🍦", "🎡", "🎈", "🎁", "📸", "🎵", "🚗"] },
+    { id: "date", name: "🍰 데이트", items: ["img:soju", "🍻", "🍺", "🍷", "🥂", "🍶", "🍰", "🎂", "🍓", "🍒", "🧋", "☕", "🍿", "🍦", "🍕", "🍣",
+        "🎡", "🎈", "🎁", "📸", "🎵", "🎬", "🎤", "🚗"] },
     { id: "bubble", name: "💬 말풍선", bubbles: true }
 ];
+
+// Drawn stickers for things Unicode has no emoji for (v453: soju — made with Qwen-Image, see
+// design/stickers/). An item's `emoji` is "img:<key>"; the picture is drawn in the emoji's square box.
+const STUDIO_IMAGE_STICKERS = { soju: "images/stickers/soju.webp" };
+const studioStickerImages = new Map();
+function studioStickerImage(key) {
+    if (!studioStickerImages.has(key)) {
+        const img = new Image();
+        img.onload = () => studioQueueRender(false);
+        img.src = STUDIO_IMAGE_STICKERS[key] || "";
+        studioStickerImages.set(key, img);
+    }
+    return studioStickerImages.get(key);
+}
+function studioStickerLabel(em) {
+    if (!String(em).startsWith("img:")) return em;
+    const key = em.slice(4);
+    return `<img src="${escapeHtml(STUDIO_IMAGE_STICKERS[key] || "")}" alt="${escapeHtml(key)}" draggable="false">`;
+}
 
 const STUDIO_BUBBLES = [
     { text: "사랑해 ♥", style: "bubble", color: "#FF6584" },
@@ -774,6 +794,11 @@ function studioEnsureItemFont(it) {
 
 async function studioWaitForItemFonts() {
     const loads = studio.items.filter(it => it.type === "text").map(studioEnsureItemFont).filter(Boolean);
+    // Picture stickers too, so an export right after adding one never leaves it out.
+    studio.items.filter(it => it.type === "sticker" && String(it.emoji).startsWith("img:")).forEach(it => {
+        const img = studioStickerImage(it.emoji.slice(4));
+        if (!img.complete) loads.push(new Promise(r => { img.addEventListener("load", r, { once: true }); img.addEventListener("error", r, { once: true }); }));
+    });
     if (!loads.length) return;
     await Promise.race([Promise.all(loads), new Promise(r => setTimeout(r, 5000))]);
 }
@@ -806,8 +831,17 @@ function studioDrawItem(ctx, it, W, H) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     if (it.type === "sticker") {
-        ctx.font = `${box.size}px ${STUDIO_EMOJI_FONT}`;
-        ctx.fillText(it.emoji, 0, box.size * 0.06);
+        if (String(it.emoji).startsWith("img:")) {
+            const img = studioStickerImage(it.emoji.slice(4));
+            if (img.complete && img.naturalWidth) {
+                const k = box.size * 1.1 / Math.max(img.naturalWidth, img.naturalHeight);
+                const w = img.naturalWidth * k, h = img.naturalHeight * k;
+                ctx.drawImage(img, -w / 2, -h / 2, w, h);
+            }
+        } else {
+            ctx.font = `${box.size}px ${STUDIO_EMOJI_FONT}`;
+            ctx.fillText(it.emoji, 0, box.size * 0.06);
+        }
         ctx.restore();
         return;
     }
@@ -1114,7 +1148,7 @@ function studioRenderStickerTray() {
         }).join("");
     } else {
         grid.className = "studio-sticker-grid";
-        grid.innerHTML = set.items.map(em => `<button type="button" class="studio-sticker-btn" onclick="studioAddSticker(${jsArg(em)})">${em}</button>`).join("");
+        grid.innerHTML = set.items.map(em => `<button type="button" class="studio-sticker-btn" onclick="studioAddSticker(${jsArg(em)})">${studioStickerLabel(em)}</button>`).join("");
     }
 }
 

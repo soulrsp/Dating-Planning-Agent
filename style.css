@@ -4243,3 +4243,5 @@ textarea.add-input { resize: none; }
 .cs-thumb { flex: none; width: 48px; height: 48px; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
 .cs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cs-hint { font-size: 0.68rem; color: var(--color-text-low); margin: 0.3rem 0.1rem 0; }
+/* drawn picture stickers in the studio tray (v453) */
+.studio-sticker-btn img { width: 78%; height: 78%; object-fit: contain; display: block; margin: auto; pointer-events: none; }
