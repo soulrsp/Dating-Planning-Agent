@@ -5755,6 +5755,15 @@ async function loadFromCloud() {
                 .then(r => r.ok ? r.json() : undefined)
                 .catch(() => undefined)
         ));
+        // A failed request (offline, expired sign-in, permission error) comes back as `undefined`;
+        // a node that really is empty comes back as `null`. Treating a failure as "the room is
+        // empty" made every poll re-upload this phone's whole stale copy of every place, and if
+        // the network returned during the retries it overwrote the partner's edits. Skip this
+        // pull entirely and let the next one try again.
+        if (fieldResults.some(v => v === undefined)) {
+            console.warn("[Sync Engine] Room fetch failed; skipping this pull instead of treating the room as empty.");
+            return;
+        }
         const resData = {};
         roomFields.forEach((f, i) => { resData[f] = fieldResults[i]; });
 
