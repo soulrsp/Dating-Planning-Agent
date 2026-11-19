@@ -850,7 +850,7 @@ function coupleAfterPoints(before) {
 window.coupleRenamePet = async function() {
     const name = prompt("우리 캐릭터 이름을 지어주세요 (12자까지)", couplePetName());
     if (name === null) return;
-    const clean = name.trim().slice(0, 12);
+    const clean = Array.from(name.trim()).slice(0, 12).join("");   // by character, so an emoji is never cut in half
     if (!clean) return;
     couple.pet = Object.assign({}, couple.pet, { name: clean });
     try { await couplePutJson("couple/pet/name", clean); showToast(`이름을 '${clean}'(으)로 바꿨어요 💚`, "success"); }

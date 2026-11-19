@@ -332,6 +332,15 @@ field. When building a feature that saves a `db.places` row from an external dat
 festival, AI-planner course, etc.), put the actual address string in `notes` — never a description or
 other text — or it will display as a garbled "address" everywhere that place is shown.
 
+## Emoji in names and comments (v452)
+
+Name fields (add sheet, quick-add from the love map, edit) and comment fields get an emoji row plus a one-line
+suggestion (`emojiAttach` in app.js; hints are local regex tables, no AI). A suggestion for a name looks first
+at words the person added to the searched name, then the Kakao `category_name` (`kakaoCategory` on Kakao
+hits), then the searched name itself. Comment edits use the `#modal-comment-sheet` bottom sheet, not
+`prompt()`. Rules: only offer emoji from Unicode 12 or older (newer ones are empty boxes on Windows 10), and
+strip emoji with `placeSearchName()` before using a place name as a map search query.
+
 ## TourAPI festival feed gotchas
 
 - The public `areaCode` filter on TourAPI's `searchFestival2` is unreliable — many real, current

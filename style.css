@@ -4221,3 +4221,25 @@ textarea.add-input { resize: none; }
     25%, 60% { box-shadow: 0 0 0 4px rgba(255, 112, 150, 0.55); }
 }
 .map-jump-flash { animation: mapJumpFlash 1.6s ease-out; border-radius: 16px; }
+
+/* emoji row + one-line suggestion under name/comment fields (app.js emojiAttach, v452) */
+.emoji-box { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.35rem; min-width: 0; }
+.emoji-box.is-focus-only:not(.is-active) { display: none; }
+.emoji-row { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.emoji-row::-webkit-scrollbar { display: none; }
+.emoji-chip { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; border: 1px solid rgba(255, 112, 150, 0.18); background: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem; line-height: 1;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.emoji-chip:active { transform: scale(0.92); background: #FBEAF0; }
+.emoji-suggest { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; min-width: 0; background: #FBEAF0; border-radius: 12px;
+    padding: 0.28rem 0.3rem 0.28rem 0.65rem; font-size: 0.78rem; font-weight: 700; color: var(--color-text-high); }
+.emoji-suggest.hidden { display: none; }
+.emoji-suggest span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.emoji-suggest button { flex: none; font: inherit; font-size: 0.74rem; font-weight: 800; border: none; border-radius: 999px; padding: 0.3rem 0.75rem;
+    background: var(--color-primary); color: #fff; cursor: pointer; }
+.emoji-suggest .emoji-x { background: transparent; color: var(--color-text-low); padding: 0.3rem 0.45rem; }
+/* comment sheet */
+.cs-sheet .add-label { display: block; margin: 0.2rem 0.1rem 0.35rem; }
+.cs-thumb { flex: none; width: 48px; height: 48px; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.cs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cs-hint { font-size: 0.68rem; color: var(--color-text-low); margin: 0.3rem 0.1rem 0; }

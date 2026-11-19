@@ -1280,7 +1280,8 @@ function mapKakaoPlaceItem(item) {
         lng: parseFloat(item.x),
         category: cat,
         phone: item.phone || "",
-        url: item.place_url || ""
+        url: item.place_url || "",
+        kakaoCategory: item.category_name || ""   // emoji suggestion (v452): "… > 결혼 > 예식장"
     };
 }
 
@@ -1733,7 +1734,7 @@ window.resetAllPlaceMapPins = async function() {
     let updatedCount = 0;
 
     const refreshOnePlace = async (place) => {
-        const placeQuery = (place.name || "").trim();
+        const placeQuery = placeSearchName(place.name);
         const addressQuery = (place.address || place.notes || "").replace(/\s*-\s*AURA.*$/, "").replace(/^💡\s*메모:\s*/, "").trim();
 
         let newLat = null;
@@ -2796,6 +2797,8 @@ window.saveMapSearchResult = function(encoded) {
     if (nameEl) nameEl.value = pendingWishlistQuickSaveData.name || "";
     const origEl = document.getElementById("wishlistq-place-orig");
     if (origEl) origEl.textContent = `검색된 이름: ${pendingWishlistQuickSaveData.name || ""} · 약속 이름처럼 바꿔도 돼요`;
+    emojiFieldReset("wishlistq-place-name");
+    emojiSetCategory("wishlistq-place-name", pendingWishlistQuickSaveData.kakaoCategory || "", pendingWishlistQuickSaveData.name || "");
     applyDateFieldState("wishlistq", new Date().toISOString());
     const modal = document.getElementById("modal-wishlist-quickdate");
     if (modal) modal.classList.add("active");
@@ -2845,7 +2848,7 @@ async function finalizeSaveMapSearchResultToWishlist(data, chosenDate, chosenEnd
             }
         }
 
-        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(data.searchName || data.name)}?c=${saveLat},${saveLng},15,0,0,0,dh`;
+        const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(placeSearchName(data.searchName || data.name))}?c=${saveLat},${saveLng},15,0,0,0,dh`;
         // "Duplicate" only means an active (non-tombstoned) entry for this place on the SAME chosen
         // date (or both "미정") — a different date is a separate visit plan and should be allowed,
         // e.g. planning to go to the same cafe again next month.
@@ -3078,6 +3081,7 @@ async function addHitsSearch(q) {
 // The picked spot's Kakao category fills the 종류 chip, unless the person already chose one.
 function addHitsApplyCategory() {
     const h = addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
+    emojiSetCategory("add-place-name", h ? h.kakaoCategory : "", h ? h.name : "");
     const sel = document.getElementById("add-place-category");
     if (!h || !h.category || addHits.catTouched || !sel) return;
     sel.value = h.category;
@@ -3109,9 +3113,10 @@ function addHitsReset() {
 }
 document.addEventListener("input", e => {
     if (!e.target || e.target.id !== "add-place-name") return;
-    const q = e.target.value.trim();
+    const q = placeSearchName(e.target.value);   // an added emoji doesn't start a new search
     clearTimeout(addHits.timer);
     if (q.length < 2) { addHitsReset(); return; }
+    if (q === addHits.q) { addHits.seq++; addHitsRender(); return; }
     addHitsRender("loading");
     addHits.timer = setTimeout(() => addHitsSearch(q), 450);
 });
@@ -3128,6 +3133,7 @@ function openAddPlaceModal() {
     document.getElementById("modal-place-add").classList.add("active");
     addHitsReset();
     addHits.catTouched = false;
+    emojiFieldReset("add-place-name");
     getUserCurrentLocation();   // warm the location fix so the first search can sort by distance
     // 기본값: 날짜 미정 (v445) — "날짜 정하기"를 누르면 오늘부터 채워져요
     applyDateFieldState("add", null);
@@ -3179,13 +3185,14 @@ async function handleAddPlaceSubmit(e) {
     let address = "";
     const submitBtn = document.getElementById("btn-add-submit");
     if (isNaN(lat) || isNaN(lng)) {
-        if (addHits.q !== name) {   // saved before the list for this exact name came back
+        const searchQ = placeSearchName(name);
+        if (searchQ && addHits.q !== searchQ) {   // saved before the list for this exact name came back
             if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "📍 위치 찾는 중…"; }
             clearTimeout(addHits.timer);
-            await addHitsSearch(name);
+            await addHitsSearch(searchQ);
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "💗 담기"; }
         }
-        const hit = addHits.q === name && addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
+        const hit = searchQ && addHits.q === searchQ && addHits.pick >= 0 ? addHits.hits[addHits.pick] : null;
         if (hit) {
             lat = parseFloat(hit.lat); lng = parseFloat(hit.lng);
             address = hit.address && hit.address !== "카카오 장소 검색" ? hit.address : "";
@@ -3246,7 +3253,8 @@ async function openVisitModal(placeId, placeName) {
     if (commA) commA.value = place ? (place.commentA || "") : "";
     const commB = document.getElementById("visit-comment-b");
     if (commB) commB.value = place ? (place.commentB || "") : "";
-    
+    if (place) emojiPrepareComments(place, ["visit-comment-a", "visit-comment-b"]);
+
     document.getElementById("modal-visit-log").classList.add("active");
 }
 
@@ -3426,6 +3434,8 @@ async function openEditPlaceModal(id, fromGallery = false) {
 
     document.getElementById("edit-place-id").value = place.id;
     document.getElementById("edit-place-name").value = place.name;
+    emojiFieldReset("edit-place-name");
+    emojiPrepareComments(place, ["edit-place-comment-a", "edit-place-comment-b"]);
 
     // 삭제 버튼은 갤러리에서 연 경우에만 노출 — 다녀온곳/위시리스트 카드는 이미 자체 삭제
     // 버튼이 있어서 여기 또 두면 중복.
@@ -3545,24 +3555,229 @@ window.deletePlaceFromEditModal = async function() {
     updateMapMarkers();
 };
 
+// ── Emoji picks & suggestions (v452) ───────────────────────────────────────────────────────────────
+// Name fields get a row of event emoji plus a one-line "💒 이름 앞에 붙일까요?" suggestion, picked from
+// the name's words or the searched spot's Kakao category. Comment fields get reaction emoji (the ones
+// that suit the place first) and a suggestion from the words being typed. All local: no AI, works offline.
+// Only emoji from Unicode 12 or older: newer ones (🩷 🫶 🥹 🫠 …) are empty boxes on Windows 10 and old phones.
+const EMOJI_NAME_CHIPS = ["💒", "💍", "🎂", "🎉", "💐", "🍽️", "☕", "🍰", "🍷", "🍺", "🎬", "🎤", "🎨", "🎡", "🌸", "🍁", "⛄", "🏖️", "⛺", "✈️", "🏨", "🎁", "💖", "✨"];
+const EMOJI_COMMENT_CHIPS = ["😍", "🥰", "😋", "😆", "🥳", "🤭", "😴", "😢", "😭", "👍", "💯", "🔥", "✨", "💖", "❤️", "📸"];
+// [pattern, emoji]: the first match wins.
+const EMOJI_NAME_HINTS = [
+    [/결혼|웨딩|예식|혼례/, "💒"], [/프러포즈|프로포즈|청혼/, "💍"], [/생일|생신|birthday/i, "🎂"],
+    [/기념일|주년|\d+00\s?일|천일/, "💖"], [/파티|축하|돌잔치|집들이|송년회|신년회/, "🎉"],
+    [/콘서트|공연|뮤지컬|연극|페스티벌|팬미팅/, "🎤"], [/영화|CGV|메가박스|롯데시네마/i, "🎬"],
+    [/전시|미술관|박물관|갤러리|팝업/, "🎨"], [/놀이공원|테마파크|에버랜드|롯데월드/, "🎡"],
+    [/벚꽃|꽃구경|꽃축제|수목원|식물원/, "🌸"], [/단풍/, "🍁"], [/스키장|눈썰매/, "⛄"],
+    [/바다|해변|해수욕장|비치/, "🏖️"], [/캠핑|글램핑/, "⛺"], [/여행|공항|비행기/, "✈️"],
+    [/호텔|펜션|리조트|호캉스|숙소/, "🏨"], [/선물/, "🎁"], [/와인|칵테일/, "🍷"], [/맥주|호프|펍/, "🍺"],
+    [/케이크|디저트|베이커리|빵/, "🍰"], [/카페|커피|coffee/i, "☕"]
+];
+// Kakao's category text ("가정,생활 > 결혼 > 예식장"): only the telling ones, not every 카페/음식점.
+const EMOJI_CATEGORY_HINTS = [
+    [/예식장|웨딩/, "💒"], [/영화관/, "🎬"], [/공연장|극장|콘서트/, "🎤"], [/미술관|박물관|전시/, "🎨"],
+    [/테마파크|놀이공원|워터파크/, "🎡"], [/수목원|식물원/, "🌸"], [/해수욕장|해변/, "🏖️"], [/캠핑|야영/, "⛺"],
+    [/호텔|펜션|리조트|숙박/, "🏨"], [/스키/, "⛄"]
+];
+const EMOJI_COMMENT_HINTS = [
+    [/또\s?(?:오|가|와)|다음에\s?또|재방문|단골/, "💖"], [/맛있|맛집|존맛|꿀맛|jmt/i, "😋"], [/배불|배터지/, "🤤"],
+    [/재밌|재미있|웃겼|웃기|웃음/, "😆"], [/예쁘|이쁘|예뻤|이뻤|분위기|감성/, "😍"], [/행복|좋았|최고|사랑/, "🥰"],
+    [/축하|생일/, "🥳"], [/사진|인생샷/, "📸"], [/피곤|졸려|졸렸|힘들/, "😴"], [/추웠|추워|춥다/, "🥶"],
+    [/더웠|더워|덥다/, "🥵"], [/비싸|비쌌/, "💸"], [/아쉽|아쉬웠|슬펐|슬퍼/, "😢"], [/감동|울었|눈물/, "😭"]
+];
+// Reaction emoji that suit the place go to the front of the comment row.
+const EMOJI_COMMENT_FRONT = { cafe: ["☕", "🍰", "🥐"], restaurant: ["😋", "🍽️", "💯"], bar: ["🍷", "🍻", "🥂"], park: ["🌿", "🌸", "🚶"], museum: ["🎨", "🖼️", "📸"] };
+const EMOJI_NAME_FRONT = { "💒": ["💒", "🥂", "💐"], "🎂": ["🎂", "🥳", "🎁"], "🎬": ["🍿", "🎬"], "🎤": ["🎤", "🎶"], "🏖️": ["🌊", "🏖️"], "🌸": ["🌸", "🌷"], "💖": ["💖", "💑"] };
+const EMOJI_ANY_RE = /[☀-➿⭐⭕]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/;
+const EMOJI_STRIP_RE = /(?:[☀-➿⭐⭕]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF])[️‍]*/g;
+function hasEmoji(s) { return EMOJI_ANY_RE.test(String(s || "")); }
+// The name without emoji, for map searches ("💒 빌라드파티엔" → "빌라드파티엔").
+function placeSearchName(name) {
+    return String(name || "").replace(EMOJI_STRIP_RE, " ").replace(/[️‍]/g, "").replace(/\s+/g, " ").trim();
+}
+function emojiHint(text, hints) {
+    const s = String(text || "");
+    for (const [re, e] of hints) if (re.test(s)) return e;
+    return "";
+}
+function emojiCommentFront(place) {
+    const cat = String(applyCategoryOverride(place.name, place.notes, place.category) || "").toLowerCase();
+    const byName = emojiHint(place.name, EMOJI_NAME_HINTS);
+    return [...(EMOJI_NAME_FRONT[byName] || (byName ? [byName] : [])), ...(EMOJI_COMMENT_FRONT[cat] || [])];
+}
+
+const emojiFields = new Map();   // input id → { kind, input, box, dismissed, catText, baseName, front }
+// opts.after: put the row after another element; opts.focusOnly: show it only while the field is focused.
+function emojiAttach(id, kind, opts = {}) {
+    const input = document.getElementById(id);
+    if (!input || emojiFields.has(id)) return;
+    const box = document.createElement("div");
+    box.className = `emoji-box${opts.focusOnly ? " is-focus-only" : ""}`;
+    box.dataset.for = id;
+    box.innerHTML = `<div class="emoji-suggest hidden"></div><div class="emoji-row" role="group" aria-label="이모지 넣기"></div>`;
+    ((opts.after && document.getElementById(opts.after)) || input).insertAdjacentElement("afterend", box);
+    emojiFields.set(id, { kind, input, box, dismissed: new Set(), catText: "", baseName: "", front: [] });
+    emojiRenderChips(id);
+    // Comments are suggested only while typing, so opening a filled-in form doesn't nag.
+    input.addEventListener("input", () => emojiSuggestRefresh(id));
+    if (opts.focusOnly) {
+        let t = null;
+        input.addEventListener("focus", () => { clearTimeout(t); box.classList.add("is-active"); });
+        input.addEventListener("blur", () => { t = setTimeout(() => box.classList.remove("is-active"), 150); });
+    }
+}
+function emojiRenderChips(id) {
+    const f = emojiFields.get(id);
+    if (!f) return;
+    const list = [...new Set([...f.front, ...(f.kind === "name" ? EMOJI_NAME_CHIPS : EMOJI_COMMENT_CHIPS)])];
+    f.box.querySelector(".emoji-row").innerHTML = list.map(e => `<button type="button" class="emoji-chip" data-e="${e}">${e}</button>`).join("");
+}
+function emojiSuggestHide(id) {
+    const f = emojiFields.get(id);
+    if (f) f.box.querySelector(".emoji-suggest").classList.add("hidden");
+}
+function emojiSuggestRefresh(id) {
+    const f = emojiFields.get(id);
+    if (!f) return;
+    const text = f.input.value;
+    if (!text.trim() || hasEmoji(text)) return emojiSuggestHide(id);
+    // Names: words the person added to the searched name come first ("… - 동완쌤 결혼식"), then the spot's
+    // Kakao category (예식장), then the searched name itself ("빌라드파티앤" would otherwise read as 파티 🎉).
+    const added = f.baseName ? text.split(f.baseName).join(" ") : text;
+    const e = f.kind === "name"
+        ? (emojiHint(added, EMOJI_NAME_HINTS) || emojiHint(f.catText, EMOJI_CATEGORY_HINTS) || emojiHint(text, EMOJI_NAME_HINTS))
+        : emojiHint(text, EMOJI_COMMENT_HINTS);
+    if (!e || f.dismissed.has(e)) return emojiSuggestHide(id);
+    const el = f.box.querySelector(".emoji-suggest");
+    el.innerHTML = `<span>${e} ${f.kind === "name" ? "이름 앞에 붙일까요?" : "끝에 붙일까요?"}</span>`
+        + `<button type="button" data-act="apply" data-e="${e}">붙이기</button>`
+        + `<button type="button" class="emoji-x" data-act="dismiss" data-e="${e}" aria-label="닫기">✕</button>`;
+    el.classList.remove("hidden");
+}
+// A field opened for a new place: forget dismissals and the last spot's category.
+function emojiFieldReset(id) {
+    const f = emojiFields.get(id);
+    if (!f) return;
+    f.dismissed.clear(); f.catText = ""; f.baseName = "";
+    emojiSuggestHide(id);
+}
+function emojiSetCategory(id, catText, baseName) {
+    const f = emojiFields.get(id);
+    if (!f) return;
+    f.catText = catText || "";
+    f.baseName = baseName || "";
+    emojiSuggestRefresh(id);
+}
+function emojiPrepareComments(place, ids) {
+    const front = emojiCommentFront(place);
+    ids.forEach(id => {
+        const f = emojiFields.get(id);
+        if (!f) return;
+        emojiFieldReset(id);
+        f.front = front;
+        emojiRenderChips(id);
+    });
+}
+function emojiInsert(input, emoji) {
+    const v = input.value;
+    const focused = document.activeElement === input;
+    const s = focused && typeof input.selectionStart === "number" ? input.selectionStart : v.length;
+    const en = focused && typeof input.selectionEnd === "number" ? input.selectionEnd : v.length;
+    const before = v.slice(0, s), after = v.slice(en);
+    const ins = (before && !/\s$/.test(before) ? " " : "") + emoji + (after && !/^\s/.test(after) ? " " : "");
+    if (input.maxLength > 0 && before.length + ins.length + after.length > input.maxLength) {
+        showToast("글자 수가 가득 찼어요", "info");
+        return;
+    }
+    input.value = before + ins + after;
+    if (focused) { try { input.setSelectionRange(before.length + ins.length, before.length + ins.length); } catch (_) {} }
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function emojiApplySuggestion(id, e) {
+    const f = emojiFields.get(id);
+    if (!f) return;
+    const v = f.input.value.trim();
+    f.input.value = f.kind === "name" ? `${e} ${v}` : `${v} ${e}`;
+    emojiSuggestHide(id);
+    f.input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+// Keep the keyboard up: a tap on an emoji button must not take focus from the field.
+["pointerdown", "mousedown"].forEach(type => document.addEventListener(type, e => {
+    if (e.target.closest && e.target.closest(".emoji-box button")) e.preventDefault();
+}));
+document.addEventListener("click", e => {
+    const btn = e.target.closest && e.target.closest(".emoji-box button");
+    if (!btn) return;
+    const id = btn.closest(".emoji-box").dataset.for;
+    const f = emojiFields.get(id);
+    if (!f) return;
+    if (btn.classList.contains("emoji-chip")) emojiInsert(f.input, btn.dataset.e);
+    else if (btn.dataset.act === "apply") emojiApplySuggestion(id, btn.dataset.e);
+    else if (btn.dataset.act === "dismiss") { f.dismissed.add(btn.dataset.e); emojiSuggestHide(id); }
+});
+function emojiSetup() {
+    emojiAttach("add-place-name", "name", { after: "add-hits" });
+    emojiAttach("wishlistq-place-name", "name", { after: "wishlistq-place-orig" });
+    emojiAttach("edit-place-name", "name");
+    emojiAttach("cs-text", "comment");
+    emojiAttach("add-place-notes", "comment", { focusOnly: true });
+    ["visit-comment-a", "visit-comment-b", "edit-place-comment-a", "edit-place-comment-b"]
+        .forEach(id => emojiAttach(id, "comment", { focusOnly: true }));
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", emojiSetup);
+else emojiSetup();
+
+// One partner's comment, in a bottom sheet with reaction emoji (v452; it used to be a prompt()).
+let commentSheet = null;   // { id, fieldKey, partnerName, before }
 window.quickEditComment = async function(id, partnerKey) {
     const place = await db.places.get(id);
     if (!place) return;
 
     const partnerName = partnerKey === "A" ? partnerAName : partnerBName;
     const fieldKey = partnerKey === "A" ? "commentA" : "commentB";
-    const currentVal = place[fieldKey] || "";
+    const before = place[fieldKey] || "";
+    const sheet = document.getElementById("modal-comment-sheet");
+    const ta = document.getElementById("cs-text");
+    if (!sheet || !ta) return;
 
-    const inputVal = prompt(`💬 [${partnerName}] 한줄 코멘트를 입력/수정해 주세요:`, currentVal);
-    if (inputVal !== null) {
-        const updateObj = {};
-        updateObj[fieldKey] = inputVal.trim();
-        await db.places.update(id, updateObj);
-        showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
-        await renderPlacesList();
-        triggerSyncUpload(id, [fieldKey]);
-    }
+    commentSheet = { id, fieldKey, partnerName, before };
+    document.getElementById("cs-title").textContent = place.name || "";
+    document.getElementById("cs-meta").textContent = [shortPlaceDate(place.createdAt || place.date, place.endDate), placeRegion(place.notes)].filter(Boolean).join(" · ");
+    document.getElementById("cs-label").textContent = `💬 ${partnerName} 한마디`;
+    const thumb = document.getElementById("cs-thumb");
+    const src = (Array.isArray(place.photos) && place.photos[0]) || place.photo || "";
+    const [catEmoji, tint] = placeCategoryLook(applyCategoryOverride(place.name, place.notes, place.category));
+    thumb.style.background = tint;
+    thumb.innerHTML = src ? `<img src="${escapeHtml(src)}" alt="">` : catEmoji;
+    ta.value = before;
+    emojiPrepareComments(place, ["cs-text"]);
+    sheet.classList.add("active");
+    if (window.lucide) lucide.createIcons();
+    setTimeout(() => { try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_) {} }, 80);
 };
+window.closeCommentSheet = function() {
+    document.getElementById("modal-comment-sheet")?.classList.remove("active");
+    document.getElementById("cs-text")?.blur();
+    commentSheet = null;
+};
+window.saveCommentSheet = async function() {
+    const s = commentSheet;
+    if (!s) return;
+    // Comments show as one line everywhere, so line breaks become spaces.
+    const val = document.getElementById("cs-text").value.replace(/\s*\n\s*/g, " ").trim();
+    closeCommentSheet();
+    if (val === s.before.trim()) return;
+    await db.places.update(s.id, { [s.fieldKey]: val });
+    showToast(`[${s.partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
+    await renderPlacesList();
+    triggerSyncUpload(s.id, [s.fieldKey]);
+};
+document.addEventListener("keydown", e => {
+    if (e.target && e.target.id === "cs-text" && e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        saveCommentSheet();
+    }
+});
 
 async function handleEditPlaceSubmit(e) {
     e.preventDefault();
