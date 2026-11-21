@@ -2442,15 +2442,11 @@ window.openStudioPicker = async function() {
         .map(p => ({ p, photos: p.photos || (p.photo ? [p.photo] : []) }))
         .filter(x => x.photos.length > 0)
         .sort((a, b) => parseAnyDate(b.p.createdAt || b.p.date) - parseAnyDate(a.p.createdAt || a.p.date));
+    // A place whose photo is already in the studio starts open, so its selection stays in view.
+    studioPickerOpen = new Set(studioPickerPlaces.map((x, pi) => x.photos.some(s => studioPickerSelection.includes(s)) ? pi : -1).filter(pi => pi >= 0));
     listEl.innerHTML = studioPickerPlaces.length === 0
         ? `<div class="studio-picker-empty">아직 사진이 있는 장소가 없어요. 다녀온 곳에 사진을 먼저 올려주세요 📸</div>`
-        : studioPickerPlaces.map((x, pi) => `
-            <div class="studio-picker-group">
-                <div class="studio-picker-title">${escapeHtml(x.p.name)} <span>${escapeHtml(formatDisplayDateRange(x.p.createdAt || x.p.date, x.p.endDate) || "")} · ${x.photos.length}장</span></div>
-                <div class="studio-picker-grid">
-                    ${x.photos.map((_, i) => `<button type="button" class="studio-pick" data-pi="${pi}" data-i="${i}" onclick="studioTogglePick(${pi}, ${i})"><img src="${LAZY_PIXEL}" data-pi="${pi}" data-i="${i}" alt=""><span class="studio-pick-no"></span></button>`).join("")}
-                </div>
-            </div>`).join("");
+        : studioPickerPlaces.map((x, pi) => `<div class="studio-picker-group" data-group="${pi}">${studioPickerGroupHtml(x, pi)}</div>`).join("");
     if (studioPickerObserver) studioPickerObserver.disconnect();
     studioPickerObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
         entries.forEach(en => {
@@ -2461,17 +2457,73 @@ window.openStudioPicker = async function() {
             studioPickerObserver.unobserve(img);
         });
     }, { root: listEl, rootMargin: "300px" }) : null;
-    listEl.querySelectorAll("img[data-pi]").forEach(img => {
-        if (studioPickerObserver) studioPickerObserver.observe(img);
-        else img.src = studioPickerPlaces[+img.dataset.pi].photos[+img.dataset.i];
-    });
+    studioPickerWatchImages(listEl);
     studioUpdatePickerMarks();
     document.getElementById("modal-studio-picker")?.classList.add("active");
     listEl.scrollTop = 0;
 };
 
+// v454: like the gallery, a place shows its cover and 4 more photos plus a "+N" tile; the tile opens
+// the rest and "접기" closes them again. Open places are kept per picker session in studioPickerOpen.
+const STUDIO_PICKER_PREVIEW = 5;
+let studioPickerOpen = new Set();
+
+function studioPickerOrder(x) {
+    const n = x.photos.length;
+    const cover = Number.isInteger(x.p.coverPhotoIndex) && x.p.coverPhotoIndex >= 0 && x.p.coverPhotoIndex < n ? x.p.coverPhotoIndex : 0;
+    return [cover, ...x.photos.map((_, i) => i).filter(i => i !== cover)];
+}
+
+function studioPickerGroupHtml(x, pi) {
+    const order = studioPickerOrder(x);
+    const open = studioPickerOpen.has(pi);
+    const collapsible = order.length > STUDIO_PICKER_PREVIEW + 1;
+    const shown = open || !collapsible ? order : order.slice(0, STUDIO_PICKER_PREVIEW);
+    const tile = i => `<button type="button" class="studio-pick" data-pi="${pi}" data-i="${i}" onclick="studioTogglePick(${pi}, ${i})"><img src="${LAZY_PIXEL}" data-pi="${pi}" data-i="${i}" alt=""><span class="studio-pick-no"></span></button>`;
+    let extra = "";
+    if (collapsible && !open) {
+        const next = order[STUDIO_PICKER_PREVIEW];
+        extra = `<button type="button" class="studio-pick studio-pick-more" onclick="studioPickerToggleGroup(${pi})" aria-label="나머지 ${order.length - STUDIO_PICKER_PREVIEW}장 보기">
+            <img src="${LAZY_PIXEL}" data-pi="${pi}" data-i="${next}" alt=""><span class="studio-pick-more-label">+${order.length - STUDIO_PICKER_PREVIEW}</span></button>`;
+    } else if (collapsible) {
+        extra = `<button type="button" class="studio-pick studio-pick-fold" onclick="studioPickerToggleGroup(${pi})">접기 ▲</button>`;
+    }
+    const picked = x.photos.filter(s => studioPickerSelection.includes(s)).length;
+    return `<div class="studio-picker-title">${escapeHtml(x.p.name)} <span>${escapeHtml(formatDisplayDateRange(x.p.createdAt || x.p.date, x.p.endDate) || "")} · ${x.photos.length}장${picked ? ` · <b>${picked}장 고름</b>` : ""}</span>
+            ${collapsible ? `<button type="button" class="studio-picker-toggle" onclick="studioPickerToggleGroup(${pi})">${open ? "접기" : "전체 보기"}</button>` : ""}</div>
+        <div class="studio-picker-grid">${shown.map(tile).join("")}${extra}</div>`;
+}
+
+function studioPickerWatchImages(root) {
+    root.querySelectorAll("img[data-pi]").forEach(img => {
+        if (img.getAttribute("src") !== LAZY_PIXEL) return;
+        if (studioPickerObserver) studioPickerObserver.observe(img);
+        else img.src = studioPickerPlaces[+img.dataset.pi].photos[+img.dataset.i];
+    });
+}
+
+window.studioPickerToggleGroup = function(pi) {
+    const el = document.querySelector(`#studio-picker-list .studio-picker-group[data-group="${pi}"]`);
+    const x = studioPickerPlaces[pi];
+    if (!el || !x) return;
+    if (studioPickerOpen.has(pi)) studioPickerOpen.delete(pi); else studioPickerOpen.add(pi);
+    el.innerHTML = studioPickerGroupHtml(x, pi);
+    studioPickerWatchImages(el);
+    studioUpdatePickerMarks();
+    // Folding a long album: bring its title back into view instead of leaving the list far below it.
+    if (!studioPickerOpen.has(pi)) el.scrollIntoView({ block: "nearest" });
+};
+
 function studioUpdatePickerMarks() {
-    document.querySelectorAll("#studio-picker-list .studio-pick").forEach(btn => {
+    document.querySelectorAll("#studio-picker-list .studio-picker-title").forEach(t => {
+        const pi = +t.parentElement.dataset.group;
+        const x = studioPickerPlaces[pi];
+        const span = t.querySelector("span");
+        if (!x || !span) return;
+        const picked = x.photos.filter(s => studioPickerSelection.includes(s)).length;
+        span.innerHTML = `${escapeHtml(formatDisplayDateRange(x.p.createdAt || x.p.date, x.p.endDate) || "")} · ${x.photos.length}장${picked ? ` · <b>${picked}장 고름</b>` : ""}`;
+    });
+    document.querySelectorAll("#studio-picker-list .studio-pick[data-i]").forEach(btn => {
         const x = studioPickerPlaces[+btn.dataset.pi];
         const src = x && x.photos[+btn.dataset.i];
         const n = studioPickerSelection.indexOf(src);

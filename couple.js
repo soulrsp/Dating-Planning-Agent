@@ -377,6 +377,7 @@ async function couplePoll() {
     });
     coupleCheckPartnerPresence();
     if (typeof togetherAfterPoll === "function") togetherAfterPoll().catch(() => { }); // together.js
+    if (typeof mealsAfterPoll === "function") mealsAfterPoll().catch(() => { }); // meals.js
     if (JSON.stringify([days.map(d => couple.daily[d] || null), couple.pet, couple.hearts, couple.badges]) !== before) {
         coupleSaveCache();
         coupleNotifyPartnerNews();
@@ -413,6 +414,7 @@ window.coupleStartSync = async function() {
         console.warn("[Couple] initial load failed (using cache):", e);
     }
     if (typeof togetherStart === "function") await togetherStart().catch(e => console.warn("[Couple] together start failed", e)); // together.js
+    if (typeof mealsStart === "function") await mealsStart().catch(e => console.warn("[Couple] meals start failed", e)); // meals.js
     await coupleRefreshExtraPoints();
     // Remember the stage we start at, so only growth that happens from now on gets celebrated.
     try {
@@ -532,6 +534,7 @@ function coupleDayStats(day) {
 function couplePoints() {
     let pts = couple.extraPoints;
     if (typeof togetherBucketPoints === "function") pts += togetherBucketPoints(); // together.js
+    if (typeof mealsPoints === "function") pts += mealsPoints(); // meals.js
     for (const day of Object.keys(couple.daily)) {
         const s = coupleDayStats(day);
         pts += s.both ? 3 : s.one ? 1 : 0;

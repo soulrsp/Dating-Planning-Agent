@@ -3561,6 +3561,18 @@ window.deletePlaceFromEditModal = async function() {
 // that suit the place first) and a suggestion from the words being typed. All local: no AI, works offline.
 // Only emoji from Unicode 12 or older: newer ones (🩷 🫶 🥹 🫠 …) are empty boxes on Windows 10 and old phones.
 const EMOJI_NAME_CHIPS = ["💒", "💍", "🎂", "🎉", "💐", "🍽️", "☕", "🍰", "🍷", "🍺", "🎬", "🎤", "🎨", "🎡", "🌸", "🍁", "⛄", "🏖️", "⛺", "✈️", "🏨", "🎁", "💖", "✨"];
+// 서나네 식탁 menu names (meals.js, v455).
+const EMOJI_FOOD_CHIPS = ["🍝", "🍛", "🍲", "🥘", "🍳", "🥗", "🍜", "🍣", "🍱", "🍙", "🍚", "🥟", "🍖", "🍗", "🥩", "🍤", "🌮", "🍕", "🍔", "🥪",
+    "🥞", "🍰", "🧁", "🍪", "🍩", "🍓", "☕", "🍷", "🍻", "🍶"];
+const EMOJI_FOOD_HINTS = [
+    [/파스타|스파게티|까르보|알리오|라자냐|뇨끼/, "🍝"], [/카레|커리|하이라이스|짜장|덮밥/, "🍛"],
+    [/찌개|국$|국밥|탕$|전골|수프|스프|미역국|떡국/, "🍲"], [/감바스|빠에야|스튜|라따뚜이|찜$/, "🥘"],
+    [/계란|달걀|오믈렛|스크램블|에그|프라이/, "🍳"], [/샐러드|포케/, "🥗"], [/라면|라멘|우동|국수|쌀국수|냉면|짬뽕|소바|면$/, "🍜"],
+    [/초밥|스시|회$|사시미|연어/, "🍣"], [/도시락|정식|한상/, "🍱"], [/주먹밥|김밥|오니기리/, "🍙"], [/볶음밥|비빔밥|솥밥|리조또|오므라이스|밥$/, "🍚"],
+    [/만두|딤섬|교자/, "🥟"], [/갈비|수육|보쌈|족발|삼겹|목살|제육|불고기/, "🍖"], [/치킨|닭|윙/, "🍗"], [/스테이크|소고기|차돌|안심|등심/, "🥩"],
+    [/새우|튀김|돈가스|돈까스|까스/, "🍤"], [/타코|부리또|퀘사디아/, "🌮"], [/피자/, "🍕"], [/버거|햄버거/, "🍔"], [/샌드위치|토스트|베이글/, "🥪"],
+    [/팬케이크|와플|프렌치/, "🥞"], [/케이크|티라미수|디저트|푸딩/, "🍰"], [/쿠키|스콘|마들렌|휘낭시에/, "🍪"], [/떡볶이|떡/, "🍢"]
+];
 const EMOJI_COMMENT_CHIPS = ["😍", "🥰", "😋", "😆", "🥳", "🤭", "😴", "😢", "😭", "👍", "💯", "🔥", "✨", "💖", "❤️", "📸"];
 // [pattern, emoji]: the first match wins.
 const EMOJI_NAME_HINTS = [
@@ -3629,7 +3641,8 @@ function emojiAttach(id, kind, opts = {}) {
 function emojiRenderChips(id) {
     const f = emojiFields.get(id);
     if (!f) return;
-    const list = [...new Set([...f.front, ...(f.kind === "name" ? EMOJI_NAME_CHIPS : EMOJI_COMMENT_CHIPS)])];
+    const base = f.kind === "name" ? EMOJI_NAME_CHIPS : f.kind === "food" ? EMOJI_FOOD_CHIPS : EMOJI_COMMENT_CHIPS;
+    const list = [...new Set([...f.front, ...base])];
     f.box.querySelector(".emoji-row").innerHTML = list.map(e => `<button type="button" class="emoji-chip" data-e="${e}">${e}</button>`).join("");
 }
 function emojiSuggestHide(id) {
@@ -3646,10 +3659,11 @@ function emojiSuggestRefresh(id) {
     const added = f.baseName ? text.split(f.baseName).join(" ") : text;
     const e = f.kind === "name"
         ? (emojiHint(added, EMOJI_NAME_HINTS) || emojiHint(f.catText, EMOJI_CATEGORY_HINTS) || emojiHint(text, EMOJI_NAME_HINTS))
+        : f.kind === "food" ? emojiHint(text, EMOJI_FOOD_HINTS)
         : emojiHint(text, EMOJI_COMMENT_HINTS);
     if (!e || f.dismissed.has(e)) return emojiSuggestHide(id);
     const el = f.box.querySelector(".emoji-suggest");
-    el.innerHTML = `<span>${e} ${f.kind === "name" ? "이름 앞에 붙일까요?" : "끝에 붙일까요?"}</span>`
+    el.innerHTML = `<span>${e} ${f.kind === "comment" ? "끝에 붙일까요?" : "이름 앞에 붙일까요?"}</span>`
         + `<button type="button" data-act="apply" data-e="${e}">붙이기</button>`
         + `<button type="button" class="emoji-x" data-act="dismiss" data-e="${e}" aria-label="닫기">✕</button>`;
     el.classList.remove("hidden");
@@ -3697,7 +3711,7 @@ function emojiApplySuggestion(id, e) {
     const f = emojiFields.get(id);
     if (!f) return;
     const v = f.input.value.trim();
-    f.input.value = f.kind === "name" ? `${e} ${v}` : `${v} ${e}`;
+    f.input.value = f.kind === "comment" ? `${v} ${e}` : `${e} ${v}`;
     emojiSuggestHide(id);
     f.input.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -3721,6 +3735,8 @@ function emojiSetup() {
     emojiAttach("edit-place-name", "name");
     emojiAttach("cs-text", "comment");
     emojiAttach("add-place-notes", "comment", { focusOnly: true });
+    emojiAttach("meal-name", "food");
+    emojiAttach("meal-note", "comment", { focusOnly: true, after: "meal-row" });
     ["visit-comment-a", "visit-comment-b", "edit-place-comment-a", "edit-place-comment-b"]
         .forEach(id => emojiAttach(id, "comment", { focusOnly: true }));
 }
@@ -3728,32 +3744,48 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 else emojiSetup();
 
 // One partner's comment, in a bottom sheet with reaction emoji (v452; it used to be a prompt()).
-let commentSheet = null;   // { id, fieldKey, partnerName, before }
-window.quickEditComment = async function(id, partnerKey) {
-    const place = await db.places.get(id);
-    if (!place) return;
-
-    const partnerName = partnerKey === "A" ? partnerAName : partnerBName;
-    const fieldKey = partnerKey === "A" ? "commentA" : "commentB";
-    const before = place[fieldKey] || "";
+let commentSheet = null;   // { before, onSave(text) }
+// Shared one-comment bottom sheet (v455): place comments use it through quickEditComment, and meals.js
+// through openCommentSheet. opts: { title, meta, label, thumb (img src), icon, tint, value, front (emoji), onSave }.
+window.openCommentSheet = function(opts) {
     const sheet = document.getElementById("modal-comment-sheet");
     const ta = document.getElementById("cs-text");
     if (!sheet || !ta) return;
-
-    commentSheet = { id, fieldKey, partnerName, before };
-    document.getElementById("cs-title").textContent = place.name || "";
-    document.getElementById("cs-meta").textContent = [shortPlaceDate(place.createdAt || place.date, place.endDate), placeRegion(place.notes)].filter(Boolean).join(" · ");
-    document.getElementById("cs-label").textContent = `💬 ${partnerName} 한마디`;
+    commentSheet = { before: opts.value || "", onSave: opts.onSave };
+    document.getElementById("cs-title").textContent = opts.title || "";
+    document.getElementById("cs-meta").textContent = opts.meta || "";
+    document.getElementById("cs-label").textContent = opts.label || "💬 한마디";
     const thumb = document.getElementById("cs-thumb");
-    const src = (Array.isArray(place.photos) && place.photos[0]) || place.photo || "";
-    const [catEmoji, tint] = placeCategoryLook(applyCategoryOverride(place.name, place.notes, place.category));
-    thumb.style.background = tint;
-    thumb.innerHTML = src ? `<img src="${escapeHtml(src)}" alt="">` : catEmoji;
-    ta.value = before;
-    emojiPrepareComments(place, ["cs-text"]);
+    thumb.style.background = opts.tint || "#FBEAF0";
+    thumb.innerHTML = opts.thumb ? `<img src="${escapeHtml(opts.thumb)}" alt="">` : (opts.icon || "💬");
+    ta.value = opts.value || "";
+    const f = emojiFields.get("cs-text");
+    if (f) { emojiFieldReset("cs-text"); f.front = opts.front || []; emojiRenderChips("cs-text"); }
     sheet.classList.add("active");
     if (window.lucide) lucide.createIcons();
     setTimeout(() => { try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_) {} }, 80);
+};
+window.quickEditComment = async function(id, partnerKey) {
+    const place = await db.places.get(id);
+    if (!place) return;
+    const partnerName = partnerKey === "A" ? partnerAName : partnerBName;
+    const fieldKey = partnerKey === "A" ? "commentA" : "commentB";
+    const [catEmoji, tint] = placeCategoryLook(applyCategoryOverride(place.name, place.notes, place.category));
+    openCommentSheet({
+        title: place.name || "",
+        meta: [shortPlaceDate(place.createdAt || place.date, place.endDate), placeRegion(place.notes)].filter(Boolean).join(" · "),
+        label: `💬 ${partnerName} 한마디`,
+        thumb: (Array.isArray(place.photos) && place.photos[0]) || place.photo || "",
+        icon: catEmoji, tint,
+        value: place[fieldKey] || "",
+        front: emojiCommentFront(place),
+        onSave: async val => {
+            await db.places.update(id, { [fieldKey]: val });
+            showToast(`[${partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
+            await renderPlacesList();
+            triggerSyncUpload(id, [fieldKey]);
+        }
+    });
 };
 window.closeCommentSheet = function() {
     document.getElementById("modal-comment-sheet")?.classList.remove("active");
@@ -3766,11 +3798,8 @@ window.saveCommentSheet = async function() {
     // Comments show as one line everywhere, so line breaks become spaces.
     const val = document.getElementById("cs-text").value.replace(/\s*\n\s*/g, " ").trim();
     closeCommentSheet();
-    if (val === s.before.trim()) return;
-    await db.places.update(s.id, { [s.fieldKey]: val });
-    showToast(`[${s.partnerName}] 코멘트가 저장되었습니다! 💖`, "success");
-    await renderPlacesList();
-    triggerSyncUpload(s.id, [s.fieldKey]);
+    if (val === s.before.trim() || typeof s.onSave !== "function") return;
+    await s.onSave(val);
 };
 document.addEventListener("keydown", e => {
     if (e.target && e.target.id === "cs-text" && e.key === "Enter" && !e.shiftKey && !e.isComposing) {

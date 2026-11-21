@@ -82,7 +82,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     
     <!-- Style CSS -->
-    <link rel="stylesheet" href="style.css?v=20261119_v453">
+    <link rel="stylesheet" href="style.css?v=20261121_v455">
     
     <!-- Dexie.js for IndexedDB -->
     <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
@@ -244,6 +244,10 @@
                         <button type="button" class="quick-tile" onclick="togetherOpenManual()">
                             <span class="qt-icon qt-manual"><i data-lucide="book-heart"></i></span>
                             <span class="qt-text"><small>설명서</small><b id="tile-manual-note">보기</b></span>
+                        </button>
+                        <button type="button" class="quick-tile" onclick="mealsOpen()">
+                            <span class="qt-icon qt-meals">🍳</span>
+                            <span class="qt-text"><small>식탁</small><b id="tile-meals-count">차리기</b></span>
                         </button>
                     </div>
 
@@ -1003,6 +1007,46 @@
         </div>
     </div>
 
+    <!-- 🍳 서나네 식탁 (meals.js) -->
+    <div class="modal-overlay" id="modal-meals">
+        <div class="modal-card studio-card">
+            <div class="modal-header">
+                <h3>🍳 서나네 식탁</h3>
+                <button type="button" class="meals-add-btn" onclick="mealsOpenEditor()" aria-label="집밥 올리기">＋</button>
+                <button class="modal-close" onclick="mealsClose()"><i data-lucide="x"></i></button>
+            </div>
+            <div id="meals-body" class="modal-body studio-body"></div>
+        </div>
+    </div>
+
+    <!-- 🍳 집밥 올리기 / 고치기 (meals.js) -->
+    <div class="modal-overlay ps-overlay" id="modal-meal-edit" onclick="if (event.target === this) mealsCloseEditor()">
+        <div class="ps-sheet meal-sheet">
+            <div class="ps-grab"></div>
+            <div class="ps-head">
+                <div class="ps-title"><h4 id="meal-edit-title">🍳 오늘의 집밥 올리기</h4></div>
+                <button type="button" class="ps-x" onclick="mealsCloseEditor()" aria-label="닫기"><i data-lucide="x"></i></button>
+            </div>
+            <div class="meal-photos" id="meal-photos"></div>
+            <input type="file" id="meal-photo-input" accept="image/*" multiple hidden onchange="mealsPickPhotos(this)">
+            <div class="add-label">메뉴 이름</div>
+            <input type="text" id="meal-name" class="add-name" maxlength="40" autocomplete="off" enterkeyhint="done" placeholder="예: 트러플 크림파스타">
+            <div class="add-label">끼니</div>
+            <div class="add-chips" id="meal-time-chips"></div>
+            <div class="add-label">날짜 · 한마디</div>
+            <div class="meal-row" id="meal-row">
+                <input type="date" id="meal-date" class="add-input meal-date">
+                <input type="text" id="meal-note" class="add-input" maxlength="80" autocomplete="off" enterkeyhint="done" placeholder="한마디 (선택)">
+            </div>
+            <button type="button" class="add-more" id="meal-recipe-toggle" onclick="mealsToggleRecipe()">＋ 레시피 메모 (선택)</button>
+            <textarea id="meal-recipe" class="add-input hidden" rows="3" maxlength="600" placeholder="재료나 만드는 법을 짧게 적어 두세요"></textarea>
+            <div class="add-actions">
+                <button type="button" class="btn btn-outline" onclick="mealsCloseEditor()">취소</button>
+                <button type="button" class="btn btn-primary" id="meal-save-btn" onclick="mealsSave()">🍳 올리기</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 📖 서로 사용 설명서 (together.js) -->
     <div class="modal-overlay" id="modal-together-manual">
         <div class="modal-card studio-card">
@@ -1260,21 +1304,22 @@
     </nav>
 
     <!-- App Logic Script -->
-    <script src="app.js?v=20261119_v453"></script>
+    <script src="app.js?v=20261121_v455"></script>
     <!-- 사진 꾸미기 (Photo Studio). Must load after app.js: it uses app.js globals. -->
-    <script src="studio.js?v=20261119_v453"></script>
+    <script src="studio.js?v=20261121_v455"></script>
     <!-- 오늘의 우리 (mood / daily question / character / badges). Loads after app.js too. -->
-    <script src="couple.js?v=20261119_v453"></script>
+    <script src="couple.js?v=20261121_v455"></script>
     <!-- 버킷리스트 · 서로 사용 설명서 — after couple.js, whose state it reads -->
-    <script src="together.js?v=20261119_v453"></script>
+    <script src="together.js?v=20261121_v455"></script>
+    <script src="meals.js?v=20261121_v455"></script>
     <!-- 날씨 맞춤 AI 데이트 코스 (the AI 플래너 tab) -->
-    <script src="course.js?v=20261119_v453"></script>
+    <script src="course.js?v=20261121_v455"></script>
 
     <!-- Service Worker Registration for PWA Mobile App Support & Auto Cache Purging -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js?v=20261119_v453').catch(err => console.log('Service Worker registration failed:', err));
+                navigator.serviceWorker.register('./sw.js?v=20261121_v455').catch(err => console.log('Service Worker registration failed:', err));
             });
         }
     </script>

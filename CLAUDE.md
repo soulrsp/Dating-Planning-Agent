@@ -11,7 +11,7 @@ AURA — a Korean couple's date-planner PWA. Static site, no backend, no build s
 Four files carry almost the entire app: [`app.js`](app.js) (~8000 lines), [`studio.js`](studio.js)
 (~2400 lines, the 사진 꾸미기 photo studio — see its section below), [`index.html`](index.html) (~1250 lines),
 [`style.css`](style.css) (~3300 lines), plus a tiny [`sw.js`](sw.js) service worker. Smaller feature files
-load after them as plain scripts: [`couple.js`](couple.js) (오늘의 우리), [`together.js`](together.js)
+load after them as plain scripts: [`couple.js`](couple.js) (오늘의 우리), [`together.js`](together.js), [`meals.js`](meals.js) (서나네 식탁)
 (버킷리스트 + 서로 사용 설명서) and [`course.js`](course.js) (the AI 플래너 tab) — see their sections below.
 Served from two places (neither via CI): **Firebase Hosting** at `https://dating-planning-agent.firebaseapp.com/`
 (the primary one — it shares an origin with the Firebase Auth helper, which is what makes Google sign-in
@@ -41,12 +41,12 @@ python -m http.server 8123
 
 This matches `.claude/launch.json` (`aura-static`, port 8123) so `preview_start` picks it up
 automatically. There is no test suite, linter, or build command — the only mechanical check available
-is `node --check app.js && node --check studio.js && node --check couple.js && node --check together.js && node --check course.js`
+is `node --check app.js && node --check studio.js && node --check couple.js && node --check together.js && node --check meals.js && node --check course.js`
 for syntax validation before calling a change done.
 
 ## Critical workflow rule: cache-busting version bump
 
-`index.html` loads `style.css?v=<version>` and every script (`app.js`, `studio.js`, `couple.js`, `together.js`,
+`index.html` loads `style.css?v=<version>` and every script (`app.js`, `studio.js`, `couple.js`, `together.js`, `meals.js`,
 `course.js`) with `?v=<version>`, and registers `sw.js?v=<version>`; `sw.js` has its own `CACHE_NAME` containing the
 same version string. **All of them must be bumped together on every change that touches any of those files**,
 or returning users get a stale cached copy. Simplest is to replace the version string everywhere at once
@@ -269,7 +269,8 @@ layout; the rules that matter:
   by `cut_dance.py`, which scales them to the stage sprite, keeps the jump's lift, pulls the paler greens to
   the stage colour and repaints stray mint scarf (young stages) / a beige foot. The egg keeps the CSS moves.
   Since v422 drawn motions share one player: `COUPLE_MOTIONS` (frames, `seq`, ms, which stages have art) +
-  `couplePlayFrames`. New poses come from the local Qwen-Image-Edit pipeline (`E:\AI\work\gen_poses.py`, off-repo)
+  `couplePlayFrames`. New poses come from the local Qwen-Image-Edit pipeline (`E:\AI\work\gen_poses.py`; copies of the scripts
+  and the full setup for another PC are in [`design/ai-pipeline/`](design/ai-pipeline/README.md))
   and are cut by `design/character-src/cut_pose.py` (sources kept in `design/character-src/poses/`). The
   wave hello (v423) plays when the partner comes online and once a day when the card opens (`coupleMaybeGreet`).
 - Character art is ChatGPT-generated (an original design, deliberately not a copy of any game
@@ -295,6 +296,22 @@ inside `coupleBadgeStats`). Cloud layout is in its header comment; the rules tha
 - A ticked bucket item dated after the character was born is +3 points — derived, like the rest.
 - When testing, stub `togetherFetch` for non-GET calls (and `coupleCheckBadges`, `couplePutJson`): ticking an
   item adds points (can trigger the level-up/stage key in localStorage) and badges.
+
+## 서나네 식탁 (`meals.js`, v455)
+
+Home-cooked meals: a fifth dashboard tile (`mealsOpen`) opens a month-grouped feed with a summary card, a
+"또 먹고 싶은 메뉴" row, search and an 아침/점심/저녁/야식 filter; `＋` opens a bottom-sheet editor. Both partners post,
+and who cooked is deliberately not shown. Same loading model as `together.js` (couple.js calls `mealsStart`,
+`mealsAfterPoll`, `mealsPoints` behind `typeof` guards). Cloud layout is in its header comment; the rules:
+
+- `meals/{id}` is text only (name, time, date, n, recipe, plus per-person `notes|hearts|again/{A|B}` leaves each
+  partner writes only for themself). Edits PATCH only changed fields, so the partner's reactions survive.
+- Photos live apart: `mealThumbs/{id}` (first two at ~360px, fetched as cards scroll into view) and
+  `mealPhotos/{id}` (all, 1600px, fetched only to view or edit). Never put images in `meals/`.
+- Every change bumps `couple/versions/meals`. A meal dated on/after the character's birthday is +2 points (derived).
+- Menu-name emoji use the `food` kind of `emojiAttach` (`EMOJI_FOOD_CHIPS` / `EMOJI_FOOD_HINTS`); a person's
+  한마디 uses the shared `openCommentSheet(opts)` in app.js (place comments go through it too).
+- To test without touching the room, replace `window.mealsFetch` with an in-memory stub and set `couple.me`.
 
 ## AI 플래너 — 날씨 맞춤 코스 (`course.js`)
 
