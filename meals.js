@@ -92,7 +92,7 @@ function mealsList() {
 
 function mealsRefresh() {
     const tile = document.getElementById("tile-meals-count");
-    if (tile) { const n = mealsList().length; tile.textContent = n ? `${n}끼` : "차리기"; }
+    if (tile) { const n = mealsList().length; tile.textContent = n ? String(n) : "차리기"; }
     if (document.getElementById("modal-meals")?.classList.contains("active")) mealsRender();
 }
 
